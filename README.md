@@ -1,2 +1,2 @@
 # rp_bodycam
-Face detection activated recording for portable raspberry pi camera.
+Face and people detection activated recording for portable raspberry pi camera.
