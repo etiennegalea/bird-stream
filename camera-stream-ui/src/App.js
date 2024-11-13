@@ -7,7 +7,7 @@ function CameraStream() {
       <div style={{ border: '2px solid black', display: 'inline-block' }}>
         {/* Display the camera stream */}
         <img
-          src="http://localhost:8051/stream"
+          src="https://cam.lifeofarobin.com/stream"
           alt="Birb Stream"
           style={{ width: '100%', height: 'auto' }}
         />
