@@ -1,2 +1,2 @@
-# rp_bodycam
-Face and people detection activated recording for portable raspberry pi camera.
+# Birb-stream
+Custom stream for bird feeder.
