@@ -12,7 +12,7 @@ function CameraStream() {
           style={{ width: '100%', height: 'auto' }}
         /> */}
         <video autoPlay muted loop>
-          <source src="http://localhost:8051/stream" type="video/mp4" />
+          <source src="https://cam.lifeofarobin.com/stream" type="video/mp4" />
           Your browser does not support the video tag.
         </video>
 
