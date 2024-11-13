@@ -1,8 +1,18 @@
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 import cv2
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+# enable CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Adjust the origins if needed
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Initialize the USB camera
 camera = cv2.VideoCapture(0)  # Change index if needed

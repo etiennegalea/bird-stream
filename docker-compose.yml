@@ -1,17 +1,17 @@
 version: '3.8'
 
 services:
-  camera-stream:
-    build: .
-    ports:
-      - "8050:8050"
-    restart: unless-stopped  # Ensures the service restarts automatically
-    devices:
-      - "/dev/video0:/dev/video0"  # Allow Docker to access the USB camera
-
   react-ui:
     build:
       context: ./camera-stream-ui  # Path to React project
     ports:
-      - "3000:80"  # Serve React UI on port 3000
+      - "8050:80"  # Serve React UI on port 3000
     restart: unless-stopped
+
+  camera-stream:
+    build: .
+    ports:
+      - "8051:8051"
+    restart: unless-stopped  # Ensures the service restarts automatically
+    devices:
+      - "/dev/video0:/dev/video0"  # Allow Docker to access the USB camera
