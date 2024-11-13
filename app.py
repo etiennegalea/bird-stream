@@ -1,9 +1,11 @@
-import cv2
-import time
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+import cv2
+import time
+from datetime import datetime
+
 
 app = FastAPI()
 
@@ -24,9 +26,34 @@ def generate_frames():
         success, frame = camera.read()
         if not success:
             break
+
+        # Get the current date and time
+        now = datetime.now()
+        timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
+
+        # Get frame dimensions
+        height, width, _ = frame.shape
+
+        # Set position for the bottom-left corner
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 1
+        color = (255, 255, 255)  # White color in BGR
+        thickness = 2
+
+        # Calculate position dynamically
+        text_size = cv2.getTextSize(timestamp, font, font_scale, thickness)[0]
+        text_x = 10  # 10 pixels from the left
+        text_y = height - 10  # 10 pixels from the bottom
+        position = (text_x, text_y)
+
+        # Add the timestamp to the frame
+        cv2.putText(frame, timestamp, position, font, font_scale, color, thickness, cv2.LINE_AA)
+
+        # Encode the frame as JPEG
         _, encoded_frame = cv2.imencode(".jpg", frame)
         yield (b"--frame\r\n"
                b"Content-Type: image/jpeg\r\n\r\n" + encoded_frame.tobytes() + b"\r\n")
+
         time.sleep(0.03)  # ~30 frames per second (adjust as needed)
 
 @app.get("/")
