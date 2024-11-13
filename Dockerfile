@@ -1,17 +1,18 @@
 # Use a lightweight Python image
 FROM python:3.11-slim
 
-# Install required packages
+# Install required system packages for OpenCV
 RUN apt-get update && apt-get install -y libopencv-dev python3-opencv && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
 
-# Copy application files
+# Copy the application files
 COPY app.py /app/
+COPY requirements.txt /app/
 
 # Install Python dependencies
-RUN pip install fastapi uvicorn
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Expose the streaming port
 EXPOSE 8050
