@@ -20,6 +20,6 @@ def generate_frames():
 # async def root():
 #     return {"message": "Camera stream available at /stream"}
 
-@app.get("/")
+@app.get("/stream")
 async def stream():
     return StreamingResponse(generate_frames(), media_type="multipart/x-mixed-replace; boundary=frame")
