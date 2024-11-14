@@ -36,9 +36,9 @@ def generate_frames():
 
         # Set position for the bottom-left corner
         font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 1
+        font_scale = 0.8
         color = (255, 255, 255)  # White color in BGR
-        thickness = 2
+        thickness = 1
 
         # Calculate position dynamically
         text_size = cv2.getTextSize(timestamp, font, font_scale, thickness)[0]
