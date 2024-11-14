@@ -1,10 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 import cv2
 import time
 from datetime import datetime
+import asyncio
 
 
 app = FastAPI()
@@ -71,3 +72,38 @@ async def stream():
         media_type="multipart/x-mixed-replace; boundary=frame",
         headers=headers
     )
+
+
+# WebSocket to manage viewer count
+class ViewerManager:
+    def __init__(self):
+        self.active_connections: set[WebSocket] = set()
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.add(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def broadcast_viewer_count(self):
+        while True:
+            viewer_count = len(self.active_connections)
+            for connection in self.active_connections:
+                try:
+                    await connection.send_json({"viewer_count": viewer_count})
+                except Exception:
+                    pass
+            await asyncio.sleep(1)  # Update every second
+
+viewer_manager = ViewerManager()
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await viewer_manager.connect(websocket)
+    try:
+        while True:
+            # Wait for messages (if needed)
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        viewer_manager.disconnect(websocket)
