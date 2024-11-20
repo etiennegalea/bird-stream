@@ -5,7 +5,7 @@ function CameraStream() {
   const videoRef = useRef(null);
 
   useEffect(() => {
-    const ws = new WebSocket("ws://localhost:8051/ws/video"); // Update with your WebSocket URL
+    const ws = new WebSocket("ws://192.168.1.140:8051/ws/video");
 
     ws.onmessage = (event) => {
       const frameData = event.data; // Base64 string
