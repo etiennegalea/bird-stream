@@ -21,4 +21,6 @@ services:
       - "8051:8051"
     volumes:
       - ./backend:/app
+    devices:
+      - "/dev/video0:/dev/video0"
     restart: unless-stopped
