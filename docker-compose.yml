@@ -11,13 +11,13 @@ services:
 
   react-frontend:
     build:
-      context: ./frontend  # Path to your React frontend code
+      context: ./camera-stream-ui
     container_name: react-frontend
     ports:
       - "8050:80"
     environment:
       - CHOKIDAR_USEPOLLING=true  # Ensures proper file watching in Docker
     volumes:
-      - ./frontend:/app
+      - ./camera-stream-ui:/app
       - /app/node_modules
     restart: unless-stopped
