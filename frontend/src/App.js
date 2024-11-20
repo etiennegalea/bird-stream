@@ -18,7 +18,7 @@ function CameraStream() {
       console.log("WebSocket connection closed");
     };
 
-    return () => ws.close(); // Cleanup WebSocket connection
+    return () => ws.close();
   }, []);
 
   return (
