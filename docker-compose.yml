@@ -1,7 +1,7 @@
 services:
   backend:
     build: 
-      context: ./backend  # Path to your FastAPI backend code
+      context: ./
     container_name: backend
     ports:
       - "8051:8051"
@@ -11,13 +11,13 @@ services:
 
   react-frontend:
     build:
-      context: ./camera-stream-ui
+      context: ./frontend  # Path to your React frontend code
     container_name: react-frontend
     ports:
-      - "8050:80"
+      - "3000:3000"
     environment:
       - CHOKIDAR_USEPOLLING=true  # Ensures proper file watching in Docker
     volumes:
-      - ./camera-stream-ui:/app
+      - ./frontend:/app
       - /app/node_modules
     restart: unless-stopped
