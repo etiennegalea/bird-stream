@@ -1,15 +1,23 @@
 services:
-  react-ui:
-    build:
-      context: ./camera-stream-ui  # Path to React project
-    ports:
-      - "8050:80"  # Serve React UI on port 3000
-    restart: unless-stopped
-
-  camera-stream:
-    build: .
+  backend:
+    build: 
+      context: ./backend  # Path to your FastAPI backend code
+    container_name: backend
     ports:
       - "8051:8051"
-    restart: unless-stopped  # Ensures the service restarts automatically
-    devices:
-      - "/dev/video0:/dev/video0"  # Allow Docker to access the USB camera
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+
+  react-frontend:
+    build:
+      context: ./frontend  # Path to your React frontend code
+    container_name: react-frontend
+    ports:
+      - "8050:80"
+    environment:
+      - CHOKIDAR_USEPOLLING=true  # Ensures proper file watching in Docker
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    restart: unless-stopped

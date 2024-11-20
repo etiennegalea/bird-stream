@@ -1,16 +1,12 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
 import cv2
-import time
-from datetime import datetime
 import asyncio
-
+import base64
 
 app = FastAPI()
 
-# enable CORS
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -19,91 +15,36 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize the USB camera
-camera = cv2.VideoCapture(0)  # Change index if needed
+camera = cv2.VideoCapture(0)  # Initialize the USB camera
 
-def generate_frames():
-    while True:
-        success, frame = camera.read()
-        if not success:
-            break
-
-        # Get the current date and time
-        now = datetime.now()
-        timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
-
-        # Get frame dimensions
-        height, width, _ = frame.shape
-
-        # Set position for the bottom-left corner
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.8
-        color = (255, 255, 255)  # White color in BGR
-        thickness = 1
-
-        # Calculate position dynamically
-        text_size = cv2.getTextSize(timestamp, font, font_scale, thickness)[0]
-        text_x = 10  # 10 pixels from the left
-        text_y = height - 10  # 10 pixels from the bottom
-        position = (text_x, text_y)
-
-        # Add the timestamp to the frame
-        cv2.putText(frame, timestamp, position, font, font_scale, color, thickness, cv2.LINE_AA)
-
-        # Encode the frame as JPEG
-        _, encoded_frame = cv2.imencode(".jpg", frame)
-        yield (b"--frame\r\n"
-               b"Content-Type: image/jpeg\r\n\r\n" + encoded_frame.tobytes() + b"\r\n")
-
-        time.sleep(0.03)  # ~30 frames per second (adjust as needed)
-
-@app.get("/")
-async def root():
-    return {"message": "Camera stream available at /stream"}
-
-@app.get("/stream")
-async def stream():
-    headers = {
-        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-        "Connection": "keep-alive",
-    }
-    return StreamingResponse(
-        generate_frames(),
-        media_type="multipart/x-mixed-replace; boundary=frame",
-        headers=headers
-    )
-
-
-# WebSocket to manage viewer count
-class ViewerManager:
-    def __init__(self):
-        self.active_connections: set[WebSocket] = set()
-
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.add(websocket)
-
-    def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
-
-    async def broadcast_viewer_count(self):
-        while True:
-            viewer_count = len(self.active_connections)
-            for connection in self.active_connections:
-                try:
-                    await connection.send_json({"viewer_count": viewer_count})
-                except Exception:
-                    pass
-            await asyncio.sleep(1)  # Update every second
-
-viewer_manager = ViewerManager()
-
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await viewer_manager.connect(websocket)
+@app.websocket("/ws/video")
+async def video_stream(websocket: WebSocket):
+    await websocket.accept()
     try:
         while True:
-            # Wait for messages (if needed)
-            await websocket.receive_text()
+            # Capture a frame from the camera
+            success, frame = camera.read()
+            if not success:
+                break
+
+            # Add timestamp to the frame
+            from datetime import datetime
+            now = datetime.now()
+            timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 0.7
+            color = (255, 255, 255)  # White color in BGR
+            thickness = 1
+            position = (10, frame.shape[0] - 10)  # Bottom-left corner
+            cv2.putText(frame, timestamp, position, font, font_scale, color, thickness, cv2.LINE_AA)
+
+            # Encode the frame as JPEG
+            _, encoded_frame = cv2.imencode(".jpg", frame)
+
+            # Convert to base64 to send as text over WebSocket
+            frame_data = base64.b64encode(encoded_frame).decode("utf-8")
+            await websocket.send_text(frame_data)
+
+            await asyncio.sleep(0.03)  # ~30 FPS
     except WebSocketDisconnect:
-        viewer_manager.disconnect(websocket)
+        print("Client disconnected")
