@@ -1,18 +1,9 @@
 services:
-  backend:
-    build: 
-      context: ./
-    container_name: backend
-    ports:
-      - "8051:8051"
-    volumes:
-      - ./backend:/app
-    restart: unless-stopped
 
-  react-frontend:
+  frontend:
     build:
-      context: ./camera-stream-ui
-    container_name: react-frontend
+      context: ./frontend
+    container_name: frontend
     ports:
       - "8050:80"
     environment:
@@ -20,4 +11,14 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+    restart: unless-stopped
+
+  backend:
+    build: 
+      context: ./backend
+    container_name: backend
+    ports:
+      - "8051:8051"
+    volumes:
+      - ./backend:/app
     restart: unless-stopped

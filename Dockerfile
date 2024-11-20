@@ -1,21 +1,22 @@
-# Use a lightweight Python image
+# Use the official Python image
 FROM python:3.11-slim
 
 # Install required system packages for OpenCV
 RUN apt-get update && apt-get install -y libopencv-dev python3-opencv && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
+# Set working directory in the container
 WORKDIR /app
 
 # Copy the application files
-COPY app.py /app/
-COPY requirements.txt /app/
+COPY backend/src/app.py /app/
+COPY backend/requirements.txt /app/
 
-# Install Python dependencies
+# Install dependencies
 RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir fastapi uvicorn opencv-python-headless asyncio
 
-# Expose the streaming port
+# Expose the port
 EXPOSE 8051
 
-# Run the application
+# Start the application
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8051"]

@@ -17,6 +17,10 @@ app.add_middleware(
 
 camera = cv2.VideoCapture(0)  # Initialize the USB camera
 
+@app.get("/")
+async def root():
+    return {"message": "This shit works"}
+
 @app.websocket("/ws/video")
 async def video_stream(websocket: WebSocket):
     await websocket.accept()
