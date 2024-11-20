@@ -8,8 +8,8 @@ RUN apt-get update && apt-get install -y libopencv-dev python3-opencv && rm -rf 
 WORKDIR /app
 
 # Copy the application files
-COPY backend/src/app.py /app/
-COPY backend/requirements.txt /app/
+COPY src/app.py /app/
+COPY requirements.txt /app/
 
 # Install dependencies
 RUN pip install -r requirements.txt
@@ -19,4 +19,4 @@ RUN pip install --no-cache-dir fastapi uvicorn opencv-python-headless asyncio
 EXPOSE 8051
 
 # Start the application
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8051"]
+CMD ["uvicorn", "src.app:app", "--host", "0.0.0.0", "--port", "8051"]

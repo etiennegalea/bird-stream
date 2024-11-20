@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import cv2
 import asyncio
 import base64
+from datetime import datetime
 
 app = FastAPI()
 
@@ -15,7 +16,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-camera = cv2.VideoCapture(0)  # Initialize the USB camera
+# Initialize the USB camera
+camera = cv2.VideoCapture(0)
 
 @app.get("/")
 async def root():
@@ -32,7 +34,6 @@ async def video_stream(websocket: WebSocket):
                 break
 
             # Add timestamp to the frame
-            from datetime import datetime
             now = datetime.now()
             timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
             font = cv2.FONT_HERSHEY_SIMPLEX
