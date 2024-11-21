@@ -54,8 +54,11 @@ async def video_stream(websocket: WebSocket):
             _, encoded_frame = cv2.imencode(".jpg", frame)
 
             # Convert to base64 to send as text over WebSocket
-            frame_data = {"type": "video", "frame": base64.b64encode(encoded_frame).decode('utf-8')}
-            await websocket.send_text(frame_data)
+            frame_data = {
+                "type": "video",
+                "frame": base64.b64encode(encoded_frame).decode('utf-8')
+            }
+            await websocket.send_json(frame_data)
 
             await asyncio.sleep(0.03)  # ~30 FPS
     except WebSocketDisconnect:

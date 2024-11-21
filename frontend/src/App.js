@@ -12,9 +12,11 @@ function CameraStream() {
       const framedata = JSON.parse(event.data);
       if (framedata.type === "video") {
         // Update video stream
+        console.log("video -- ", framedata)
         setVideoSrc(`data:image/jpeg;base64,${framedata.frame}`);
       } else if (framedata.type === "viewerCount") {
         // Update viewer count
+        console.log("viewerCount -- ", framedata)
         setViewerCount(framedata.count);
       }
     };
