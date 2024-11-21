@@ -5,7 +5,8 @@ function CameraStream() {
   const [videoSrc, setVideoSrc] = useState("");
 
   useEffect(() => {
-    const ws = new WebSocket(`ws://${window.location.hostname}:8051/ws/video`);
+    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    const ws = new WebSocket(`${protocol}://${window.location.hostname}:8051/ws/video`);
 
     ws.onmessage = (event) => {
       const framedata = JSON.parse(event.data);
