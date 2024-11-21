@@ -12,6 +12,8 @@ services:
       - ./frontend:/app
       - /app/node_modules
     restart: unless-stopped
+    networks:
+      - app_network
 
   backend:
     build: 
@@ -24,3 +26,9 @@ services:
     devices:
       - "/dev/video0:/dev/video0"
     restart: unless-stopped
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: bridge

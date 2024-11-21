@@ -5,18 +5,15 @@ function CameraStream() {
   const [videoSrc, setVideoSrc] = useState("");
 
   useEffect(() => {
-    const ws = new WebSocket("ws://192.168.1.140:8051/ws/video");
+    const ws = new WebSocket(`ws://${window.location.hostname}:8051/ws/video`);
 
     ws.onmessage = (event) => {
-      console.log(event);
       const framedata = JSON.parse(event.data);
       if (framedata.type === "video") {
         // Update video stream
-        console.log("video -- ", framedata)
         setVideoSrc(`data:image/jpeg;base64,${framedata.frame}`);
       } else if (framedata.type === "viewerCount") {
         // Update viewer count
-        console.log("viewerCount -- ", framedata)
         setViewerCount(framedata.count);
       }
     };
