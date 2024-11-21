@@ -4,6 +4,8 @@ import cv2
 import asyncio
 import base64
 from datetime import datetime
+from typing import List
+
 
 app = FastAPI()
 
@@ -19,6 +21,8 @@ app.add_middleware(
 # Initialize the USB camera
 camera = cv2.VideoCapture(0)
 
+connected_clients: List[WebSocket] = []
+
 @app.get("/")
 async def root():
     return {"message": "This shit works"}
@@ -26,6 +30,9 @@ async def root():
 @app.websocket("/ws/video")
 async def video_stream(websocket: WebSocket):
     await websocket.accept()
+    connected_clients.append(websocket)
+    await broadcast_viewer_count()
+
     try:
         while True:
             # Capture a frame from the camera
@@ -53,3 +60,16 @@ async def video_stream(websocket: WebSocket):
             await asyncio.sleep(0.03)  # ~30 FPS
     except WebSocketDisconnect:
         print("Client disconnected")
+    except Exception as e:
+        print(f"Error: {e}")
+    finally:
+        connected_clients.remove(websocket)
+        await broadcast_viewer_count()
+    
+async def broadcast_viewer_count():
+    viewer_count = len(connected_clients)
+    for client in connected_clients:
+        try:
+            await client.send_json({"type": "viewerCount", "count": viewer_count})
+        except:
+            connected_clients.remove(client)

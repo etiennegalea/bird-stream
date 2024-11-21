@@ -1,19 +1,26 @@
 import React, { useEffect, useRef, useState } from "react";
 
 function CameraStream() {
-  const [viewerCount, setViewerCount] = useState(0); // Optional viewer count
+  const [viewerCount, setViewerCount] = useState(0);
   const videoRef = useRef(null);
+  const [videoSrc, setVideoSrc] = useState("");
 
   useEffect(() => {
     const ws = new WebSocket("ws://192.168.1.140:8051/ws/video");
 
     ws.onmessage = (event) => {
-      const frameData = event.data; // Base64 string
-      if (videoRef.current) {
-        videoRef.current.src = `data:image/jpeg;base64,${frameData}`; // Display frame
+      const framedata = JSON.parse(event.data);
+      if (framedata.type === "video") {
+        // Update video stream
+        setVideoSrc(`data:image/jpeg;base64,${framedata.frame}`);
+      } else if (framedata.type === "viewerCount") {
+        // Update viewer count
+        setViewerCount(framedata.count);
       }
     };
-
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
     ws.onclose = () => {
       console.log("WebSocket connection closed");
     };
