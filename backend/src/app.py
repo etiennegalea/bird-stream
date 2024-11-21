@@ -41,7 +41,7 @@ async def video_stream(websocket: WebSocket):
                 break
 
             # Add timestamp to the frame
-            now = datetime.now()
+            now = datetime.now().astimezone()
             timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
             font = cv2.FONT_HERSHEY_SIMPLEX
             font_scale = 0.7
