@@ -8,8 +8,8 @@ function CameraStream() {
     const ws = new WebSocket("ws://192.168.1.140:8051/ws/video");
 
     ws.onmessage = (event) => {
+      console.log(event);
       const framedata = JSON.parse(event.data);
-
       if (framedata.type === "video") {
         // Update video stream
         setVideoSrc(`data:image/jpeg;base64,${framedata.frame}`);
