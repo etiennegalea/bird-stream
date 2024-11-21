@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import './styles/App.css';
 
 function CameraStream() {
   const [viewerCount, setViewerCount] = useState(0);
@@ -32,12 +33,13 @@ function CameraStream() {
   }, []);
 
   return (
-    <div style={{ textAlign: "center" }}>
-      <h1>Camera Stream</h1>
-      <p>Viewers: {viewerCount}</p> {/* Display viewer count */}
-      <div style={{ border: "2px solid black", display: "inline-block" }}>
-        {/* Use videoSrc for the <img> src attribute */}
-        <img src={videoSrc} alt="Camera Stream" style={{ width: "100%", height: "auto" }} />
+    <div className="stream-container">
+      <h1>BIRB STREAM</h1>
+      <p>Bringing you beautiful Rotterdam birbs live!</p>
+      <div className="viewer-count">👥 Viewers: {viewerCount}</div>
+      <div className="chicken-viewport">
+        {/* <img src="/chicken.jpg" alt="Chicken Stream" /> */}
+        <img src={videoSrc} alt="Camera Stream" className="chicken-viewport" />
       </div>
     </div>
   );
