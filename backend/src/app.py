@@ -35,6 +35,9 @@ async def video_stream(websocket: WebSocket):
     await broadcast_viewer_count()
 
     try:
+        # init last_frame_time
+        last_frame_time = time()
+        
         while True:
             # Capture a frame from the camera
             success, frame = camera.read()
