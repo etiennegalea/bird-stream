@@ -16,7 +16,7 @@ RUN pip install -r requirements.txt
 RUN pip install --no-cache-dir fastapi uvicorn opencv-python-headless asyncio
 
 # Expose the port
-EXPOSE 8880
+EXPOSE 2096
 
 # Start the application
-CMD ["uvicorn", "src.app:app", "--host", "0.0.0.0", "--port", "8880"]
+CMD ["uvicorn", "src.app:app", "--host", "0.0.0.0", "--port", "2096"]
