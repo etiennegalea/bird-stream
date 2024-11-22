@@ -18,7 +18,7 @@ services:
       context: ./backend
     container_name: backend
     ports:
-      - "8051:443"
+      - "8051:80"
     volumes:
       - ./backend:/app
     devices:
