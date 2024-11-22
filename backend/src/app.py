@@ -27,7 +27,7 @@ connected_clients: List[WebSocket] = []
 async def root():
     return {"message": "This shit works"}
 
-@app.websocket("/ws/video")
+@app.websocket("/stream")
 async def video_stream(websocket: WebSocket):
     await websocket.accept()
     connected_clients.append(websocket)
