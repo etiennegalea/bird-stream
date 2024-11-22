@@ -68,7 +68,9 @@ async def video_stream(websocket: WebSocket):
                 "frame": base64.b64encode(encoded_frame).decode('utf-8'),
                 "fps": fps
             }
-            await websocket.send_json(frame_data)
+
+            # Broadcast frame to all connected clients
+            await broadcast_frame(frame_data)
 
             # await asyncio.sleep(0.03)  # ~30 FPS
     except WebSocketDisconnect:
@@ -85,4 +87,12 @@ async def broadcast_viewer_count():
         try:
             await client.send_json({"type": "viewerCount", "count": viewer_count})
         except:
+            connected_clients.remove(client)
+
+async def broadcast_frame(frame_data):
+    for client in connected_clients[:]:  # Iterate over a copy of the list
+        try:
+            await client.send_json(frame_data)
+        except Exception as e:
+            print(f"Error sending frame to a client: {e}")
             connected_clients.remove(client)
