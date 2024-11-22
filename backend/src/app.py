@@ -5,6 +5,7 @@ import asyncio
 import base64
 from datetime import datetime
 from typing import List
+from time import time
 
 
 app = FastAPI()
@@ -40,6 +41,11 @@ async def video_stream(websocket: WebSocket):
             if not success:
                 break
 
+            # Calculate FPS
+            current_time = time()
+            fps = 1 / (current_time - last_frame_time)
+            last_frame_time = current_time
+
             # Add timestamp to the frame
             now = datetime.now().astimezone()
             timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
@@ -56,11 +62,12 @@ async def video_stream(websocket: WebSocket):
             # Convert to base64 to send as text over WebSocket
             frame_data = {
                 "type": "video",
-                "frame": base64.b64encode(encoded_frame).decode('utf-8')
+                "frame": base64.b64encode(encoded_frame).decode('utf-8'),
+                "fps": fps
             }
             await websocket.send_json(frame_data)
 
-            await asyncio.sleep(0.03)  # ~30 FPS
+            # await asyncio.sleep(0.03)  # ~30 FPS
     except WebSocketDisconnect:
         print("Client disconnected")
     except Exception as e:

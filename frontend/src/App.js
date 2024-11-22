@@ -4,6 +4,7 @@ import './styles/App.css';
 function CameraStream() {
   const [viewerCount, setViewerCount] = useState(0);
   const [videoSrc, setVideoSrc] = useState("");
+  const [fps, setFps] = useState(0);
 
   useEffect(() => {
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
@@ -15,6 +16,7 @@ function CameraStream() {
       if (framedata.type === "video") {
         // Update video stream
         setVideoSrc(`data:image/jpeg;base64,${framedata.frame}`);
+        setFps(framedata.fps.toFixed(2)); // Round FPS to 2 decimal places
       } else if (framedata.type === "viewerCount") {
         // Update viewer count
         setViewerCount(framedata.count);
@@ -43,6 +45,7 @@ function CameraStream() {
         <img src={videoSrc} alt="Camera Stream" className="chicken-viewport" />
       </div>
       <div className="viewer-count">👥 Viewers: {viewerCount}</div>
+      <p>FPS: {fps}</p>
     </div>
   );
 }
