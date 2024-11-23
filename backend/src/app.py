@@ -7,7 +7,6 @@ from datetime import datetime
 from typing import List
 from time import time
 
-
 app = FastAPI()
 
 # Add CORS middleware
@@ -21,78 +20,77 @@ app.add_middleware(
 
 # Initialize the USB camera
 camera = cv2.VideoCapture(0)
-
 connected_clients: List[WebSocket] = []
+lock = asyncio.Lock()  # For thread-safe client list modifications
+
 
 @app.get("/")
 async def root():
-    return {"message": "This shit works"}
+    return {"message": "This works!"}
+
 
 @app.websocket("/stream")
 async def video_stream(websocket: WebSocket):
     await websocket.accept()
-    connected_clients.append(websocket)
+    async with lock:
+        connected_clients.append(websocket)
     await broadcast_viewer_count()
 
     try:
-        # init last_frame_time
         last_frame_time = time()
-        
         while True:
-            # Capture a frame from the camera
             success, frame = camera.read()
             if not success:
                 break
 
-            # Calculate FPS
+            # calculate FPS
             current_time = time()
-            fps = 1 / (current_time - last_frame_time)
+            fps = 1 / max((current_time - last_frame_time), 1e-6)
             last_frame_time = current_time
 
-            # Add timestamp to the frame
+            # add datetime
             now = datetime.now().astimezone()
             timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
             font = cv2.FONT_HERSHEY_SIMPLEX
-            font_scale = 0.7
-            color = (255, 255, 255)  # White color in BGR
-            thickness = 1
-            position = (10, frame.shape[0] - 10)  # Bottom-left corner
-            cv2.putText(frame, timestamp, position, font, font_scale, color, thickness, cv2.LINE_AA)
+            position = (10, frame.shape[0] - 10)
+            cv2.putText(frame, timestamp, position, font, 0.7, (255, 255, 255), 1, cv2.LINE_AA)
 
-            # Encode the frame as JPEG
             _, encoded_frame = cv2.imencode(".jpg", frame)
-
-            # Convert to base64 to send as text over WebSocket
             frame_data = {
                 "type": "video",
                 "frame": base64.b64encode(encoded_frame).decode('utf-8'),
-                "fps": fps
+                "fps": round(fps, 2),
             }
 
-            # Broadcast frame to all connected clients
             await broadcast_frame(frame_data)
+            # await asyncio.sleep(1 / 30)
 
-            # await asyncio.sleep(0.03)  # ~30 FPS
     except WebSocketDisconnect:
         print("Client disconnected")
     except Exception as e:
         print(f"Error: {e}")
     finally:
-        connected_clients.remove(websocket)
+        async with lock:
+            connected_clients.remove(websocket)
         await broadcast_viewer_count()
-    
+
 async def broadcast_viewer_count():
-    viewer_count = len(connected_clients)
-    for client in connected_clients:
+    async with lock:
+        viewer_count = len(connected_clients)
+    for client in connected_clients[:]:
         try:
             await client.send_json({"type": "viewerCount", "count": viewer_count})
-        except:
-            connected_clients.remove(client)
+        except Exception as e:
+            print(f"Error sending viewer count: {e}")
+            async with lock:
+                connected_clients.remove(client)
 
 async def broadcast_frame(frame_data):
-    for client in connected_clients[:]:  # Iterate over a copy of the list
-        try:
-            await client.send_json(frame_data)
-        except Exception as e:
-            print(f"Error sending frame to a client: {e}")
-            connected_clients.remove(client)
+    async with lock:
+        for client in connected_clients[:]:
+            try:
+                await client.send_json(frame_data)
+            except Exception as e:
+                print(f"Error sending frame to a client: {e}")
+                async with lock:
+                    connected_clients.remove(client)
