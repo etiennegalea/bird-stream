@@ -87,10 +87,9 @@ async def video_stream(websocket: WebSocket):
         async with lock:
             connected_clients.remove(websocket)
         await broadcast_viewer_count()
-        
+
 async def broadcast_viewer_count():
-    async with lock:
-        viewer_count = len(connected_clients)
+    viewer_count = len(connected_clients)
     for client in connected_clients[:]:
         try:
             await client.send_json({"type": "viewerCount", "count": viewer_count})
@@ -101,12 +100,11 @@ async def broadcast_viewer_count():
                 logger.error(f"connected_clients (on_remove) -- {connected_clients}")
 
 async def broadcast_frame(frame_data):
-    async with lock:
-        for client in connected_clients[:]:
-            try:
-                await client.send_json(frame_data)
-            except Exception as e:
-                logger.error(f"Error sending frame to a client: {e}")
-                async with lock:
-                    connected_clients.remove(client)
-                    logger.error(f"connected_clients (on_remove) -- {connected_clients}")
+    for client in connected_clients[:]:
+        try:
+            await client.send_json(frame_data)
+        except Exception as e:
+            logger.error(f"Error sending frame to a client: {e}")
+            async with lock:
+                connected_clients.remove(client)
+                logger.error(f"connected_clients (on_remove) -- {connected_clients}")
