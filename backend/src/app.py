@@ -18,8 +18,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize the USB camera
-camera = cv2.VideoCapture(0)
+# init vars
+camera = cv2.VideoCapture(0) # fetch first camera
 connected_clients: List[WebSocket] = []
 lock = asyncio.Lock()  # For thread-safe client list modifications
 
@@ -55,6 +55,7 @@ async def video_stream(websocket: WebSocket):
             position = (10, frame.shape[0] - 10)
             cv2.putText(frame, timestamp, position, font, 0.7, (255, 255, 255), 1, cv2.LINE_AA)
 
+            # encode frame and prepare json
             _, encoded_frame = cv2.imencode(".jpg", frame)
             frame_data = {
                 "type": "video",
@@ -63,15 +64,14 @@ async def video_stream(websocket: WebSocket):
             }
 
             await broadcast_frame(frame_data)
-            # await asyncio.sleep(1 / 30)
+
+            await asyncio.sleep(1 / 30) # 30 fps
 
     except WebSocketDisconnect:
         print("Client disconnected")
     except Exception as e:
         print(f"Error: {e}")
     finally:
-        async with lock:
-            connected_clients.remove(websocket)
         await broadcast_viewer_count()
 
 async def broadcast_viewer_count():
