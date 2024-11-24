@@ -34,6 +34,7 @@ async def video_stream(websocket: WebSocket):
     await websocket.accept()
     async with lock:
         connected_clients.append(websocket)
+        print(f"connected_clients (on_append) -- {connected_clients}")
     await broadcast_viewer_count()
 
     try:
@@ -84,6 +85,7 @@ async def broadcast_viewer_count():
             print(f"Error sending viewer count: {e}")
             async with lock:
                 connected_clients.remove(client)
+                print(f"connected_clients (on_remove) -- {connected_clients}")
 
 async def broadcast_frame(frame_data):
     async with lock:
@@ -94,3 +96,4 @@ async def broadcast_frame(frame_data):
                 print(f"Error sending frame to a client: {e}")
                 async with lock:
                     connected_clients.remove(client)
+                    print(f"connected_clients (on_remove) -- {connected_clients}")
