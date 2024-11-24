@@ -8,12 +8,11 @@ RUN apt-get update && apt-get install -y libopencv-dev python3-opencv && rm -rf 
 WORKDIR /app
 
 # Copy the application files
-COPY src/app.py /app/
+COPY src/ /app/
 COPY requirements.txt /app/
 
 # Install dependencies
-RUN pip install -r requirements.txt
-RUN pip install --no-cache-dir fastapi uvicorn opencv-python-headless asyncio
+RUN pip install -r requirements.txt --no-cache-dir asyncio fastapi opencv-python-headless uvicorn
 
 # Expose the port
 EXPOSE 2096
