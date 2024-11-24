@@ -6,7 +6,18 @@ import base64
 from datetime import datetime
 from typing import List
 from time import time
+import logging
 
+# Configure the logging
+logging.basicConfig(
+    level=logging.INFO,  # Set log level to INFO (can use DEBUG for more details)
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",  # Log format
+    handlers=[
+        logging.StreamHandler()  # Log to the console
+    ],
+)
+
+logger = logging.getLogger("backend")
 app = FastAPI()
 
 # Add CORS middleware
@@ -34,7 +45,7 @@ async def video_stream(websocket: WebSocket):
     await websocket.accept()
     async with lock:
         connected_clients.append(websocket)
-        print(f"connected_clients (on_append) -- {connected_clients}")
+        logger.info(f"connected_clients (on_append) -- {connected_clients}")
     await broadcast_viewer_count()
 
     try:
@@ -69,12 +80,14 @@ async def video_stream(websocket: WebSocket):
             await asyncio.sleep(1 / 30) # 30 fps
 
     except WebSocketDisconnect:
-        print("Client disconnected")
+        logger.error("Client disconnected")
     except Exception as e:
-        print(f"Error: {e}")
+        logger.error(f"Error: {e}")
     finally:
+        async with lock:
+            connected_clients.remove(websocket)
         await broadcast_viewer_count()
-
+        
 async def broadcast_viewer_count():
     async with lock:
         viewer_count = len(connected_clients)
@@ -82,10 +95,10 @@ async def broadcast_viewer_count():
         try:
             await client.send_json({"type": "viewerCount", "count": viewer_count})
         except Exception as e:
-            print(f"Error sending viewer count: {e}")
+            logger.error(f"Error sending viewer count: {e}")
             async with lock:
                 connected_clients.remove(client)
-                print(f"connected_clients (on_remove) -- {connected_clients}")
+                logger.error(f"connected_clients (on_remove) -- {connected_clients}")
 
 async def broadcast_frame(frame_data):
     async with lock:
@@ -93,7 +106,7 @@ async def broadcast_frame(frame_data):
             try:
                 await client.send_json(frame_data)
             except Exception as e:
-                print(f"Error sending frame to a client: {e}")
+                logger.error(f"Error sending frame to a client: {e}")
                 async with lock:
                     connected_clients.remove(client)
-                    print(f"connected_clients (on_remove) -- {connected_clients}")
+                    logger.error(f"connected_clients (on_remove) -- {connected_clients}")
