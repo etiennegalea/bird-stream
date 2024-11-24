@@ -8,17 +8,20 @@ from typing import List
 from time import time
 import logging
 
-# Configure the logging
+from connection_manager import ConnectionManager
+
+
 logging.basicConfig(
-    level=logging.INFO,  # Set log level to INFO (can use DEBUG for more details)
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",  # Log format
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.StreamHandler()  # Log to the console
+        logging.StreamHandler()
     ],
 )
 
 logger = logging.getLogger("backend")
 app = FastAPI()
+manager = ConnectionManager()
 
 # Add CORS middleware
 app.add_middleware(
@@ -33,16 +36,34 @@ app.add_middleware(
 camera = cv2.VideoCapture(0) # fetch first camera
 connected_clients: List[WebSocket] = []
 lock = asyncio.Lock()  # For thread-safe client list modifications
+global_frame_data = None
 
 
 @app.get("/")
 async def root():
     return {"message": "This works!"}
 
+@app.get("/stream")
+def connect_to_stream(websocket: WebSocket):
+    manager.connect(websocket)
 
-@app.websocket("/stream")
-async def video_stream(websocket: WebSocket):    
-    await client_connect(websocket)
+    try:
+        prev_timeframe = global_frame_data.timeframe
+        while True:
+            if global_frame_data.timeframe > prev_timeframe:
+                websocket.send_json(global_frame_data)
+                prev_timeframe = global_frame_data.timeframe
+    except WebSocketDisconnect:
+        logger.error(f"active_connections (disconnect) -- {manager.active_connections}")
+        manager.disconnect(websocket)
+    except Exception as e:
+        logger.error(f"Exception: {e}")
+
+@staticmethod
+def video_stream():
+    """
+    Serve stream.
+    """
 
     try:
         last_frame_time = time()
@@ -69,37 +90,21 @@ async def video_stream(websocket: WebSocket):
                 "type": "video",
                 "frame": base64.b64encode(encoded_frame).decode('utf-8'),
                 "fps": round(fps, 2),
+                "timestamp": timestamp
             }
 
-            await broadcast_frame(frame_data)
-
-            await asyncio.sleep(1 / 30) # 30 fps
-
-    except WebSocketDisconnect:
-        logger.error("Client disconnected")
-        await client_disconnect(websocket)
+            global_frame_data = frame_data
 
     except Exception as e:
         logger.error(f"Error: {e}")
 
+# start stream
+video_stream()
+
 async def broadcast_viewer_count():
-    viewer_count = len(connected_clients)
-    for client in connected_clients[:]:
-        await client.send_json({"type": "viewerCount", "count": viewer_count})
+    for client in manager.active_connections[:]:
+        await client.send_json({"type": "viewerCount", "count": manager.count_connections()})
 
-async def broadcast_frame(frame_data):
-    for client in connected_clients[:]:
-        await client.send_json(frame_data)
-
-async def client_connect(client):
-    await client.accept()
-    async with lock:
-        connected_clients.append(client)
-        logger.info(f"connected_clients (on_append) -- {connected_clients}")
-    await broadcast_viewer_count()
-
-async def client_disconnect(client):
-    await broadcast_viewer_count()
-    async with lock:
-        logger.error(f"connected_clients (on_remove) -- {connected_clients}")
-        connected_clients.remove(client)
+async def broadcast_frame():
+    for client in manager.active_connections[:]:
+        await client.send_json(global_frame_data)
