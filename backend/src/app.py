@@ -77,7 +77,7 @@ async def video_stream(websocket: WebSocket):
 
     except WebSocketDisconnect:
         logger.error("Client disconnected")
-        client_disconnect()
+        client_disconnect(websocket)
 
     except Exception as e:
         logger.error(f"Error: {e}")
