@@ -34,14 +34,13 @@ class ConnectionManager:
         return len(self.active_connections)
 
 
-class VideoStream(device_id=0):
-    def __init__(self, device_id):
+class VideoStream:
+    def __init__(self, device_id=0):
         self.global_frame_data = None
         self.camera = cv2.VideoCapture(device_id)
         self.connected_clients: List[WebSocket] = []
         self.lock = asyncio.Lock()  # For thread-safe client list modifications
 
-    @staticmethod
     def video_stream(self):
         """
         Serve stream.
