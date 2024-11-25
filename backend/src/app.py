@@ -10,19 +10,6 @@ import logging
 
 # from connection_manager import ConnectionManager
 
-from fastapi import WebSocket, WebSocketDisconnect
-import logging
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler()
-    ],
-)
-
-logger = logging.getLogger("connection_manager")
-
 class ConnectionManager:
     def __init__(self):
         self.active_connections: list[WebSocket] = []
@@ -46,6 +33,56 @@ class ConnectionManager:
     def count_connections(self):
         return len(self.active_connections)
 
+
+class VideoStream(device_id=0):
+    def __init__(self, device_id):
+        self.global_frame_data = None
+        self.camera = cv2.VideoCapture(device_id)
+        self.connected_clients: List[WebSocket] = []
+        self.lock = asyncio.Lock()  # For thread-safe client list modifications
+
+    @staticmethod
+    def video_stream(self):
+        """
+        Serve stream.
+        """
+
+        try:
+            last_frame_time = time()
+            while True:
+                success, frame = self.camera.read()
+                if not success:
+                    break
+
+                # calculate FPS
+                current_time = time()
+                fps = 1 / max((current_time - last_frame_time), 1e-6)
+                last_frame_time = current_time
+
+                # add datetime
+                now = datetime.now().astimezone()
+                timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
+                font = cv2.FONT_HERSHEY_SIMPLEX
+                position = (10, frame.shape[0] - 10)
+                cv2.putText(frame, timestamp, position, font, 0.7, (255, 255, 255), 1, cv2.LINE_AA)
+
+                # encode frame and prepare json
+                _, encoded_frame = cv2.imencode(".jpg", frame)
+                frame_data = {
+                    "type": "video",
+                    "frame": base64.b64encode(encoded_frame).decode('utf-8'),
+                    "fps": round(fps, 2),
+                    "timestamp": timestamp
+                }
+
+                self.global_frame_data = frame_data
+
+        except Exception as e:
+            logger.error(f"Error: {e}")
+
+
+# ========================================================================================== #
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -57,6 +94,7 @@ logging.basicConfig(
 logger = logging.getLogger("backend")
 app = FastAPI()
 manager = ConnectionManager()
+vs = VideoStream(0)
 
 # Add CORS middleware
 app.add_middleware(
@@ -67,12 +105,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# init vars
-camera = cv2.VideoCapture(0) # fetch first camera
-connected_clients: List[WebSocket] = []
-lock = asyncio.Lock()  # For thread-safe client list modifications
-global_frame_data = None
-
+vs.video_stream()   # start stream
 
 @app.get("/")
 async def root():
@@ -83,58 +116,16 @@ def connect_to_stream(websocket: WebSocket):
     manager.connect(websocket)
 
     try:
-        prev_timeframe = global_frame_data.timeframe
+        prev_timeframe = vs.global_frame_data.timeframe
         while True:
-            if global_frame_data.timeframe > prev_timeframe:
-                websocket.send_json(global_frame_data)
-                prev_timeframe = global_frame_data.timeframe
+            if vs.global_frame_data.timeframe > prev_timeframe:
+                websocket.send_json(vs.global_frame_data)
+                prev_timeframe = vs.global_frame_data.timeframe
     except WebSocketDisconnect:
         logger.error(f"active_connections (disconnect) -- {manager.active_connections}")
         manager.disconnect(websocket)
     except Exception as e:
         logger.error(f"Exception: {e}")
-
-@staticmethod
-def video_stream():
-    """
-    Serve stream.
-    """
-
-    try:
-        last_frame_time = time()
-        while True:
-            success, frame = camera.read()
-            if not success:
-                break
-
-            # calculate FPS
-            current_time = time()
-            fps = 1 / max((current_time - last_frame_time), 1e-6)
-            last_frame_time = current_time
-
-            # add datetime
-            now = datetime.now().astimezone()
-            timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
-            font = cv2.FONT_HERSHEY_SIMPLEX
-            position = (10, frame.shape[0] - 10)
-            cv2.putText(frame, timestamp, position, font, 0.7, (255, 255, 255), 1, cv2.LINE_AA)
-
-            # encode frame and prepare json
-            _, encoded_frame = cv2.imencode(".jpg", frame)
-            frame_data = {
-                "type": "video",
-                "frame": base64.b64encode(encoded_frame).decode('utf-8'),
-                "fps": round(fps, 2),
-                "timestamp": timestamp
-            }
-
-            global_frame_data = frame_data
-
-    except Exception as e:
-        logger.error(f"Error: {e}")
-
-# start stream
-video_stream()
 
 async def broadcast_viewer_count():
     for client in manager.active_connections[:]:
@@ -142,4 +133,4 @@ async def broadcast_viewer_count():
 
 async def broadcast_frame():
     for client in manager.active_connections[:]:
-        await client.send_json(global_frame_data)
+        await client.send_json(vs.global_frame_data)
