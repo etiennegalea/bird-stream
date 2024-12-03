@@ -1,101 +1,104 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 import cv2
 import asyncio
 import base64
 from datetime import datetime
+import logging
 from typing import List
 from time import time
-import logging
 
-# from connection_manager import ConnectionManager
+# Logger setup
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger("backend")
 
 class ConnectionManager:
     def __init__(self):
-        self.active_connections: list[WebSocket] = []
+        self.active_connections: List[WebSocket] = []
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
-        logger.error(f"active_connections (connect) -- {self.active_connections}")
         self.active_connections.append(websocket)
+        logger.info("New connection established. Total: %d", len(self.active_connections))
 
     async def disconnect(self, websocket: WebSocket):
-        logger.error(f"active_connections (disconnect) -- {self.active_connections}")
         self.active_connections.remove(websocket)
+        logger.info("Connection removed. Total: %d", len(self.active_connections))
 
-    async def send_personal_message(self, message: str, websocket: WebSocket):
-        await websocket.send_text(message)
-
-    async def broadcast(self, message: str):
+    async def broadcast(self, message: dict):
         for connection in self.active_connections:
-            await connection.send_text(message)
-
-    def count_connections(self):
-        return len(self.active_connections)
-
+            try:
+                await connection.send_json(message)
+            except Exception as e:
+                logger.error(f"Error sending data to a client: {e}")
+                await self.disconnect(connection)
 
 class VideoStream:
     def __init__(self, device_id=0):
-        self.global_frame_data = None
         self.camera = cv2.VideoCapture(device_id)
-        self.connected_clients: List[WebSocket] = []
-        self.lock = asyncio.Lock()  # For thread-safe client list modifications
+        self.global_frame_data = None
+        self.lock = asyncio.Lock()
 
-    def video_stream(self):
-        """
-        Serve stream.
-        """
-
+    async def video_stream(self):
         try:
             last_frame_time = time()
             while True:
                 success, frame = self.camera.read()
                 if not success:
+                    logger.error("Failed to capture frame from camera")
                     break
 
-                # calculate FPS
+                # Calculate FPS
                 current_time = time()
                 fps = 1 / max((current_time - last_frame_time), 1e-6)
                 last_frame_time = current_time
 
-                # add datetime
-                now = datetime.now().astimezone()
-                timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
-                font = cv2.FONT_HERSHEY_SIMPLEX
-                position = (10, frame.shape[0] - 10)
-                cv2.putText(frame, timestamp, position, font, 0.7, (255, 255, 255), 1, cv2.LINE_AA)
+                # Add timestamp to the frame
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                cv2.putText(
+                    frame, 
+                    timestamp, 
+                    (10, frame.shape[0] - 10), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 
+                    0.7, 
+                    (255, 255, 255), 
+                    1, 
+                    cv2.LINE_AA
+                )
 
-                # encode frame and prepare json
+                # Encode the frame as JPEG
                 _, encoded_frame = cv2.imencode(".jpg", frame)
-                frame_data = {
-                    "type": "video",
-                    "frame": base64.b64encode(encoded_frame).decode('utf-8'),
-                    "fps": round(fps, 2),
-                    "timestamp": timestamp
-                }
 
-                self.global_frame_data = frame_data
+                # Update global frame data
+                async with self.lock:
+                    self.global_frame_data = {
+                        "type": "video",
+                        "frame": base64.b64encode(encoded_frame).decode("utf-8"),
+                        "fps": round(fps, 2),
+                        "timestamp": timestamp,
+                    }
 
+                # Limit FPS to ~30
+                await asyncio.sleep(1 / 30)
         except Exception as e:
-            logger.error(f"Error: {e}")
+            logger.error(f"Error in video stream: {e}")
 
-
-# ========================================================================================== #
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler()
-    ],
-)
-
-logger = logging.getLogger("backend")
-app = FastAPI()
 manager = ConnectionManager()
 vs = VideoStream(0)
 
-# Add CORS middleware
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Load the ML model
+    asyncio.create_task(vs.video_stream())
+    yield
+
+app = FastAPI(lifespan=lifespan)
+
+# CORS Middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -104,32 +107,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-vs.video_stream()   # start stream
-
-@app.get("/")
-async def root():
-    return {"message": "This works!"}
-
-@app.get("/stream")
-def connect_to_stream(websocket: WebSocket):
-    manager.connect(websocket)
+@app.websocket("/stream")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
 
     try:
-        prev_timeframe = vs.global_frame_data.timeframe
         while True:
-            if vs.global_frame_data.timeframe > prev_timeframe:
-                websocket.send_json(vs.global_frame_data)
-                prev_timeframe = vs.global_frame_data.timeframe
+            async with vs.lock:
+                frame_data = vs.global_frame_data
+
+            if frame_data:
+                await websocket.send_json(frame_data)
+
+            await asyncio.sleep(1 / 30)  # Send data at ~30 FPS
     except WebSocketDisconnect:
-        logger.error(f"active_connections (disconnect) -- {manager.active_connections}")
-        manager.disconnect(websocket)
+        await manager.disconnect(websocket)
     except Exception as e:
-        logger.error(f"Exception: {e}")
-
-async def broadcast_viewer_count():
-    for client in manager.active_connections[:]:
-        await client.send_json({"type": "viewerCount", "count": manager.count_connections()})
-
-async def broadcast_frame():
-    for client in manager.active_connections[:]:
-        await client.send_json(vs.global_frame_data)
+        logger.error(f"Error in WebSocket endpoint: {e}")
