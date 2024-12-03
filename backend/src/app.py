@@ -83,7 +83,7 @@ class VideoStream:
                     }
 
                 # Limit FPS to ~30
-                # await asyncio.sleep(1 / 30)
+                await asyncio.sleep(1 / 30)
         except Exception as e:
             logger.error(f"Error in video stream: {e}")
 
