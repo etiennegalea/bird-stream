@@ -118,11 +118,11 @@ async def websocket_endpoint(websocket: WebSocket):
 
             if frame_data:
                 # add viewer number to frame data
-                # frame_data['viewers'] = manager.active_connections
+                frame_data['viewers'] = len(manager.active_connections)
                 # send
                 await websocket.send_json(frame_data)
 
-            # await asyncio.sleep(1 / 30)  # Send data at ~30 FPS
+            await asyncio.sleep(1 / 30)  # Send data at ~30 FPS
     except WebSocketDisconnect:
         await manager.disconnect(websocket)
     except Exception as e:
