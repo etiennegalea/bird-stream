@@ -79,11 +79,11 @@ class VideoStream:
                         "type": "video",
                         "frame": base64.b64encode(encoded_frame).decode("utf-8"),
                         "fps": round(fps, 2),
-                        "timestamp": timestamp,
+                        "timestamp": timestamp
                     }
 
                 # Limit FPS to ~30
-                await asyncio.sleep(1 / 30)
+                # await asyncio.sleep(1 / 30)
         except Exception as e:
             logger.error(f"Error in video stream: {e}")
 
@@ -117,9 +117,12 @@ async def websocket_endpoint(websocket: WebSocket):
                 frame_data = vs.global_frame_data
 
             if frame_data:
+                # add viewer number to frame data
+                frame_data['viewers'] = manager.active_connections
+                # send
                 await websocket.send_json(frame_data)
 
-            await asyncio.sleep(1 / 30)  # Send data at ~30 FPS
+            # await asyncio.sleep(1 / 30)  # Send data at ~30 FPS
     except WebSocketDisconnect:
         await manager.disconnect(websocket)
     except Exception as e:
