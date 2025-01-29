@@ -17,9 +17,8 @@ function CameraStream() {
         // Update video stream
         setVideoSrc(`data:image/jpeg;base64,${framedata.frame}`);
         setFps(Math.round(framedata.fps)); // Round FPS to 2 decimal places
-      } else if (framedata.type === "viewerCount") {
         // Update viewer count
-        setViewerCount(framedata.count);
+        setViewerCount(framedata.viewers);
       }
     };
 
