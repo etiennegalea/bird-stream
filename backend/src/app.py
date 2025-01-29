@@ -123,6 +123,7 @@ app.add_middleware(
 @app.websocket("/stream")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
+    logger.info(f"Active connections: {len(manager.active_connections)}")
 
     try:
         while True:
@@ -139,5 +140,10 @@ async def websocket_endpoint(websocket: WebSocket):
             await asyncio.sleep(1 / 30)
     except WebSocketDisconnect:
         await manager.disconnect(websocket)
+
+        # Notify remaining clients about updated viewer count
+        if frame_data:
+            frame_data['viewers'] = len(manager.active_connections)
+            await manager.broadcast(frame_data)
     except Exception as e:
         logger.error(f"Error in WebSocket endpoint: {e}")
