@@ -8,18 +8,15 @@ function CameraStream() {
 
   useEffect(() => {
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-    // const ws = new WebSocket(`${protocol}://${window.location.hostname}/stream`);
     const ws = new WebSocket(`${protocol}://cam.lifeofarobin.com/stream`);
 
     ws.onmessage = (event) => {
       const framedata = JSON.parse(event.data);
-      if (framedata.type === "video") {
-        // Update video stream
-        setVideoSrc(`data:image/jpeg;base64,${framedata.frame}`);
-        setFps(Math.round(framedata.fps)); // Round FPS to 2 decimal places
-        // Update viewer count
-        setViewerCount(framedata.viewers);
-      }
+      // Update video stream
+      setVideoSrc(`data:image/jpeg;base64,${framedata.frame}`);
+      setFps(Math.round(framedata.fps)); // Round FPS to 2 decimal places
+      // Update viewer count
+      setViewerCount(framedata.viewers);
     };
 
     ws.onerror = (error) => {
