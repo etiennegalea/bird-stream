@@ -143,6 +143,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
         # Notify remaining clients about updated viewer count
         if frame_data:
+            frame_data['type'] = 'viewerCount'
             frame_data['viewers'] = len(manager.active_connections)
             await manager.broadcast(frame_data)
     except Exception as e:
