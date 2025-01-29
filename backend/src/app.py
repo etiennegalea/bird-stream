@@ -132,6 +132,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
             if frame_data:
                 # add viewer number to frame data
+                frame_data['type'] = 'viewerCount'
                 frame_data['viewers'] = len(manager.active_connections)
                 # send
                 await websocket.send_json(frame_data)
