@@ -8,12 +8,14 @@ from datetime import datetime
 import logging
 from typing import List
 from time import time
+import pytz
 
 # Logger setup
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
+
 logger = logging.getLogger("backend")
 
 class ConnectionManager:
@@ -42,6 +44,14 @@ class VideoStream:
         self.camera = cv2.VideoCapture(device_id)
         self.global_frame_data = None
         self.lock = asyncio.Lock()
+        self.running = True
+        self.timezone = pytz.timezone('Europe/Amsterdam')  # UTC+1 timezone
+
+    async def cleanup(self):
+        self.running = False
+        if self.camera:
+            self.camera.release()
+        logger.info("Camera resources released")
 
     async def video_stream(self):
         try:
@@ -58,7 +68,8 @@ class VideoStream:
                 last_frame_time = current_time
 
                 # Add timestamp to the frame
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                local_time = datetime.now(self.timezone)
+                timestamp = local_time.strftime("%Y-%m-%d %H:%M:%S")
                 cv2.putText(
                     frame, 
                     timestamp, 
@@ -82,10 +93,12 @@ class VideoStream:
                         "timestamp": timestamp
                     }
 
-                # Limit FPS to ~30
+                # Limit FPS to ~30 video generation
                 await asyncio.sleep(1 / 30)
         except Exception as e:
             logger.error(f"Error in video stream: {e}")
+        finally:
+            await self.cleanup()
 
 manager = ConnectionManager()
 vs = VideoStream(0)
@@ -122,7 +135,8 @@ async def websocket_endpoint(websocket: WebSocket):
                 # send
                 await websocket.send_json(frame_data)
 
-            await asyncio.sleep(1 / 30)  # Send data at ~30 FPS
+            # Send data at ~30 FPS to connected clients
+            await asyncio.sleep(1 / 30)
     except WebSocketDisconnect:
         await manager.disconnect(websocket)
     except Exception as e:
