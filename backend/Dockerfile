@@ -1,8 +1,23 @@
 # Use the official Python image
 FROM python:3.11-slim
 
-# Install required system packages for OpenCV
-RUN apt-get update && apt-get install -y libopencv-dev python3-opencv && rm -rf /var/lib/apt/lists/*
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3-dev \
+    gcc \
+    g++ \
+    libavdevice-dev \
+    libavfilter-dev \
+    libopus-dev \
+    libvpx-dev \
+    pkg-config \
+    libsrtp2-dev \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory in the container
 WORKDIR /app
@@ -11,8 +26,8 @@ WORKDIR /app
 COPY src/ /app/
 COPY requirements.txt /app/
 
-# Install dependencies
-RUN pip install -r requirements.txt --no-cache-dir asyncio fastapi opencv-python-headless uvicorn
+# Install Python dependencies
+RUN pip install -r requirements.txt --no-cache-dir
 
 # Expose the port
 EXPOSE 2096
