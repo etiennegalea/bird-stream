@@ -1,9 +1,15 @@
+# Core dependencies
 fastapi
 uvicorn
+
+# Video processing
 opencv-python-headless
-websockets
-pytz
+av
+
+# WebRTC and async
 aiortc
 aiohttp
-av
-aiortc
+websockets
+
+# Other utilities
+pytz
