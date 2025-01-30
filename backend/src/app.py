@@ -6,9 +6,8 @@ import asyncio
 import logging
 from typing import List
 from av import VideoFrame
-from aiortc import MediaStreamTrack
+from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
-from fastapi_webrtc import WebRTCConnection, WebRTCMode
 import pytz
 from datetime import datetime
 
@@ -80,19 +79,9 @@ app.add_middleware(
 async def webrtc_offer():
     video_track = VideoStreamTrack()
     
-    pc = WebRTCConnection(
-        mode=WebRTCMode.SENDONLY,
-        track_settings={
-            "video": True,
-            "audio": False,
-        }
-    )
+    pc = RTCPeerConnection()
+    pc.addTrack(video_track)
     
-    @pc.on("track")
-    def on_track(track):
-        if track.kind == "video":
-            pc.addTrack(video_track)
-
     offer = await pc.createOffer()
     await pc.setLocalDescription(offer)
     
@@ -100,6 +89,6 @@ async def webrtc_offer():
 
 @app.post("/webrtc/answer")
 async def webrtc_answer(session_description: dict):
-    await pc.setRemoteDescription(session_description)
+    answer = RTCSessionDescription(sdp=session_description["sdp"], type=session_description["type"])
+    await pc.setRemoteDescription(answer)
     return {"status": "success"}
-

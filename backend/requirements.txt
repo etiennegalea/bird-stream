@@ -6,3 +6,5 @@ pytz
 aiortc
 aiohttp
 fastapi-webrtc
+av
+aiortc
