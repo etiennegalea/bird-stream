@@ -3,3 +3,6 @@ uvicorn
 opencv-python-headless
 websockets
 pytz
+aiortc
+aiohttp
+fastapi-webrtc
