@@ -10,14 +10,22 @@ function CameraStream() {
   useEffect(() => {
     const startStream = async () => {
       try {
-        // Create new RTCPeerConnection
-        const configuration = {
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' }, // Basic STUN server
+        const iceServers = {
+          urls: [
+            "stun:stun.l.google.com:19302",
+            "stun:stun.l.google.com:5349",
+            "stun:stun1.l.google.com:3478",
+            "stun:stun1.l.google.com:5349",
+            "stun:stun2.l.google.com:19302",
+            "stun:stun2.l.google.com:5349",
+            "stun:stun3.l.google.com:3478",
+            "stun:stun3.l.google.com:5349",
+            "stun:stun4.l.google.com:19302",
+            "stun:stun4.l.google.com:5349"
           ]
         };
-        
-        const pc = new RTCPeerConnection(configuration);
+
+        const pc = new RTCPeerConnection(iceServers);
         peerConnectionRef.current = pc;
 
         // Handle incoming tracks
@@ -52,7 +60,7 @@ function CameraStream() {
         await pc.setLocalDescription(offer);
 
         // Send offer to server
-        const response = await fetch('http://localhost:8000/webrtc/offer', {
+        const response = await fetch('http://localhost:2096/webrtc/offer', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
