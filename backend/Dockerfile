@@ -8,15 +8,17 @@ ENV PYTHONUNBUFFERED=1
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     python3-dev \
+    python3-opencv \
     gcc \
     g++ \
+    ffmpeg \
+    pkg-config \
     libavdevice-dev \
     libavfilter-dev \
     libopus-dev \
     libvpx-dev \
-    pkg-config \
     libsrtp2-dev \
-    ffmpeg \
+    libopencv-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory in the container

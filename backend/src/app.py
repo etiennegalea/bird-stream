@@ -1,15 +1,14 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import cv2
 import asyncio
+import base64
+from datetime import datetime
 import logging
 from typing import List
-from av import VideoFrame
-from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
-from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
+from time import time
 import pytz
-from datetime import datetime
 
 # Logger setup
 logging.basicConfig(
@@ -19,49 +18,95 @@ logging.basicConfig(
 
 logger = logging.getLogger("backend")
 
-class VideoStreamTrack(MediaStreamTrack):
-    kind = "video"
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
 
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+        logger.info("New connection established. Total: %d", len(self.active_connections))
+
+    async def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+        logger.info("Connection removed. Total: %d", len(self.active_connections))
+
+    async def broadcast(self, message: dict):
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except Exception as e:
+                logger.error(f"Error sending data to a client: {e}")
+                await self.disconnect(connection)
+
+class VideoStream:
     def __init__(self, device_id=0):
-        super().__init__()
         self.camera = cv2.VideoCapture(device_id)
-        self.timezone = pytz.timezone('Europe/Amsterdam')
+        self.global_frame_data = None
+        self.lock = asyncio.Lock()
+        self.running = True
+        self.timezone = pytz.timezone('Europe/Amsterdam')  # UTC+1 timezone
 
-    async def recv(self):
-        success, frame = self.camera.read()
-        if not success:
-            logger.error("Failed to capture frame from camera")
-            return None
+    async def cleanup(self):
+        self.running = False
+        if self.camera:
+            self.camera.release()
+        logger.info("Camera resources released")
 
-        # Add timestamp to the frame
-        local_time = datetime.now(self.timezone)
-        timestamp = local_time.strftime("%Y-%m-%d %H:%M:%S")
-        cv2.putText(
-            frame, 
-            timestamp, 
-            (10, frame.shape[0] - 10), 
-            cv2.FONT_HERSHEY_SIMPLEX, 
-            0.7, 
-            (255, 255, 255), 
-            1, 
-            cv2.LINE_AA
-        )
+    async def video_stream(self):
+        try:
+            last_frame_time = time()
+            while True:
+                success, frame = self.camera.read()
+                if not success:
+                    logger.error("Failed to capture frame from camera")
+                    break
 
-        # Convert to RGB for VideoFrame
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        
-        # Create VideoFrame
-        video_frame = VideoFrame.from_ndarray(frame, format="rgb24")
-        video_frame.pts = video_frame.time = 0
+                # Calculate FPS
+                current_time = time()
+                fps = 1 / max((current_time - last_frame_time), 1e-6)
+                last_frame_time = current_time
 
-        return video_frame
+                # Add timestamp to the frame
+                local_time = datetime.now(self.timezone)
+                timestamp = local_time.strftime("%Y-%m-%d %H:%M:%S")
+                cv2.putText(
+                    frame, 
+                    timestamp, 
+                    (10, frame.shape[0] - 10), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 
+                    0.7, 
+                    (255, 255, 255), 
+                    1, 
+                    cv2.LINE_AA
+                )
 
-    def stop(self):
-        super().stop()
-        self.camera.release()
+                # Encode the frame as JPEG
+                _, encoded_frame = cv2.imencode(".jpg", frame)
+
+                # Update global frame data
+                async with self.lock:
+                    self.global_frame_data = {
+                        "type": "video",
+                        "frame": base64.b64encode(encoded_frame).decode("utf-8"),
+                        "fps": round(fps, 2),
+                        "timestamp": timestamp
+                    }
+
+                # Limit FPS to ~30 video generation
+                await asyncio.sleep(1 / 30)
+        except Exception as e:
+            logger.error(f"Error in video stream: {e}")
+        finally:
+            await self.cleanup()
+
+manager = ConnectionManager()
+vs = VideoStream(0)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Load the ML model
+    asyncio.create_task(vs.video_stream())
     yield
 
 app = FastAPI(lifespan=lifespan)
@@ -75,20 +120,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/webrtc/offer")
-async def webrtc_offer():
-    video_track = VideoStreamTrack()
-    
-    pc = RTCPeerConnection()
-    pc.addTrack(video_track)
-    
-    offer = await pc.createOffer()
-    await pc.setLocalDescription(offer)
-    
-    return {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type}
+@app.websocket("/stream")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    logger.info(f"Active connections: {len(manager.active_connections)}")
 
-@app.post("/webrtc/answer")
-async def webrtc_answer(session_description: dict):
-    answer = RTCSessionDescription(sdp=session_description["sdp"], type=session_description["type"])
-    await pc.setRemoteDescription(answer)
-    return {"status": "success"}
+    try:
+        while True:
+            async with vs.lock:
+                frame_data = vs.global_frame_data
+
+            if frame_data:
+                # add viewer number to frame data
+                frame_data['type'] = 'viewerCount'
+                frame_data['viewers'] = len(manager.active_connections)
+                # send
+                await websocket.send_json(frame_data)
+
+            # Send data at ~30 FPS to connected clients
+            await asyncio.sleep(1 / 30)
+    except WebSocketDisconnect:
+        await manager.disconnect(websocket)
+
+        # Notify remaining clients about updated viewer count
+        if frame_data:
+            frame_data['type'] = 'viewerCount'
+            frame_data['viewers'] = len(manager.active_connections)
+            await manager.broadcast(frame_data)
+    except Exception as e:
+        logger.error(f"Error in WebSocket endpoint: {e}")

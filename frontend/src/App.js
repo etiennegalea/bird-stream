@@ -1,101 +1,33 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import './styles/App.css';
 
 function CameraStream() {
-  const [isConnected, setIsConnected] = useState(false);
-  const [error, setError] = useState(null);
-  const videoRef = useRef(null);
-  const peerConnectionRef = useRef(null);
+  const [viewerCount, setViewerCount] = useState(0);
+  const [videoSrc, setVideoSrc] = useState("");
+  const [fps, setFps] = useState(0);
 
   useEffect(() => {
-    const startStream = async () => {
-      try {
-        const iceServers = {
-          urls: [
-            "stun:stun.l.google.com:19302",
-            "stun:stun.l.google.com:5349",
-            "stun:stun1.l.google.com:3478",
-            "stun:stun1.l.google.com:5349",
-            "stun:stun2.l.google.com:19302",
-            "stun:stun2.l.google.com:5349",
-            "stun:stun3.l.google.com:3478",
-            "stun:stun3.l.google.com:5349",
-            "stun:stun4.l.google.com:19302",
-            "stun:stun4.l.google.com:5349"
-          ]
-        };
+    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    const ws = new WebSocket(`${protocol}://cam.lifeofarobin.com/stream`);
 
-        const pc = new RTCPeerConnection(iceServers);
-        peerConnectionRef.current = pc;
-
-        // Handle incoming tracks
-        pc.ontrack = (event) => {
-          if (videoRef.current && event.streams[0]) {
-            videoRef.current.srcObject = event.streams[0];
-            setIsConnected(true);
-          }
-        };
-
-        // Handle connection state changes
-        pc.onconnectionstatechange = (event) => {
-          switch(pc.connectionState) {
-            case "connected":
-              setIsConnected(true);
-              break;
-            case "disconnected":
-            case "failed":
-              setIsConnected(false);
-              setError("Connection lost. Please refresh to try again.");
-              break;
-            default:
-              break;
-          }
-        };
-
-        // Create and send offer
-        const offer = await pc.createOffer({
-          offerToReceiveVideo: true,
-          offerToReceiveAudio: false,
-        });
-        await pc.setLocalDescription(offer);
-
-        // Send offer to server
-        const response = await fetch('http://localhost:2096/webrtc/offer', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            sdp: pc.localDescription.sdp,
-            type: pc.localDescription.type,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to connect to server');
-        }
-
-        const answerData = await response.json();
-        const remoteDesc = new RTCSessionDescription(answerData);
-        await pc.setRemoteDescription(remoteDesc);
-
-      } catch (err) {
-        console.error('Error setting up WebRTC:', err);
-        setError('Failed to connect to camera stream. Please refresh to try again.');
-      }
+    ws.onmessage = (event) => {
+      const framedata = JSON.parse(event.data);
+      // Update video stream
+      setVideoSrc(`data:image/jpeg;base64,${framedata.frame}`);
+      setFps(Math.round(framedata.fps)); // Round FPS to 2 decimal places
+      // Update viewer count
+      setViewerCount(framedata.viewers);
     };
 
-    startStream();
-
-    // Cleanup function
-    return () => {
-      if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
-      }
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-      }
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
     };
+
+    ws.onclose = () => {
+      console.log("WebSocket connection closed");
+    };
+
+    return () => ws.close(); // Cleanup WebSocket on component unmount
   }, []);
 
   return (
@@ -105,20 +37,11 @@ function CameraStream() {
         <p>Bringing you beautiful Rotterdam birbs live!</p>
       </div>
       <div className="chicken-viewport">
-        {error ? (
-          <div className="error-message">{error}</div>
-        ) : (
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            className="chicken-viewport"
-          />
-        )}
+        {/* <img src="/chicken.jpg" alt="Chicken Stream" /> */}
+        <img src={videoSrc} alt="Camera Stream" className="chicken-viewport" />
       </div>
-      <div className="connection-status">
-        Status: {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
-      </div>
+      <div className="viewer-count">👥 Viewers: {viewerCount}</div>
+      <p>FPS: {fps}</p>
     </div>
   );
 }
