@@ -118,3 +118,42 @@ video {
   height: 100%;
   object-fit: contain;
 }
+
+/* ANIMATED TITLE */
+@keyframes shadowRotate {
+  0% {
+    filter: drop-shadow(6px 6px 8px rgba(0, 0, 0, 0.5));
+  }
+  25% {
+    filter: drop-shadow(-6px 6px 8px rgba(0, 0, 0, 0.5));
+  }
+  50% {
+    filter: drop-shadow(-6px -6px 8px rgba(0, 0, 0, 0.5));
+  }
+  75% {
+    filter: drop-shadow(6px -6px 8px rgba(0, 0, 0, 0.5));
+  }
+  100% {
+    filter: drop-shadow(6px 6px 8px rgba(0, 0, 0, 0.5));
+  }
+}
+
+.title-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+
+.header h1 {
+  font-family: 'Anton', sans-serif;
+  font-size: 4rem;
+  font-weight: 800;
+  color: #00000000;
+  -webkit-text-stroke: 1px white;
+  text-stroke: 1px white;
+  animation: shadowRotate 4s linear infinite;
+  text-transform: uppercase;
+  letter-spacing: 8px;
+  margin: 0;
+}
