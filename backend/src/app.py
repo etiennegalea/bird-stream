@@ -43,9 +43,9 @@ class ConnectionManager:
 class VideoStreamTrack(MediaStreamTrack):
     kind = "video"
 
-    def __init__(self, device_id=0):
+    def __init__(self):
         super().__init__()
-        self.camera = cv2.VideoCapture(device_id)
+        self.camera = cv2.VideoCapture("/dev/video0")
         self.timezone = pytz.timezone('Europe/Amsterdam')
 
     async def recv(self):
