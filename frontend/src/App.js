@@ -60,7 +60,7 @@ function CameraStream() {
         await pc.setLocalDescription(offer);
 
         // Send offer to server
-        const response = await fetch(`${process.env.REACT_APP_API_URL}:8051/webrtc/offer`, {
+        const response = await fetch(`${process.env.REACT_APP_API_URL}:${process.env.REACT_APP_API_PORT}/webrtc/offer`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
