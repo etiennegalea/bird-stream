@@ -32,7 +32,7 @@ COPY requirements.txt /app/
 RUN pip install -r requirements.txt --no-cache-dir
 
 # Expose the port
-EXPOSE 2096
+EXPOSE 8051
 
 # Start the application
-CMD ["uvicorn", "src.app:app", "--host", "0.0.0.0", "--port", "2096"]
+CMD ["uvicorn", "src.app:app", "--host", "0.0.0.0", "--port", "8051"]
