@@ -45,41 +45,51 @@ class VideoStreamTrack(MediaStreamTrack):
 
     def __init__(self):
         super().__init__()
-        self.camera = cv2.VideoCapture("/dev/video0")
-        self.timezone = pytz.timezone('Europe/Amsterdam')
+        self.camera = cv2.VideoCapture(0)  # Ensure correct device ID
+        self.timezone = pytz.timezone("Europe/Amsterdam")
+
+        # Ensure camera is opened properly
+        if not self.camera.isOpened():
+            raise RuntimeError("Could not open video device")
 
     async def recv(self):
-        success, frame = self.camera.read()
+        loop = asyncio.get_running_loop()
+
+        # Read frame asynchronously to avoid blocking
+        success, frame = await loop.run_in_executor(None, self.camera.read)
+
         if not success:
             logger.error("Failed to capture frame from camera")
-            return None
+            return None  # Returning None might not be ideal for WebRTC; consider retrying instead
 
-        # Add timestamp to the frame
+        # Add timestamp
         local_time = datetime.now(self.timezone)
         timestamp = local_time.strftime("%Y-%m-%d %H:%M:%S")
         cv2.putText(
-            frame, 
-            timestamp, 
-            (10, frame.shape[0] - 10), 
-            cv2.FONT_HERSHEY_SIMPLEX, 
-            0.7, 
-            (255, 255, 255), 
-            1, 
-            cv2.LINE_AA
+            frame,
+            timestamp,
+            (10, frame.shape[0] - 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            1,
+            cv2.LINE_AA,
         )
 
-        # Convert to RGB for VideoFrame
+        # Convert to RGB
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        
-        # Create VideoFrame
+
+        # Create VideoFrame with correct timestamps
         video_frame = VideoFrame.from_ndarray(frame, format="rgb24")
-        video_frame.pts = video_frame.time = 0
+        video_frame.pts = int(datetime.now(self.timezone).timestamp() * 90000)  # 90kHz WebRTC clock
+        video_frame.time_base = "1/90000"
 
         return video_frame
 
     def stop(self):
         super().stop()
-        self.camera.release()
+        if self.camera.isOpened():
+            self.camera.release()
 
 manager = ConnectionManager()
 
