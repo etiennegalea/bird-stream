@@ -10,6 +10,8 @@ from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
 import pytz
 from datetime import datetime
+import numpy as np
+
 
 # Logger setup
 logging.basicConfig(
@@ -45,51 +47,65 @@ class VideoStreamTrack(MediaStreamTrack):
 
     def __init__(self):
         super().__init__()
-        self.camera = cv2.VideoCapture(0)  # Ensure correct device ID
+        self.camera = cv2.VideoCapture(0)
         self.timezone = pytz.timezone("Europe/Amsterdam")
+        self.frame_count = 0  # Add counter for debugging
 
         # Ensure camera is opened properly
         if not self.camera.isOpened():
             raise RuntimeError("Could not open video device")
+        
+        # Log camera properties
+        logger.info(f"Camera FPS: {self.camera.get(cv2.CAP_PROP_FPS)}")
+        logger.info(f"Camera Resolution: {self.camera.get(cv2.CAP_PROP_FRAME_WIDTH)}x{self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT)}")
 
     async def recv(self):
+        self.frame_count += 1
+        if self.frame_count % 30 == 0:  # Log every 30 frames
+            logger.debug(f"Processed {self.frame_count} frames")
+
         loop = asyncio.get_running_loop()
 
-        # Read frame asynchronously to avoid blocking
-        success, frame = await loop.run_in_executor(None, self.camera.read)
-
+        # Implement retry logic for frame capture
+        max_retries = 3
+        for attempt in range(max_retries):
+            success, frame = await loop.run_in_executor(None, self.camera.read)
+            if success:
+                break
+            logger.warning(f"Frame capture attempt {attempt + 1} failed")
+            await asyncio.sleep(0.1)
+        
         if not success:
-            logger.error("Failed to capture frame from camera")
-            return None  # Returning None might not be ideal for WebRTC; consider retrying instead
+            logger.error("Failed to capture frame after multiple attempts")
+            # Return a black frame instead of None
+            frame = np.zeros((480, 640, 3), dtype=np.uint8)
 
-        # Add timestamp
+        # Add timestamp to the frame
         local_time = datetime.now(self.timezone)
         timestamp = local_time.strftime("%Y-%m-%d %H:%M:%S")
         cv2.putText(
-            frame,
-            timestamp,
-            (10, frame.shape[0] - 10),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            (255, 255, 255),
-            1,
-            cv2.LINE_AA,
+            frame, 
+            timestamp, 
+            (10, frame.shape[0] - 10), 
+            cv2.FONT_HERSHEY_SIMPLEX, 
+            0.7, 
+            (255, 255, 255), 
+            1, 
+            cv2.LINE_AA
         )
 
-        # Convert to RGB
+        # Convert to RGB for VideoFrame
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-        # Create VideoFrame with correct timestamps
+        
+        # Create VideoFrame
         video_frame = VideoFrame.from_ndarray(frame, format="rgb24")
-        video_frame.pts = int(datetime.now(self.timezone).timestamp() * 90000)  # 90kHz WebRTC clock
-        video_frame.time_base = "1/90000"
+        video_frame.pts = video_frame.time = 0
 
         return video_frame
 
     def stop(self):
         super().stop()
-        if self.camera.isOpened():
-            self.camera.release()
+        self.camera.release()
 
 manager = ConnectionManager()
 
@@ -118,12 +134,19 @@ app.add_middleware(
 # Store active peer connections
 pcs = set()
 
-@app.post("/webrtc/offer")  # Changed from GET to POST
-async def webrtc_offer(session_description: dict):  # Add parameter to receive offer
+@app.post("/webrtc/offer")
+async def webrtc_offer(session_description: dict):
+    logger.info("Received WebRTC offer")
     video_track = VideoStreamTrack()
     
-    pc = RTCPeerConnection()
-    pcs.add(pc)  # Keep track of peer connection
+    # Configure ICE servers
+    pc = RTCPeerConnection({
+        "iceServers": [
+            {"urls": ["stun:stun.l.google.com:19302"]},
+            {"urls": ["stun:stun1.l.google.com:19302"]},
+        ]
+    })
+    pcs.add(pc)
     pc.addTrack(video_track)
     
     # Set the remote description from client's offer
@@ -134,13 +157,21 @@ async def webrtc_offer(session_description: dict):  # Add parameter to receive o
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
     
-    # Clean up when connection closes
+    # Add more detailed connection state logging
     @pc.on("connectionstatechange")
     async def on_connectionstatechange():
+        logger.info(f"Connection state changed to: {pc.connectionState}")
         if pc.connectionState == "failed" or pc.connectionState == "closed":
+            logger.warning("Closing peer connection due to state change")
             pcs.discard(pc)
             await pc.close()
     
+    # Add ICE connection state monitoring
+    @pc.on("iceconnectionstatechange")
+    async def on_iceconnectionstatechange():
+        logger.info(f"ICE connection state changed to: {pc.iceConnectionState}")
+    
+    logger.info("Sending WebRTC answer")
     return {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type}
 
 @app.get("/health")

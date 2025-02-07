@@ -13,3 +13,4 @@ websockets
 
 # Other utilities
 pytz
+numpy
