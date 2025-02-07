@@ -135,9 +135,17 @@ async def webrtc_offer(session_description: dict):  # Add parameter to receive o
     # Clean up when connection closes
     @pc.on("connectionstatechange")
     async def on_connectionstatechange():
+        logger.info(f"Connection state changed to: {pc.connectionState}")
         if pc.connectionState == "failed" or pc.connectionState == "closed":
+            logger.info("Cleaning up peer connection")
             pcs.discard(pc)
+            # Clean up video track
+            for sender in pc.getSenders():
+                if sender.track:
+                    sender.track.stop()
             await pc.close()
+            logger.info(f"Peer connection cleaned up. Remaining connections: {len(pcs)}")
+    
     
     return {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type}
 
