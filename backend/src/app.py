@@ -121,6 +121,8 @@ async def webrtc_offer(session_description: dict):  # Add parameter to receive o
     pcs.add(pc)  # Keep track of peer connection
     logger.info("added video_track to RTCPeerConnection (pc)")
     pc.addTrack(video_track)
+
+    logger.info(f"pcs: {pcs}")
     
     # Set the remote description from client's offer
     offer = RTCSessionDescription(sdp=session_description["sdp"], type=session_description["type"])

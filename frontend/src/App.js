@@ -113,7 +113,9 @@ function CameraStream() {
             autoPlay
             playsInline
             className="chicken-viewport"
-          />
+          >
+            <track kind="captions" label="Captions" />
+          </video>
         )}
       </div>
       <div className="connection-status">
