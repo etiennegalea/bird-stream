@@ -7,9 +7,11 @@ import logging
 from typing import List
 from av import VideoFrame
 from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
-from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
+from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder, MediaRelay
+from aiortc.rtcrtpsender import RTCRtpSender
 import pytz
 from datetime import datetime
+import json
 
 # Logger setup
 logging.basicConfig(
@@ -108,46 +110,78 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# Store active peer connections
-pcs = set()
+
+def create_local_tracks(play_from=False, decode=None):
+    global relay, webcam
+
+    if play_from:
+        player = MediaPlayer(play_from, decode=decode)
+        return player.audio, player.video
+    else:
+        options = {"framerate": "30", "video_size": "640x480"}
+        if relay is None:
+            webcam = MediaPlayer("/dev/video0", format="v4l2", options=options)
+            relay = MediaRelay()
+        return None, relay.subscribe(webcam.video)
+
+
+def force_codec(pc, sender, forced_codec):
+    kind = forced_codec.split("/")[0]
+    codecs = RTCRtpSender.getCapabilities(kind).codecs
+    transceiver = next(t for t in pc.getTransceivers() if t.sender == sender)
+    transceiver.setCodecPreferences(
+        [codec for codec in codecs if codec.mimeType == forced_codec]
+    )
 
 @app.post("/webrtc/offer")  # Changed from GET to POST
-async def webrtc_offer(session_description: dict):  # Add parameter to receive offer
-    video_track = VideoStreamTrack()
+async def offer(request):
+    params = await request.json()
+    offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
 
-    logger.info(f"session_desc: {session_description}")
-    
     pc = RTCPeerConnection()
-    pcs.add(pc)  # Keep track of peer connection
-    logger.info("added video_track to RTCPeerConnection (pc)")
-    pc.addTrack(video_track)
+    pcs.add(pc)
 
-    logger.info(f"pcs: {pcs}")
-    
-    # Set the remote description from client's offer
-    offer = RTCSessionDescription(sdp=session_description["sdp"], type=session_description["type"])
-    await pc.setRemoteDescription(offer)
-    
-    # Create and set local description
-    answer = await pc.createAnswer()
-    await pc.setLocalDescription(answer)
-    
-    # Clean up when connection closes
     @pc.on("connectionstatechange")
     async def on_connectionstatechange():
-        logger.info(f"Connection state changed to: {pc.connectionState}")
-        if pc.connectionState == "failed" or pc.connectionState == "closed":
-            logger.info("Cleaning up peer connection")
-            pcs.discard(pc)
-            # Clean up video track
-            for sender in pc.getSenders():
-                if sender.track:
-                    sender.track.stop()
+        print("Connection state is %s" % pc.connectionState)
+        if pc.connectionState == "failed":
             await pc.close()
-            logger.info(f"Peer connection cleaned up. Remaining connections: {len(pcs)}")
-    
-    
-    return {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type}
+            pcs.discard(pc)
+
+    # open media source
+    # audio, video = create_local_tracks(
+    #     args.play_from, decode=not args.play_without_decoding
+    # )
+
+    video = create_local_tracks()
+
+    # if audio:
+        # audio_sender = pc.addTrack(audio)
+        # if args.audio_codec:
+        #     force_codec(pc, audio_sender, args.audio_codec)
+        # elif args.play_without_decoding:
+        #     raise Exception("You must specify the audio codec using --audio-codec")
+
+    if video:
+        video_sender = pc.addTrack(video)
+        force_codec(pc, video_sender, args.video_codec)
+        # elif args.play_without_decoding:
+        #     raise Exception("You must specify the video codec using --video-codec")
+
+    await pc.setRemoteDescription(offer)
+
+    answer = await pc.createAnswer()
+    await pc.setLocalDescription(answer)
+
+    return json.dumps({"sdp": pc.localDescription.sdp, "type": pc.localDescription.type})
+
+pcs = set()
+
+async def on_shutdown():
+    # close peer connections
+    coros = [pc.close() for pc in pcs]
+    await asyncio.gather(*coros)
+    pcs.clear()
 
 @app.get("/health")
 async def health_check():
