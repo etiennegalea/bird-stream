@@ -4,6 +4,10 @@ FROM python:3.11-slim
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+
+# Set working directory in the container
+WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -21,11 +25,8 @@ RUN apt-get update && apt-get install -y \
     libopencv-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Set working directory in the container
-WORKDIR /app
-
 # Copy the application files
-COPY src/ /app/
+COPY ./src /app
 COPY requirements.txt /app/
 
 # Install Python dependencies

@@ -13,15 +13,7 @@ function CameraStream() {
         const iceServers = {
           urls: [
             "stun:stun.l.google.com:19302",
-            "stun:stun.l.google.com:5349",
-            "stun:stun1.l.google.com:3478",
-            "stun:stun1.l.google.com:5349",
-            "stun:stun2.l.google.com:19302",
-            "stun:stun2.l.google.com:5349",
-            "stun:stun3.l.google.com:3478",
-            "stun:stun3.l.google.com:5349",
-            "stun:stun4.l.google.com:19302",
-            "stun:stun4.l.google.com:5349"
+            "stun:stun.l.google.com:5349"
           ]
         };
 
@@ -60,7 +52,8 @@ function CameraStream() {
         await pc.setLocalDescription(offer);
 
         // Send offer to server
-        const response = await fetch(`${process.env.REACT_APP_API_URL}:${process.env.REACT_APP_API_PORT}/webrtc/offer`, {
+        const response = await fetch(`https://${process.env.REACT_APP_API_URL}:${process.env.REACT_APP_API_PORT}/webrtc/offer`, {
+        // const response = await fetch(`https://localhost:8051/webrtc/offer`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
