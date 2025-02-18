@@ -6,31 +6,20 @@ function CameraStream() {
   const [error, setError] = useState(null);
   const videoRef = useRef(null);
   const peerConnectionRef = useRef(null);
+
+  const iceServers = {
+    urls: [
+      "stun:stun.l.google.com:19302",
+      "stun:stun.l.google.com:5349"
+    ]
+  };
+  
   useEffect(() => {
     const startStream = async () => {
       try {
-        const iceServers = {
-          urls: [
-            "stun:stun.l.google.com:19302",
-            "stun:stun.l.google.com:5349"
-          ]
-        };
-
-
         const pc = new RTCPeerConnection(iceServers);
         peerConnectionRef.current = pc;
 
-        // Handle incoming tracks
-        pc.ontrack = (event) => {
-          console.log(event)
-          console.log('Track received:', event.streams[0]);
-          console.log('Track type:', event.track.kind);
-          if (videoRef.current && event.streams[0]) {
-            console.log('yes')
-            videoRef.current.srcObject = event.streams[0];
-            setIsConnected(true);
-          }
-        };
 
         // Handle connection state changes
         pc.onconnectionstatechange = (event) => {
@@ -48,7 +37,7 @@ function CameraStream() {
           }
         };
 
-        // Create and send offer
+        // Create offer
         const offer = await pc.createOffer({
           offerToReceiveVideo: true,
           offerToReceiveAudio: false,
@@ -66,7 +55,7 @@ function CameraStream() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            name: name,
+            id: name,
             offer: {type: offer.type, sdp: offer.sdp}
           })
         });
@@ -80,10 +69,14 @@ function CameraStream() {
         const answerData = await response.json();
         await pc.setRemoteDescription(new RTCSessionDescription(answerData));
 
+        console.log('Answer received:', answerData);
+      
         const remoteStream = peerConnectionRef.current.getRemoteStreams()[0];
         if (videoRef.current && remoteStream) {
           videoRef.current.srcObject = remoteStream;
         }
+
+        console.log('Remote stream:', remoteStream);
 
       } catch (err) {
         console.error('Error setting up WebRTC:', err);
@@ -92,7 +85,7 @@ function CameraStream() {
     };
 
     startStream();
-  }, []);
+  });
   
   function getRandomName(prefix="client_") {
     return prefix + Math.random().toString(36).substring(2, 15);

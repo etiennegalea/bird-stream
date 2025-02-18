@@ -5,11 +5,11 @@ import asyncio
 import logging
 from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
 import json
-import httpx
-from pydantic import BaseModel
 
 from src.connection_manager import ConnectionManager
 import src.video_stream as vs
+from src.models import ClientModel
+
 
 # Logger setup
 logging.basicConfig(
@@ -21,7 +21,7 @@ logger = logging.getLogger("backend")
 manager = ConnectionManager()
 
 print(manager)
-pcs = set()
+pcs = {}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -30,15 +30,13 @@ async def lifespan(app: FastAPI):
     # Initialize resources here (database connections, caches, etc.)
 
     yield
-    # async with httpx.AsyncClient() as client:
-    #     yield {"client": client}
     
     # Shutdown: runs when the app is shutting down
     logger.info("Application is shutting down...")
     print("shutdown")
 
     # Cleanup resources here (close connections, etc.)
-    coros = [pc.close() for pc in pcs]
+    coros = [pc.close() for pc in pcs.values()]
     await asyncio.gather(*coros)
     pcs.clear()
 
@@ -57,33 +55,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class OfferModel(BaseModel):
-    sdp: str
-    type: str
-
-class ClientModel(BaseModel):
-    name: str
-    offer: OfferModel
-
-def print_pcs():
-    for pc in pcs:
-        print(f"pc: {pc}")
+def print_pcs(pcs):
+    print(":: ALL PCS ::")
+    for key, value in pcs.items():
+        print(f"key: {key}, value: {value}")
 
 @app.post("/webrtc/offer")
-async def offer(client_request: ClientModel = Body(...)): 
+async def offer(peer: ClientModel = Body(...)): 
     pc = RTCPeerConnection()
-    if pc not in pcs:
-        pcs.add(pc)
 
-    print(" --> ALL PCS <--")
-    for pc in pcs:
-        print(f"pc: {pc}, name: {client_request.name}")
+    # store peer connection
+    pcs[peer.id] = pc
+    print_pcs(pcs)
 
     _, video = vs.create_local_tracks()
     video_sender = pc.addTrack(video)
     
     # Set remote description only once
-    await pc.setRemoteDescription(RTCSessionDescription(sdp=client_request.offer.sdp, type=client_request.offer.type))
+    await pc.setRemoteDescription(RTCSessionDescription(sdp=peer.offer.sdp, type=peer.offer.type))
     
     # Force codec settings if needed
     vs.force_codec(pc, video_sender)
@@ -91,22 +80,17 @@ async def offer(client_request: ClientModel = Body(...)):
     # Create and set local description
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
-
+    
     @pc.on("connectionstatechange")
     async def on_connectionstatechange():
         print("xxx Connection state is %s" % pc.connectionState)
         if pc.connectionState in ["closed", "failed"]:
-            print("xxx Unresponsive peer, removing connection xxx")
-            print(pc)
+            print(f"xxx Unresponsive peer, removing connection xxx {pc} xxx")
             await pc.close()
-            pcs.discard(pc)
-            print
+            pcs.pop(peer.id, None)
 
-        # Get track information
-    # for transceiver in pc.getTransceivers():
-    #     print(f"--> Track: {transceiver.sender.track}")
-
-    print(f"--> current PC: {pc}")
+    print(f":: current PC: {pc} ::")
+    print_pcs(pcs)
     
     return {
         "sdp": pc.localDescription.sdp, 
