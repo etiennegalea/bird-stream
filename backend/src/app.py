@@ -23,10 +23,14 @@ manager = ConnectionManager()
 print(manager)
 pcs = {}
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global video
+    
     # Startup: runs before the app starts
     logger.info("Application is starting up...")
+    _, video = vs.create_local_tracks()
     # Initialize resources here (database connections, caches, etc.)
 
     yield
@@ -68,7 +72,6 @@ async def offer(peer: ClientModel = Body(...)):
     pcs[peer.id] = pc
     print_pcs(pcs)
 
-    _, video = vs.create_local_tracks()
     video_sender = pc.addTrack(video)
     
     # Set remote description only once
