@@ -1,5 +1,5 @@
 # Core dependencies
-fastapi
+fastapi[all]
 uvicorn
 
 # Video processing
@@ -15,3 +15,4 @@ websockets
 pytz
 numpy
 httpx
+pydantic
