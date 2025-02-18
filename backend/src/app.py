@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import asyncio
@@ -6,6 +6,7 @@ import logging
 from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
 import json
 import httpx
+from pydantic import BaseModel
 
 from src.connection_manager import ConnectionManager
 import src.video_stream as vs
@@ -56,37 +57,61 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.post("/webrtc/offer")  # Changed from GET to POST
-async def offer(request):
-    params = await request.json()
-    offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
+class OfferModel(BaseModel):
+    sdp: str
+    type: str
 
+class ClientModel(BaseModel):
+    name: str
+    offer: OfferModel
+
+def print_pcs():
+    for pc in pcs:
+        print(f"pc: {pc}")
+
+@app.post("/webrtc/offer")
+async def offer(client_request: ClientModel = Body(...)): 
     pc = RTCPeerConnection()
+    if pc not in pcs:
+        pcs.add(pc)
 
-    print(pc)
+    print(" --> ALL PCS <--")
+    for pc in pcs:
+        print(f"pc: {pc}, name: {client_request.name}")
 
-
-    pcs.add()
-
-    print(pcs)
-
-    @pc.on("connectionstatechange")
-    async def on_connectionstatechange():
-        print("Connection state is %s" % pc.connectionState)
-        if pc.connectionState == "failed":
-            await pc.close()
-            pcs.discard(pc)
-
-    video = vs.create_local_tracks()
+    _, video = vs.create_local_tracks()
     video_sender = pc.addTrack(video)
-
+    
+    # Set remote description only once
+    await pc.setRemoteDescription(RTCSessionDescription(sdp=client_request.offer.sdp, type=client_request.offer.type))
+    
+    # Force codec settings if needed
     vs.force_codec(pc, video_sender)
-    await pc.setRemoteDescription(offer)
 
+    # Create and set local description
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
 
-    return json.dumps({"sdp": pc.localDescription.sdp, "type": pc.localDescription.type})
+    @pc.on("connectionstatechange")
+    async def on_connectionstatechange():
+        print("xxx Connection state is %s" % pc.connectionState)
+        if pc.connectionState in ["closed", "failed"]:
+            print("xxx Unresponsive peer, removing connection xxx")
+            print(pc)
+            await pc.close()
+            pcs.discard(pc)
+            print
+
+        # Get track information
+    # for transceiver in pc.getTransceivers():
+    #     print(f"--> Track: {transceiver.sender.track}")
+
+    print(f"--> current PC: {pc}")
+    
+    return {
+        "sdp": pc.localDescription.sdp, 
+        "type": pc.localDescription.type
+    }
 
 
 @app.get("/health")
