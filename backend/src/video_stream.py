@@ -1,6 +1,6 @@
 from datetime import datetime
 import logging
-from aiortc import MediaStreamTrack
+from aiortc import MediaStreamTrack, VideoStreamTrack
 from av import VideoFrame
 import cv2
 import pytz
@@ -16,12 +16,13 @@ logging.basicConfig(
 logger = logging.getLogger("videostream")
 
 
-class VideoStreamTrack(MediaStreamTrack):
+class VideoTrack(VideoStreamTrack):
     kind = "video"
 
     def __init__(self):
         super().__init__()
-        self.camera = cv2.VideoCapture("/dev/video0")
+        self.camera = cv2.VideoCapture(0)
+        # self.camera = cv2.VideoCapture("/dev/video0")
         self.timezone = pytz.timezone('Europe/Amsterdam')
         logger.info("init video stream capture ...")
 
@@ -69,9 +70,9 @@ def create_local_tracks(play_from=False, decode=None):
         return player.audio, player.video
     else:
         options = {"framerate": "30", "video_size": "640x480"}
-        if relay is None:
-            webcam = MediaPlayer("/dev/video0", format="v4l2", options=options)
-            relay = MediaRelay()
+        webcam = MediaPlayer("default:none", format="avfoundation", options=options)  # Use avfoundation for MacOS
+        # webcam = MediaPlayer("/dev/video0", options=options)
+        relay = MediaRelay()
         return None, relay.subscribe(webcam.video)
 
 
