@@ -27,7 +27,7 @@ pcs = {}
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global video
-    
+
     # Startup: runs before the app starts
     logger.info("Application is starting up...")
     _, video = vs.create_local_tracks()
@@ -88,18 +88,26 @@ async def offer(peer: ClientModel = Body(...)):
     async def on_connectionstatechange():
         print("xxx Connection state is %s" % pc.connectionState)
         if pc.connectionState in ["closed", "failed"]:
-            print(f"xxx Unresponsive peer, removing connection xxx {pc} xxx")
+            print(f"xxx Unresponsive peer, removing connection xxx {peer.id} xxx")
             await pc.close()
             pcs.pop(peer.id, None)
-
-    print(f":: current PC: {pc} ::")
-    print_pcs(pcs)
     
     return {
         "sdp": pc.localDescription.sdp, 
         "type": pc.localDescription.type
     }
 
+@app.get("/webrtc/getpeers")
+async def get_peers():
+    return {key: {
+        'connection_state': value.connectionState,
+        'ice_connection_state': value.iceConnectionState,
+        'ice_gathering_state': value.iceGatheringState,
+        'local_description': str(value.localDescription) if value.localDescription else None,
+        'remote_description': str(value.remoteDescription) if value.remoteDescription else None,
+        'sctp': str(value.sctp) if value.sctp else None,
+        'signalingState': value.signalingState
+    } for key, value in pcs.items()}
 
 @app.get("/health")
 async def health_check():

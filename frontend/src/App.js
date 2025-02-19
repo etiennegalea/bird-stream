@@ -1,24 +1,28 @@
 import React, { useEffect, useState, useRef } from "react";
 import './styles/App.css';
+import VideoPlayer from "./VideoPlayer";
 
 function CameraStream() {
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState(null);
   const videoRef = useRef(null);
   const peerConnectionRef = useRef(null);
-
-  const iceServers = {
-    urls: [
-      "stun:stun.l.google.com:19302",
-      "stun:stun.l.google.com:5349"
-    ]
-  };
   
   useEffect(() => {
     const startStream = async () => {
+      const iceServers = {
+        urls: [
+          "stun:stun.l.google.com:19302",
+          "stun:stun.l.google.com:5349"
+        ]
+      };
       try {
         const pc = new RTCPeerConnection(iceServers);
+        pc.onactive = function harja() {
+          console.log("Peer connection is active");
+        };
         peerConnectionRef.current = pc;
+
 
 
         // Handle connection state changes
@@ -48,8 +52,8 @@ function CameraStream() {
 
         // Send offer to server
         console.log(`client name: ${name} | Offer created: ${offer}`);
-        const response = await fetch(`https://${process.env.REACT_APP_API_URL}:${process.env.REACT_APP_API_PORT}/webrtc/offer`, {
-        // const response = await fetch(`http://127.0.0.1:8000/webrtc/offer`, {
+        // const response = await fetch(`https://${process.env.REACT_APP_API_URL}:${process.env.REACT_APP_API_PORT}/webrtc/offer`, {
+        const response = await fetch(`http://127.0.0.1:8000/webrtc/offer`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -71,12 +75,16 @@ function CameraStream() {
 
         console.log('Answer received:', answerData);
       
+        // Handle remote stream
         const remoteStream = peerConnectionRef.current.getRemoteStreams()[0];
         if (videoRef.current && remoteStream) {
           videoRef.current.srcObject = remoteStream;
+          console.log('Remote stream:', remoteStream);
+        } else {
+          console.error('Failed to get remote stream');
         }
-
-        console.log('Remote stream:', remoteStream);
+        
+        console.log('Peer connection:', peerConnectionRef.current);
 
       } catch (err) {
         console.error('Error setting up WebRTC:', err);
@@ -85,12 +93,11 @@ function CameraStream() {
     };
 
     startStream();
-  });
+  }, []);
   
   function getRandomName(prefix="client_") {
     return prefix + Math.random().toString(36).substring(2, 15);
   }
-  
 
   return (
     <div className="stream-container">
@@ -102,6 +109,7 @@ function CameraStream() {
         {error ? (
           <div className="error-message">{error}</div>
         ) : (
+          // <VideoPlayer peerConnection={peerConnectionRef.current} />
           <video ref={videoRef} autoPlay playsInline className="chicken-viewport">
             <track kind="captions" label="Captions" />
           </video>
