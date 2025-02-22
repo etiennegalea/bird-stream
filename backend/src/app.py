@@ -82,15 +82,21 @@ async def offer(peer: ClientModel = Body(...)):
     @pc.on("iceconnectionstatechange")
     async def on_iceconnectionstatechange():
         if pc.iceConnectionState == "failed" or pc.iceConnectionState == "disconnected":
-            print(f"ICE Connection failed for peer {peer.id}, cleaning up")
-            await pcs_manager.remove_peer(peer.id, pc)
+            try:
+                print(f"ICE Connection failed for peer {peer.id}, cleaning up")
+                await pcs_manager.remove_peer(peer.id, pc)
+            except Exception as e:
+                logger.error(f"Error (ICE) removing peer: {e}")
 
     @pc.on("connectionstatechange")
     async def on_connectionstatechange():
         print(f"Connection state changed to {pc.connectionState} for peer {peer.id}")
         if pc.connectionState in ["closed", "failed", "disconnected"]:
-            print(f"Cleaning up connection for peer {peer.id}")
-            await pcs_manager.remove_peer(peer.id, pc)
+            try:
+                print(f"Cleaning up connection for peer {peer.id}")
+                await pcs_manager.remove_peer(peer.id, pc)
+            except Exception as e:
+                logger.error(f"Error removing peer: {e}")
 
     
     # Set remote description only once
