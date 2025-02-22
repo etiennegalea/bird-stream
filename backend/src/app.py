@@ -1,15 +1,15 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body
+from fastapi import FastAPI, Body
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import asyncio
 import logging
-from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
-import json
+from aiortc import RTCPeerConnection, RTCSessionDescription
+from aiortc.contrib.media import MediaRelay
+
 
 from src.connection_manager import ConnectionManager
 import src.video_stream as vs
 from src.models import ClientModel
-
 
 # Logger setup
 logging.basicConfig(
@@ -18,31 +18,29 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger("backend")
-manager = ConnectionManager()
-
-print(manager)
-pcs = {}
+pcs_manager = ConnectionManager()
+relay = MediaRelay()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global video
-
     # Startup: runs before the app starts
     logger.info("Application is starting up...")
-    _, video = vs.create_local_tracks()
+    video = vs.create_local_tracks().video
+
     # Initialize resources here (database connections, caches, etc.)
 
     yield
     
     # Shutdown: runs when the app is shutting down
+    coros = [pc.close() for pc in pcs_manager.get_pcs()]
+    asyncio.gather(*coros)
     logger.info("Application is shutting down...")
     print("shutdown")
 
     # Cleanup resources here (close connections, etc.)
-    coros = [pc.close() for pc in pcs.values()]
-    await asyncio.gather(*coros)
-    pcs.clear()
+    pcs_manager.clean_up()
 
 app = FastAPI(
     title="LoaR Birb Stream",
@@ -69,45 +67,49 @@ async def offer(peer: ClientModel = Body(...)):
     pc = RTCPeerConnection()
 
     # store peer connection
-    pcs[peer.id] = pc
-    print_pcs(pcs)
+    pcs_manager.add_peer(peer.id, pc)
 
-    video_sender = pc.addTrack(video)
+    video_sender = pc.addTrack(relay.subscribe(video))
+    print(f"video: {video}")
+    print(f"video_sender: {video_sender}")
+
+    @pc.on("track")
+    def on_track(track):
+        print("Received track:", track.kind)
+        if track.kind == "video":
+            print("Received video track!!")
+
+    @pc.on("iceconnectionstatechange")
+    async def on_iceconnectionstatechange():
+        if pc.iceConnectionState == "failed" or pc.iceConnectionState == "disconnected":
+            print(f"ICE Connection failed for peer {peer.id}, cleaning up")
+            await pcs_manager.remove_peer(peer.id, pc)
+
+    @pc.on("connectionstatechange")
+    async def on_connectionstatechange():
+        print(f"Connection state changed to {pc.connectionState} for peer {peer.id}")
+        if pc.connectionState in ["closed", "failed", "disconnected"]:
+            print(f"Cleaning up connection for peer {peer.id}")
+            await pcs_manager.remove_peer(peer.id, pc)
+
     
     # Set remote description only once
     await pc.setRemoteDescription(RTCSessionDescription(sdp=peer.offer.sdp, type=peer.offer.type))
     
-    # Force codec settings if needed
     vs.force_codec(pc, video_sender)
 
     # Create and set local description
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
-    
-    @pc.on("connectionstatechange")
-    async def on_connectionstatechange():
-        print("xxx Connection state is %s" % pc.connectionState)
-        if pc.connectionState in ["closed", "failed"]:
-            print(f"xxx Unresponsive peer, removing connection xxx {peer.id} xxx")
-            await pc.close()
-            pcs.pop(peer.id, None)
-    
+
     return {
-        "sdp": pc.localDescription.sdp, 
+        "sdp": pc.localDescription.sdp,
         "type": pc.localDescription.type
     }
 
 @app.get("/webrtc/getpeers")
-async def get_peers():
-    return {key: {
-        'connection_state': value.connectionState,
-        'ice_connection_state': value.iceConnectionState,
-        'ice_gathering_state': value.iceGatheringState,
-        'local_description': str(value.localDescription) if value.localDescription else None,
-        'remote_description': str(value.remoteDescription) if value.remoteDescription else None,
-        'sctp': str(value.sctp) if value.sctp else None,
-        'signalingState': value.signalingState
-    } for key, value in pcs.items()}
+async def get_peers(verbose: bool = False):
+    return pcs_manager.get_peers(verbose=verbose)
 
 @app.get("/health")
 async def health_check():

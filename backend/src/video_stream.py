@@ -70,11 +70,9 @@ def create_local_tracks(play_from=False, decode=None):
         return player.audio, player.video
     else:
         options = {"framerate": "30", "video_size": "640x480"}
-        webcam = MediaPlayer("default:none", format="avfoundation", options=options)  # Use avfoundation for MacOS
-        # webcam = MediaPlayer("/dev/video0", options=options)
-        relay = MediaRelay()
-        return None, relay.subscribe(webcam.video)
-
+        # webcam = MediaPlayer("default:none", format="avfoundation", options=options)  # Use avfoundation for MacOS
+        webcam = MediaPlayer("/dev/video0", options=options)
+        return webcam
 
 def force_codec(pc, sender, forced_codec="video/H264"):
     kind = forced_codec.split("/")[0]

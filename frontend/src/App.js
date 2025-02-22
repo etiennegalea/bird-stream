@@ -18,8 +18,12 @@ function CameraStream() {
       };
       try {
         const pc = new RTCPeerConnection(iceServers);
-        pc.onactive = function harja() {
-          console.log("Peer connection is active");
+        pc.ontrack = (event) => {
+          console.log('Received track:', event.track);
+          if (videoRef.current && event.streams[0]) {
+            videoRef.current.srcObject = event.streams[0];
+            console.log('Set video source:', event.streams[0]);
+          }
         };
         peerConnectionRef.current = pc;
 
@@ -110,7 +114,13 @@ function CameraStream() {
           <div className="error-message">{error}</div>
         ) : (
           // <VideoPlayer peerConnection={peerConnectionRef.current} />
-          <video ref={videoRef} autoPlay playsInline className="chicken-viewport">
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="chicken-viewport"
+            style={{ width: '100%', height: '100%'}}>
             <track kind="captions" label="Captions" />
           </video>
         )}
