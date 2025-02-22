@@ -27,8 +27,6 @@ function CameraStream() {
         };
         peerConnectionRef.current = pc;
 
-
-
         // Handle connection state changes
         pc.onconnectionstatechange = (event) => {
           switch(pc.connectionState) {
