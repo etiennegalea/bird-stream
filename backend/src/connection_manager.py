@@ -41,16 +41,7 @@ class ConnectionManager():
     
     async def remove_peer(self, peer_id: str, pc: RTCPeerConnection):
         if peer_id in self.pcs.keys():
-            for transceiver in pc.getTransceivers():
-                if transceiver.receiver:
-                    await transceiver.receiver.stop()
-            
-            for sender in pc.getSenders():
-                if sender is not None:
-                    sender.replaceTrack(None)
-            
             await pc.close()
-
             removed_pc = self.pcs.pop(peer_id, None)
             print(f":::: {removed_pc} ::::")
             logger.info(f"Removing peer {peer_id} -> {removed_pc} ({removed_pc.connectionState})")
