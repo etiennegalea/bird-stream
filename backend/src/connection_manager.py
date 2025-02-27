@@ -54,5 +54,23 @@ class ConnectionManager():
 
     # Clean up connections
     async def clean_up(self):
-        self.pcs.clear()
-        logger.info(f"All connections cleaned up: {self.pcs}")
+        try:
+            close_coros = []
+            for peer_id, pc in list(self.pcs.items()):
+                # Stop all tracks first
+                for transceiver in pc.getTransceivers():
+                    if transceiver.receiver and transceiver.receiver.track:
+                        transceiver.receiver.track.stop()
+                
+                # Force connection state to closed
+                if pc.connectionState != "closed":
+                    close_coros.append(pc.close())
+                    logger.info(f"Closing peer connection: {peer_id}")
+            
+            if close_coros:
+                await asyncio.gather(*close_coros, return_exceptions=True)
+            
+            self.pcs.clear()
+            logger.info("All connections cleaned up")
+        except Exception as e:
+            logger.error(f"Error during cleanup: {e}")

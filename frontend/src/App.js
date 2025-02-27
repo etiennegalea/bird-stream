@@ -9,15 +9,33 @@ function CameraStream() {
   const peerConnectionRef = useRef(null);
   
   useEffect(() => {
+    const cleanup = () => {
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+    };
+
     const startStream = async () => {
-      const iceServers = {
-        urls: [
-          "stun:stun.l.google.com:19302",
-          "stun:stun.l.google.com:5349"
-        ]
-      };
+      cleanup();
+
       try {
-        const pc = new RTCPeerConnection(iceServers);
+        const pc = new RTCPeerConnection({
+          iceServers: [
+            {
+                urls: ["stun:stream.lifeofarobin.com:3478"],
+            },
+            {
+                urls: ["turns:stream.lifeofarobin.com:5349"],
+                username: "user",
+                credential: "supersecretpassword",
+            }
+          ]
+        });
+
         pc.ontrack = (event) => {
           console.log('Received track:', event.track);
           if (videoRef.current && event.streams[0]) {
@@ -55,7 +73,8 @@ function CameraStream() {
         // Send offer to server
         console.log(`client name: ${name} | Offer created: ${offer}`);
         const response = await fetch(`https://${process.env.REACT_APP_API_URL}:${process.env.REACT_APP_API_PORT}/webrtc/offer`, {
-        // const response = await fetch(`http://127.0.0.1:8000/webrtc/offer`, {
+          // const response = await fetch(`http://localhost:8051/webrtc/offer`, {
+          // const response = await fetch(`http://127.0.0.1:8000/webrtc/offer`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -95,6 +114,7 @@ function CameraStream() {
     };
 
     startStream();
+    return cleanup;
   }, []);
   
   function getRandomName(prefix="client_") {

@@ -27,15 +27,14 @@ async def lifespan(app: FastAPI):
     global video
     # Startup: runs before the app starts
     logger.info("Application is starting up...")
-    video = vs.create_local_tracks().video
+    audio, video = vs.create_local_tracks("/Users/etiennegalea/Movies/rapidsave.mp4")
 
     # Initialize resources here (database connections, caches, etc.)
 
     yield
     
     # Shutdown: runs when the app is shutting down
-    coros = [pc.close() for pc in pcs_manager.get_pcs()]
-    asyncio.gather(*coros)
+    await pcs_manager.clean_up()
     logger.info("Application is shutting down...")
     print("shutdown")
 

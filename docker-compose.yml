@@ -1,5 +1,4 @@
 services:
-
   frontend:
     build:
       context: ./frontend
@@ -18,9 +17,22 @@ services:
       context: ./backend
     container_name: backend
     ports:
-      - "8051:2096"
+      - "8051:2096/tcp"
+      - "8051:2096/udp"
     volumes:
       - ./backend:/app
     devices:
       - "/dev/video0:/dev/video0"
     restart: unless-stopped
+
+  coturn:
+    image: coturn/coturn
+    container_name: coturn_server
+    restart: unless-stopped
+    network_mode: "host"
+    volumes:
+      - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf
+    environment:
+      - TURN_PORT=3478
+    command: ["-c", "/etc/coturn/turnserver.conf"]
+    privileged: true
