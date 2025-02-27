@@ -29,7 +29,7 @@ function CameraStream() {
                 urls: ["stun:stream.lifeofarobin.com:3478"],
             },
             {
-                urls: ["turns:stream.lifeofarobin.com:5349"],
+                urls: ["turn:stream.lifeofarobin.com:5349"],
                 username: "user",
                 credential: "supersecretpassword",
             }
@@ -73,7 +73,7 @@ function CameraStream() {
         // Send offer to server
         console.log(`client name: ${name} | Offer created: ${offer}`);
         const response = await fetch(`https://${process.env.REACT_APP_API_URL}:${process.env.REACT_APP_API_PORT}/webrtc/offer`, {
-          // const response = await fetch(`http://localhost:8051/webrtc/offer`, {
+          // const response = await fetch(`http://localhost:8051/webrtc/offer`, {`
           // const response = await fetch(`http://127.0.0.1:8000/webrtc/offer`, {
           method: 'POST',
           headers: {

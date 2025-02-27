@@ -34,5 +34,6 @@ services:
       - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf
     environment:
       - TURN_PORT=3478
+      - TURN_TLS_PORT=5349
     command: ["-c", "/etc/coturn/turnserver.conf"]
     privileged: true
