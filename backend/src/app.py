@@ -68,7 +68,7 @@ async def offer(peer: ClientModel = Body(...)):
     # store peer connection
     pcs_manager.add_peer(peer.id, pc)
 
-    video_sender = pc.addTrack(relay.subscribe(video))
+    video_sender = pc.addTrack(relay.subscribe(video.video))
     print(f"video: {video}")
     print(f"video_sender: {video_sender}")
 
