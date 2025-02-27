@@ -1,4 +1,4 @@
-# 🐦 Bird Live Stream - Quick Start Guide
+# 🐦‍⬛ Bird Live Stream - Quick Start Guide
 
 ## 📋 Prerequisites
 * Docker installed on your system
