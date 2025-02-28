@@ -32,6 +32,7 @@ services:
     network_mode: "host"
     volumes:
       - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf
+      - ./coturn/logs:/var/log
     environment:
       - TURN_PORT=3478
       - TURN_TLS_PORT=5349
