@@ -26,14 +26,7 @@ services:
     restart: unless-stopped
 
   coturn:
-    image: coturn/coturn
-    container_name: coturn_server
-    restart: unless-stopped
-    network_mode: "host"
+    build: ./coturn
     volumes:
-      - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf
-      - ./coturn/logs:/var/log
-    environment:
-      - TURN_PORT=3478
-      - TURN_TLS_PORT=5349
-    command: ["-c", "/etc/coturn/turnserver.conf", "--log-file=stdout"]
+      - ./turnserver.conf:/etc/turnserver.conf
+    network_mode: "host"
