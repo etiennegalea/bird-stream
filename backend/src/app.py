@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
     # Startup: runs before the app starts
     logger.info("Application is starting up...")
     # audio, video = vs.create_local_tracks()
-    audio, video = vs.create_local_tracks("/app/rapidsave.mp4")
+    audio, video = vs.create_local_tracks("/app/media/birbs-of-paradise.mp4")
 
     # Initialize resources here (database connections, caches, etc.)
 

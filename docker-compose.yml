@@ -21,7 +21,7 @@ services:
       - "8051:2096/udp"
     volumes:
       - ./backend:/app
-      - /Users/etiennegalea/Movies/rapidsave.mp4:/app/rapidsave.mp4
+      - /Users/etiennegalea/Movies/birbs-of-paradise.mp4:/app/media/rapidsave.mp4
     # devices:
       # - "/dev/video0:/dev/video0"
     restart: unless-stopped
