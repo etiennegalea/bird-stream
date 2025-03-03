@@ -7,8 +7,10 @@ RUN sed -i "s/USER=turnserver/USER=root/" /etc/init.d/coturn
 RUN sed -i "s/GROUP=turnserver/GROUP=root/" /etc/init.d/coturn
 RUN sed -i "s/#TURNSERVER_ENABLED=1/TURNSERVER_ENABLED=1/" /etc/default/coturn
 
-RUN service coturn stop
-#RUN service coturn start
+# Create a directory for logs
+RUN mkdir -p /var/log/coturn && \
+    touch /var/log/coturn/turnserver.log && \
+    chmod -R 755 /var/log/coturn
 
-#/etc/default/coturn -> TURNSERVER_ENABLED=1
-CMD service coturn start && tail -f /dev/null
+# Start coturn with logging enabled
+CMD turnserver -v --log-file=/var/log/coturn/turnserver.log --no-stdout-log=0 && tail -f /var/log/coturn/turnserver.log
