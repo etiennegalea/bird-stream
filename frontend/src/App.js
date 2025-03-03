@@ -26,10 +26,10 @@ function CameraStream() {
         const pc = new RTCPeerConnection({
           iceServers: [
             {
-              urls: "stun:77.174.190.102:3478",
+              urls: "stun:turn.lifeofarobin.com:3478",
             },
             {
-              urls: "turn:77.174.190.102:3478",
+              urls: "turn:turn.lifeofarobin.com:3478",
               username: "user",
               credential: "supersecretpassword",
             }
