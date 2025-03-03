@@ -28,11 +28,11 @@ function CameraStream() {
             {
               urls: [
                 "stun:stun.l.google.com:19302",
-                "stun:77.174.190.102:3478"
+                "stun:192.168.1.140:3478"
               ],
             },
             {
-                urls: ["turn:77.174.190.102:5349"],
+                urls: ["turn:192.168.1.140:3478"],
                 username: "user",
                 credential: "supersecretpassword",
             }
