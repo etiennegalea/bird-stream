@@ -30,4 +30,9 @@ services:
     container_name: coturn
     volumes:
       - ./coturn/turnserver.conf:/etc/turnserver.conf
+      # - ./coturn/logs:/var/log
     network_mode: "host"
+    environment:
+      - TURN_PORT=3478
+      - TURN_TLS_PORT=5349
+    command: ["-c", "/etc/coturn/turnserver.conf", "--log-file=stdout"]
