@@ -72,7 +72,7 @@ def create_local_tracks(play_from=False, decode=True):
         options = {"framerate": "30", "video_size": "640x480"}
         # webcam = MediaPlayer("default:none", format="avfoundation", options=options)
         webcam = MediaPlayer("/dev/video0", options=options)
-        return None, webcam
+        return None, webcam.video
 
 def force_codec(pc, sender, forced_codec="video/H264"):
     kind = forced_codec.split("/")[0]

@@ -21,8 +21,9 @@ services:
       - "8051:2096/udp"
     volumes:
       - ./backend:/app
-    devices:
-      - "/dev/video0:/dev/video0"
+      - /Users/etiennegalea/Movies/rapidsave.mp4:/app/rapidsave.mp4
+    # devices:
+      # - "/dev/video0:/dev/video0"
     restart: unless-stopped
 
   coturn:
@@ -32,7 +33,6 @@ services:
       - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf
       # - ./coturn/logs:/var/log
     network_mode: "host"
-    # environment:
-    #   - TURN_PORT=3478
-    #   - TURN_TLS_PORT=5349
-    # command: ["--log-file=stdout"]
+    environment:
+      - EXTERNAL_IP=77.174.190.102
+    restart: unless-stopped

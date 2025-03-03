@@ -27,7 +27,8 @@ async def lifespan(app: FastAPI):
     global video
     # Startup: runs before the app starts
     logger.info("Application is starting up...")
-    audio, video = vs.create_local_tracks()
+    # audio, video = vs.create_local_tracks()
+    audio, video = vs.create_local_tracks("/app/rapidsave.mp4")
 
     # Initialize resources here (database connections, caches, etc.)
 
@@ -68,7 +69,7 @@ async def offer(peer: ClientModel = Body(...)):
     # store peer connection
     pcs_manager.add_peer(peer.id, pc)
 
-    video_sender = pc.addTrack(relay.subscribe(video.video))
+    video_sender = pc.addTrack(relay.subscribe(video))
     print(f"video: {video}")
     print(f"video_sender: {video_sender}")
 
