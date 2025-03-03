@@ -29,7 +29,7 @@ services:
     build: ./coturn
     container_name: coturn
     volumes:
-      - ./coturn/turnserver.conf:/etc/turnserver.conf
+      - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf
       # - ./coturn/logs:/var/log
     network_mode: "host"
     environment:
