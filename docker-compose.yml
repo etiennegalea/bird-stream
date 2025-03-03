@@ -27,6 +27,7 @@ services:
 
   coturn:
     build: ./coturn
+    container_name: coturn
     volumes:
       - ./coturn/turnserver.conf:/etc/turnserver.conf
     network_mode: "host"
