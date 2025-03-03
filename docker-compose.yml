@@ -33,6 +33,4 @@ services:
       - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf
       # - ./coturn/logs:/var/log
     network_mode: "host"
-    environment:
-      - EXTERNAL_IP=77.174.190.102
     restart: unless-stopped
