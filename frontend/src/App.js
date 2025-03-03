@@ -35,7 +35,6 @@ function CameraStream() {
                 urls: ["turn:77.174.190.102:3478"],
                 username: "user",
                 credential: "supersecretpassword",
-                credentialType: "password",
                 realm: "stream.lifeofarobin.com"
             }
           ]
