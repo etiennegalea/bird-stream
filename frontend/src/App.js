@@ -27,15 +27,15 @@ function CameraStream() {
           iceServers: [
             {
               urls: [
-                "stun:stun.l.google.com:19302",
-                "stun:77.174.190.102:3478"
+                // "stun:stun.l.google.com:19302",
+                // "stun:77.174.190.102:3478",
+                "stun:192.168.1.140:3478"
               ],
             },
             {
-                urls: ["turn:77.174.190.102:3478"],
-                username: "user",
-                credential: "supersecretpassword",
-                realm: "stream.lifeofarobin.com"
+              urls: ["turn:192.168.1.140:3478"],
+              username: "user",
+              credential: "supersecretpassword",
             }
           ]
         });
@@ -76,8 +76,8 @@ function CameraStream() {
 
         // Send offer to server
         console.log(`client name: ${name} | Offer created: ${offer}`);
-        const response = await fetch(`https://${process.env.REACT_APP_API_URL}:${process.env.REACT_APP_API_PORT}/webrtc/offer`, {
-        // const response = await fetch(`http://localhost:8051/webrtc/offer`, {
+        // const response = await fetch(`https://${process.env.REACT_APP_API_URL}:${process.env.REACT_APP_API_PORT}/webrtc/offer`, {
+        const response = await fetch(`http://localhost:8051/webrtc/offer`, {
         // const response = await fetch(`http://127.0.0.1:8000/webrtc/offer`, {
           method: 'POST',
           headers: {
