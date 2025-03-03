@@ -35,4 +35,4 @@ services:
     environment:
       - TURN_PORT=3478
       - TURN_TLS_PORT=5349
-    command: ["-c", "/etc/coturn/turnserver.conf", "--log-file=stdout"]
+    command: ["--log-file=stdout"]
