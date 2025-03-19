@@ -22,8 +22,8 @@ services:
     volumes:
       - ./backend:/app
       - ./media/birbs-of-paradise.mp4:/app/media/birbs-of-paradise.mp4
-    # devices:
-    #   - "/dev/video0:/dev/video0"
+    devices:
+      - "/dev/video0:/dev/video0"
     restart: unless-stopped
 
   coturn:
