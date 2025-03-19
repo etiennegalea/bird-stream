@@ -2,7 +2,7 @@ services:
   frontend:
     build:
       context: ./frontend
-    container_name: frontend
+    container_name: stream-frontend
     ports:
       - "8050:80"
     environment:
@@ -15,15 +15,15 @@ services:
   backend:
     build: 
       context: ./backend
-    container_name: backend
+    container_name: stream-backend
     ports:
       - "8051:2096/tcp"
       - "8051:2096/udp"
     volumes:
       - ./backend:/app
       - ./media/birbs-of-paradise.mp4:/app/media/birbs-of-paradise.mp4
-    devices:
-      - "/dev/video0:/dev/video0"
+    # devices:
+    #   - "/dev/video0:/dev/video0"
     restart: unless-stopped
 
   coturn:

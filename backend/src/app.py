@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import asyncio
 import logging
-from aiortc import RTCPeerConnection, RTCSessionDescription
+from aiortc import RTCConfiguration, RTCIceServer, RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaRelay
 
 
@@ -27,9 +27,8 @@ async def lifespan(app: FastAPI):
     global video
     # Startup: runs before the app starts
     logger.info("Application is starting up...")
-    # audio, video = vs.create_local_tracks()
-    # audio, video = vs.create_local_tracks("/app/birbs-of-paradise.mp4")
     audio, video = vs.create_local_tracks()
+    # audio, video = vs.create_local_tracks("/app/media/birbs-of-paradise.mp4")
 
     # Initialize resources here (database connections, caches, etc.)
 
@@ -65,7 +64,13 @@ def print_pcs(pcs):
 
 @app.post("/webrtc/offer")
 async def offer(peer: ClientModel = Body(...)): 
-    pc = RTCPeerConnection()
+
+    config = RTCConfiguration([
+        RTCIceServer(urls=["stun:stun.l.google.com:19302", "stun:77.174.190.102:3478"]),
+        RTCIceServer(urls=["turn:77.174.190.102:3478"], username="user", credential="supersecretpassword")
+    ])
+    
+    pc = RTCPeerConnection(config)
 
     # store peer connection
     pcs_manager.add_peer(peer.id, pc)

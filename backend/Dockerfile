@@ -27,10 +27,11 @@ RUN apt-get update && apt-get install -y \
 
 # Copy the application files
 COPY ./src /app
-COPY requirements.txt /app/
+COPY requirements.txt /tmp/
 
 # Install Python dependencies
-RUN pip install -r requirements.txt
+RUN pip install --requirement /tmp/requirements.txt
+COPY . /tmp/
 
 # Expose the port
 EXPOSE 2096
