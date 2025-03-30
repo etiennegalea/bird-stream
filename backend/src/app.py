@@ -1,11 +1,14 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from datetime import datetime
 import asyncio
 import logging
+import json
 
 from src.components.connection_manager import ConnectionManager
 from src.components.video_stream import VideoStream
+from src.components.chat_room import ChatRoom
 
 
 logging.basicConfig(
@@ -14,8 +17,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger("backend | main")
 
-manager = ConnectionManager()
 vs = VideoStream(0)
+videoManager = ConnectionManager()
+chatroom = ChatRoom()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -36,8 +40,8 @@ app.add_middleware(
 
 @app.websocket("/stream")
 async def websocket_endpoint(websocket: WebSocket):
-    await manager.connect(websocket)
-    logger.info(f"Active connections: {len(manager.active_connections)}")
+    await videoManager.connect(websocket)
+    logger.info(f"Active connections: {len(videoManager.active_connections)}")
 
     try:
         while True:
@@ -47,19 +51,89 @@ async def websocket_endpoint(websocket: WebSocket):
             if frame_data:
                 # add viewer number to frame data
                 frame_data['type'] = 'viewerCount'
-                frame_data['viewers'] = len(manager.active_connections)
+                frame_data['viewers'] = len(videoManager.active_connections)
                 # send
                 await websocket.send_json(frame_data)
 
             # Send data at ~30 FPS to connected clients
             await asyncio.sleep(1 / 30)
     except WebSocketDisconnect:
-        await manager.disconnect(websocket)
+        await videoManager.disconnect(websocket)
 
         # Notify remaining clients about updated viewer count
         if frame_data:
             frame_data['type'] = 'viewerCount'
-            frame_data['viewers'] = len(manager.active_connections)
-            await manager.broadcast(frame_data)
+            frame_data['viewers'] = len(videoManager.active_connections)
+            await videoManager.broadcast(frame_data)
     except Exception as e:
         logger.error(f"Error in WebSocket endpoint: {e}")
+
+@app.websocket("/chat")
+async def chat_endpoint(websocket: WebSocket):
+    # Extract username from query parameters
+    username = websocket.query_params.get("username", "Anonymous")
+    
+    # Limit username length for security
+    username = username[:20]
+    
+    await chatroom.connect(websocket)
+    logger.info(f"User {username} connected to chat. Total chat users: {len(chatroom.active_connections)}")
+
+    # Send a system message about the new user
+    await chatroom.broadcast_message({
+        "type": "system",
+        "text": f"{username} has joined the chat",
+        "timestamp": datetime.now().isoformat()
+    })
+
+    try:
+        while True:
+            # Wait for messages from the client
+            data = await websocket.receive_text()
+            
+            try:
+                # Parse the message
+                message_data = json.loads(data)
+                
+                # Validate message format
+                if "username" not in message_data or "text" not in message_data:
+                    logger.warning(f"Received invalid message format: {message_data}")
+                    continue
+                
+                # Sanitize and limit message length
+                msg_username = message_data["username"][:20]  # Limit username to 20 chars
+                text = message_data["text"][:500]  # Limit message to 500 chars
+                
+                # Verify username matches the connected user
+                if msg_username != username:
+                    logger.warning(f"Username mismatch: {msg_username} vs {username}")
+                    msg_username = username  # Force the correct username
+                
+                # Create the message object
+                chat_message = {
+                    "type": "message",
+                    "username": msg_username,
+                    "text": text,
+                    "timestamp": message_data.get("timestamp", datetime.now().isoformat())
+                }
+                
+                # Broadcast the message to all clients
+                await chatroom.broadcast_message(chat_message)
+                logger.info(f"Message from {msg_username}: {text[:30]}...")
+                
+            except json.JSONDecodeError:
+                logger.warning(f"Received invalid JSON: {data}")
+            except Exception as e:
+                logger.error(f"Error processing message: {e}")
+                
+    except WebSocketDisconnect:
+        # Send a system message about the user leaving
+        await chatroom.broadcast_message({
+            "type": "system",
+            "text": f"{username} has left the chat",
+            "timestamp": datetime.now().isoformat()
+        })
+        await chatroom.disconnect(websocket)
+    except Exception as e:
+        logger.error(f"Error in chat WebSocket endpoint: {e}")
+        await chatroom.disconnect(websocket)
