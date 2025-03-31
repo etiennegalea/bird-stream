@@ -39,37 +39,89 @@ body {
 
 .main-content .stream-section {
   flex: 1;
-  max-width: 100%;
+  max-width: 800px;
   transition: max-width 0.5s ease;
 }
 
-.main-content .chat-container.chat-hidden {
-  opacity: 0;
-  max-width: 0;
-  margin: 0;
-  padding: 0;
+.main-content.chat-hidden .stream-section {
+  max-width: 1100px; /* Expand when chat is hidden */
 }
 
 .chat-section {
   position: relative;
   width: 350px;
+  height: 500px; /* Set a fixed height */
   opacity: 1;
   max-width: 350px;
-  overflow: hidden;
-  /* transition: opacity 0.5s ease, max-width 0.5s ease; */
+  overflow: hidden; /* Ensure overflow is hidden */
+  transition: opacity 0.5s ease, max-width 0.5s ease;
+  display: flex; /* Add flex display */
+  flex-direction: column; /* Stack children vertically */
+  border-radius: 8px;
+  border: 1px solid #ddd; /* Add consistent border */
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
+.chat-section.chat-hidden {
+  opacity: 0;
+  max-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none; /* Remove border when hidden */
+}
 
 .chicken-viewport {
   width: 100%;
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  position: relative;
+  cursor: pointer;
 }
 
-.chicken-viewport img {
+.chicken-viewport:hover .fullscreen-hint {
+  opacity: 1;
+}
+
+.stream-image {
   width: 100%;
   display: block;
+}
+
+/* Fullscreen styles */
+.fullscreen-hint {
+  position: absolute;
+  bottom: 15px;
+  right: 15px;
+  background-color: rgba(0, 0, 0, 0.6);
+  color: white;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+/* Fullscreen mode */
+.stream-image:fullscreen {
+  object-fit: contain;
+  width: 100vw;
+  height: 100vh;
+  background-color: black;
+}
+
+.stream-image:-webkit-full-screen {
+  object-fit: contain;
+  width: 100vw;
+  height: 100vh;
+  background-color: black;
+}
+
+.stream-image:-ms-fullscreen {
+  object-fit: contain;
+  width: 100vw;
+  height: 100vh;
+  background-color: black;
 }
 
 .stream-info {
@@ -93,7 +145,7 @@ body {
   width: 30px;
   height: 30px;
   border: 1px solid #ddd;
-  border-radius: 5px 5px 5px 5px;
+  border-radius: 25px;
   background-color: #fafafa;
   cursor: pointer;
   font-size: 15px;
@@ -110,7 +162,7 @@ body {
 
 .chat-toggle-btn.chat-hidden {
   right: -20px;
-  border-radius: 5px 5px 5px 5px;
+  border-radius: 25px;
 }
 
 /* Responsive adjustments */
@@ -120,15 +172,20 @@ body {
     align-items: center;
   }
   
-  .stream-section, .chat-container {
+  .stream-section, .chat-section {
     width: 100%;
     max-width: 100%;
   }
   
   .chat-toggle-btn {
     right: 0px;
-    /* top: -15px; */
-    /* transform: translateY(0) rotate(90deg); */
-    border-radius: 5px 5px 5px 5px;
+    border-radius: 25px;
+  }
+  
+  /* Adjust fullscreen for mobile */
+  .fullscreen-hint {
+    bottom: 10px;
+    right: 10px;
+    font-size: 10px;
   }
 }

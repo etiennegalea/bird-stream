@@ -1,12 +1,13 @@
+/* Chat container */
 .chat-container {
-    width: 350px;
-    height: 500px;
-    border-radius: 15px;
-    display: flex;
-    flex-direction: column;
-    background-color: #f8f8f8;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    transition: width 0.3s ease, opacity 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  background-color: #f8f8f8;
+  transition: width 0.3s ease, opacity 0.3s ease;
+  flex: 1; /* Take up all available space */
+  overflow: hidden; /* Hide overflow */
+  border-radius: 8px;
+  /* Remove box-shadow from here since it's now in chat-section */
 }
 
 .chat-container h2 {
@@ -17,13 +18,18 @@
     /* border-bottom: 1px solid #eee; */
 }
 
+/* Chat messages container */
 .chat-messages {
-    flex: 1;
-    overflow-y: auto;
-    padding: 10px;
-    display: flex;
-    flex-direction: column;
-    background-color: #fff;
+  flex: 1; /* Take up all available space */
+  overflow-y: auto; /* Enable vertical scrolling */
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background-color: #fff;
+  height: calc(100% - 60px); /* Calculate height minus the form height */
+  border-radius: 8px 8px 0 0; /* Rounded corners only at the top */
+  border-bottom: 1px solid #ddd; /* Add bottom border to separate from form */
 }
 
 .message {
@@ -82,11 +88,14 @@
     color: inherit;
 }
 
+/* Message form */
 .message-form {
-    display: flex;
-    padding: 10px;
-    border-top: 1px solid #ddd;
-    background-color: #f8f8f8;
+  display: flex;
+  padding: 10px;
+  border-top: 1px solid #ddd;
+  background-color: #f8f8f8;
+  height: 60px; /* Fixed height for the form */
+  box-sizing: border-box;
 }
 
 .message-form input {
@@ -110,13 +119,14 @@
     background-color: #45a049;
 }
 
+/* Username form */
 .username-form {
-    display: flex;
-    flex-direction: column;
-    padding: 20px;
-    gap: 10px;
-    flex: 1;
-    justify-content: center;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  gap: 10px;
+  flex: 1;
+  justify-content: center;
 }
 
 .username-form input {

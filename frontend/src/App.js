@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import './styles/App.css';
 import ChatRoom from './components/ChatRoom';
 
@@ -7,6 +7,7 @@ function CameraStream() {
   const [videoSrc, setVideoSrc] = useState("");
   const [fps, setFps] = useState(0);
   const [isChatVisible, setIsChatVisible] = useState(true);
+  const videoRef = useRef(null);
 
   useEffect(() => {
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
@@ -37,6 +38,32 @@ function CameraStream() {
     setIsChatVisible(!isChatVisible);
   };
 
+  const toggleFullScreen = () => {
+    const videoElement = videoRef.current;
+    
+    if (!videoElement) return;
+    
+    if (!document.fullscreenElement) {
+      // Enter fullscreen
+      if (videoElement.requestFullscreen) {
+        videoElement.requestFullscreen();
+      } else if (videoElement.webkitRequestFullscreen) { /* Safari */
+        videoElement.webkitRequestFullscreen();
+      } else if (videoElement.msRequestFullscreen) { /* IE11 */
+        videoElement.msRequestFullscreen();
+      }
+    } else {
+      // Exit fullscreen
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) { /* Safari */
+        document.webkitExitFullscreen();
+      } else if (document.msExitFullscreen) { /* IE11 */
+        document.msExitFullscreen();
+      }
+    }
+  };
+
   return (
     <div className="app-container">
       <div className="header">
@@ -44,19 +71,23 @@ function CameraStream() {
         <p>Bringing you beautiful Rotterdam birbs live!</p>
       </div>
       
-      <div className="main-content">
+      <div className={`main-content ${!isChatVisible ? 'chat-hidden' : ''}`}>
         <div className="stream-section">
-          <div className="chicken-viewport">
-            <img src={videoSrc} alt="Camera Stream" />
+          <div className="chicken-viewport" onClick={toggleFullScreen}>
+            <img 
+              ref={videoRef} 
+              src={videoSrc} 
+              alt="Camera Stream" 
+              className="stream-image"
+            />
+            <div className="fullscreen-hint">
+              <span>Click to toggle fullscreen</span>
+            </div>
           </div>
           <div className="stream-info">
             <div className="viewer-count">👥 Viewers: {viewerCount}</div>
             <p>FPS: {fps}</p>
           </div>
-        </div>
-        
-        <div className={`chat-container ${!isChatVisible ? 'chat-hidden' : ''}`}>
-          <ChatRoom />
         </div>
         
         <button 
@@ -66,6 +97,10 @@ function CameraStream() {
         >
           {isChatVisible ? '→' : '←'}
         </button>
+        
+        <div className={`chat-section ${!isChatVisible ? 'chat-hidden' : ''}`}>
+          <ChatRoom />
+        </div>
       </div>
     </div>
   );
