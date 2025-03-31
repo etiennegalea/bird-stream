@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import '../styles/ChatRoom.css';
+import DOMPurify from 'dompurify';
 
 function ChatRoom() {
   const [messages, setMessages] = useState([]);
@@ -125,12 +126,12 @@ function ChatRoom() {
         {messages.map((msg, index) => (
           <div key={`${msg.username}-${msg.timestamp}`} className={`message ${getMessageClass(msg, username)}`}>
             {msg.type === 'system' 
-              ? <span className="message-text">{msg.text}</span>
+              ? <span className="message-text">{DOMPurify.sanitize(msg.text)}</span>
               : (
                 <>
                   <span className="timestamp">{new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                   <span className="username">{msg.username}:</span>
-                  <span className="message-text">{msg.text}</span>
+                  <span className="message-text">{DOMPurify.sanitize(msg.text)}</span>
                 </>
               )
             }
