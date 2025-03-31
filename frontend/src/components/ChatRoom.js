@@ -22,6 +22,19 @@ function ChatRoom() {
       chatWs.onmessage = (event) => {
         const data = JSON.parse(event.data);
         console.log("Received message:", data);
+
+        // Check if the date is different from current date
+        const messageDate = new Date(data.timestamp);
+        const currentDate = new Date();
+        
+        if (messageDate.getDate() !== currentDate.getDate() || 
+            messageDate.getMonth() !== currentDate.getMonth() || 
+            messageDate.getFullYear() !== currentDate.getFullYear()) {
+          const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+          const dateString = `${messageDate.getDate()} ${months[messageDate.getMonth()]} ${messageDate.getFullYear()}`;
+          setMessages(prevMessages => [...prevMessages, { type: "system", text: dateString, timestamp: messageDate.getTime() }]);
+        }
+
         if (data.type === "history") {
           setMessages(data.messages.filter(msg => msg.type !== "system"));
         }
@@ -111,9 +124,16 @@ function ChatRoom() {
       <div className="chat-messages">
         {messages.map((msg, index) => (
           <div key={`${msg.username}-${msg.timestamp}`} className={`message ${getMessageClass(msg, username)}`}>
-            <span className="username">{msg.username}</span>
-            <span className="message-text">{msg.text}</span>
-            {msg.type === 'system' ? '' : <span className="timestamp">{msg.timestamp}</span>}
+            {msg.type === 'system' 
+              ? <span className="message-text">{msg.text}</span>
+              : (
+                <>
+                  <span className="timestamp">{new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                  <span className="username">{msg.username}</span>
+                  <span className="message-text">{msg.text}</span>
+                </>
+              )
+            }
           </div>
         ))}
         <div ref={messagesEndRef} />

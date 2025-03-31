@@ -36,8 +36,7 @@ class ChatRoom:
 
     async def broadcast_message(self, message: Dict[str, Any]):
         # Add timestamp to message
-        message["timestamp"] = datetime.now().isoformat(' ')
-        # Add to history - unless it's a system message
+        message["timestamp"] = int(datetime.now().timestamp() * 1000)
         if message["type"] != "system":
             self.chat_history.append(message)
         
