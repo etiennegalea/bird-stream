@@ -129,7 +129,7 @@ function ChatRoom() {
               : (
                 <>
                   <span className="timestamp">{new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                  <span className="username">{msg.username}</span>
+                  <span className="username">{msg.username}:</span>
                   <span className="message-text">{msg.text}</span>
                 </>
               )

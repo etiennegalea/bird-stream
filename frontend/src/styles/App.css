@@ -138,12 +138,12 @@ body {
 
 /* Chat toggle button */
 .chat-toggle-btn {
-  position: absolute;
+  position: fixed;
   right: 10px;
-  top: 25px;
+  top: 125px;
   transform: translateY(-50%);
-  width: 30px;
-  height: 30px;
+  width: 35px;
+  height: 35px;
   border: 1px solid #ddd;
   border-radius: 25px;
   background-color: #fafafa;
@@ -161,11 +161,19 @@ body {
 }
 
 .chat-toggle-btn.chat-hidden {
-  right: -20px;
   border-radius: 25px;
 }
 
-/* Responsive adjustments */
+
+@media (min-width: 1200px) {
+  .chat-toggle-btn {
+    position: absolute;
+    top: 0px;
+    right: 0px;
+  }
+}
+
+
 @media (max-width: 900px) {
   .main-content {
     flex-direction: column;
@@ -178,7 +186,9 @@ body {
   }
   
   .chat-toggle-btn {
-    right: 0px;
+    position: absolute;
+    top: 0px;
+    right: -14px;
     border-radius: 25px;
   }
   
@@ -187,5 +197,5 @@ body {
     bottom: 10px;
     right: 10px;
     font-size: 10px;
-  }
+  } 
 }

@@ -95,7 +95,7 @@ function CameraStream() {
           onClick={toggleChat}
           aria-label={isChatVisible ? "Hide chat" : "Show chat"}
         >
-          {isChatVisible ? '→' : '←'}
+          <img src="/chat_icon.svg" alt="Chat Icon" />
         </button>
         
         <div className={`chat-section ${!isChatVisible ? 'chat-hidden' : ''}`}>

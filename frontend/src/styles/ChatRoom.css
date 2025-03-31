@@ -25,7 +25,7 @@
   padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  /* gap: 4px; */
   background-color: #fff;
   height: calc(100% - 60px); /* Calculate height minus the form height */
   border-radius: 8px 8px 0 0; /* Rounded corners only at the top */
@@ -34,7 +34,7 @@
 
 .message {
     padding: 6px 8px;
-    line-height: 1.4;
+    line-height: 1;
     word-wrap: break-word;
     display: flex;
     flex-wrap: wrap;
