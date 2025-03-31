@@ -14,7 +14,8 @@ function ChatRoom() {
   useEffect(() => {
     if (isUsernameSet) {
       const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-      const chatWs = new WebSocket(`${protocol}://localhost:8000/chat?username=${encodeURIComponent(username)}`);
+      const chatWs = new WebSocket(`${protocol}://cam.lifeofarobin.com/chat?username=${encodeURIComponent(username)}`);
+      // const chatWs = new WebSocket(`${protocol}://localhost:8000/chat?username=${encodeURIComponent(username)}`);
 
       chatWs.onopen = () => {
         console.log("Chat WebSocket connection established");
