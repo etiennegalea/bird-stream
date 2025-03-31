@@ -5,6 +5,7 @@ from datetime import datetime
 import asyncio
 import logging
 import json
+import html
 
 from src.components.connection_manager import ConnectionManager
 from src.components.video_stream import VideoStream
@@ -71,10 +72,7 @@ async def websocket_endpoint(websocket: WebSocket):
 @app.websocket("/chat")
 async def chat_endpoint(websocket: WebSocket):
     # Extract username from query parameters
-    username = websocket.query_params.get("username", "Anonymous")
-    
-    # Limit username length for security
-    username = username[:20]
+    username = html.escape(websocket.query_params.get("username", "Anonymous"))[:20]
     
     await chatroom.connect(websocket)
     logger.info(f"User {username} connected to chat. Total chat users: {len(chatroom.active_connections)}")
@@ -101,8 +99,8 @@ async def chat_endpoint(websocket: WebSocket):
                     continue
                 
                 # Sanitize and limit message length
-                msg_username = message_data["username"][:20]  # Limit username to 20 chars
-                text = message_data["text"][:500]  # Limit message to 500 chars
+                msg_username = message_data["username"][:20]
+                text = html.escape(message_data["text"])[:500]
                 
                 # Verify username matches the connected user
                 if msg_username != username:

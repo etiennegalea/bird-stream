@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import './styles/App.css';
 import ChatRoom from './components/ChatRoom';
 
+
 function CameraStream() {
   const [viewerCount, setViewerCount] = useState(0);
   const [videoSrc, setVideoSrc] = useState("");
@@ -11,8 +12,8 @@ function CameraStream() {
 
   useEffect(() => {
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-    // const ws = new WebSocket(`${protocol}://cam.lifeofarobin.com/stream`);
-    const ws = new WebSocket(`${protocol}://localhost:8000/stream`);
+    const ws = new WebSocket(`${protocol}://cam.lifeofarobin.com/stream`);
+    // const ws = new WebSocket(`${protocol}://localhost:8000/stream`);
 
     ws.onmessage = (event) => {
       const framedata = JSON.parse(event.data);
