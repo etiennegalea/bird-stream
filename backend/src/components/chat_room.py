@@ -36,30 +36,16 @@ class ChatRoom:
 
     async def broadcast_message(self, message: Dict[str, Any]):
         # Add timestamp to message
-        message["timestamp"] = datetime.now().isoformat(timespec='minutes')
-        # Add to history
-        self.chat_history.append(message)
+        message["timestamp"] = datetime.now().isoformat(' ')
+        # Add to history - unless it's a system message
+        if message["type"] != "system":
+            self.chat_history.append(message)
         
         # Trim history if needed
         if len(self.chat_history) > self.max_history:
             self.chat_history = self.chat_history[-self.max_history:]
         
         # Broadcast to all connected clients
-        for connection in self.active_connections:
-            try:
-                await connection.send_json(message)
-            except Exception as e:
-                logger.error(f"Error sending message to a client: {e}")
-                await self.disconnect(connection)
-
-    async def broadcast_sys_message(self, text: str):
-        message = {
-            "type": "system",
-            "message": text,
-            "timestamp": datetime.now().isoformat(timespec='minutes')
-        }
-        self.chat_history.append(message)
-
         for connection in self.active_connections:
             try:
                 await connection.send_json(message)

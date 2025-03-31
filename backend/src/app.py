@@ -83,7 +83,7 @@ async def chat_endpoint(websocket: WebSocket):
     await chatroom.broadcast_message({
         "type": "system",
         "text": f"{username} has joined the chat",
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(' ')
     })
 
     try:
@@ -131,7 +131,7 @@ async def chat_endpoint(websocket: WebSocket):
         await chatroom.broadcast_message({
             "type": "system",
             "text": f"{username} has left the chat",
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(' ')
         })
         await chatroom.disconnect(websocket)
     except Exception as e:

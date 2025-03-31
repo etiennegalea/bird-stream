@@ -21,7 +21,16 @@ function ChatRoom() {
 
       chatWs.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        setMessages(prevMessages => [...prevMessages, data]);
+        console.log("Received message:", data);
+        if (data.type === "history") {
+          setMessages(data.messages.filter(msg => msg.type !== "system"));
+        }
+        else if (data.type === "message") {
+          setMessages(prevMessages => [...prevMessages, data]);
+        }
+        else if (data.type === "system" && !data.text.includes(username)) {
+          setMessages(prevMessages => [...prevMessages, data]);
+        }
       };
 
       chatWs.onerror = (error) => {
@@ -115,7 +124,7 @@ function ChatRoom() {
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
           placeholder="Type a message..."
-          maxLength={200}
+          maxLength={255}
         />
         <button type="submit">Send</button>
       </form>
