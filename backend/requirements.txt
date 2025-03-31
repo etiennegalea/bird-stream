@@ -1,5 +1,5 @@
 # Core dependencies
-fastapi
+fastapi==0.115.12
 uvicorn==0.23.2
 
 # Video processing
