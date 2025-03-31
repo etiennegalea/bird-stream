@@ -15,7 +15,7 @@ class ChatRoom:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
         self.chat_history: List[Dict[str, Any]] = []
-        self.max_history = 50  # Store last 50 messages
+        self.max_history = 500
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
