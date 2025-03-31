@@ -125,13 +125,14 @@ async def chat_endpoint(websocket: WebSocket):
                 logger.error(f"Error processing message: {e}")
                 
     except WebSocketDisconnect:
+        # disconnect the user first
+        await chatroom.disconnect(websocket)
         # Send a system message about the user leaving
         await chatroom.broadcast_message({
             "type": "system",
             "text": f"{username} has left the chat",
             "timestamp": datetime.now().isoformat(' ')
         })
-        await chatroom.disconnect(websocket)
     except Exception as e:
         logger.error(f"Error in chat WebSocket endpoint: {e}")
         await chatroom.disconnect(websocket)

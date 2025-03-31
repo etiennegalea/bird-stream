@@ -44,10 +44,18 @@ class ChatRoom:
         if len(self.chat_history) > self.max_history:
             self.chat_history = self.chat_history[-self.max_history:]
         
+        # Create a copy of active_connections to avoid modification during iteration
+        connections_to_remove = []
+        
         # Broadcast to all connected clients
         for connection in self.active_connections:
             try:
                 await connection.send_json(message)
             except Exception as e:
                 logger.error(f"Error sending message to a client: {e}")
-                await self.disconnect(connection)
+
+                connections_to_remove.append(connection)
+        
+        # Remove failed connections after the broadcast loop
+        for connection in connections_to_remove:
+            await self.disconnect(connection)
