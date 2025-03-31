@@ -30,7 +30,7 @@ COPY src/ /app/
 COPY requirements.txt /app/
 
 # Install Python dependencies
-RUN pip install -r requirements.txt --no-cache-dir
+RUN pip install -r requirements.txt
 
 # Expose the port
 EXPOSE 2096
