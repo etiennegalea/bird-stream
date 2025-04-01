@@ -25,17 +25,17 @@ RUN apt-get update && apt-get install -y \
 # Set working directory in the container
 WORKDIR /app
 
-# Copy only the requirements file first
-COPY requirements.txt /app/requirements.txt
+# Copy the application files
+COPY ./src /app
+COPY requirements.txt /tmp/
 
 # Upgrade pip
-RUN python -m pip install --upgrade pip
+RUN pip install --upgrade pip
 
-# Install Python dependencies
-RUN pip install --timeout=250 --retries=10 -r /app/requirements.txt
+# Install requirements from tmp dir
+RUN pip install --requirement /tmp/requirements.txt
 
-# Copy the application files
-COPY src/ /app/
+COPY . /tmp/
 
 # Expose the port
 EXPOSE 2096
