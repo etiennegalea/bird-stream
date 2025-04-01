@@ -29,7 +29,7 @@ WORKDIR /app
 COPY requirements.txt /app/requirements.txt
 
 # Install Python dependencies
-RUN pip install -r /app/requirements.txt
+RUN pip install --timeout=250 --retries=10 -r /app/requirements.txt
 
 # Copy the application files
 COPY src/ /app/
