@@ -14,8 +14,8 @@ function CameraStream() {
 
   useEffect(() => {
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-    // const ws = new WebSocket(`${protocol}://cam.lifeofarobin.com/stream`);
-    const ws = new WebSocket(`${protocol}://localhost:8000/stream`);
+    const ws = new WebSocket(`${protocol}://cam.lifeofarobin.com/stream`);
+    // const ws = new WebSocket(`${protocol}://localhost:8000/stream`);
 
     ws.onmessage = (event) => {
       const framedata = JSON.parse(event.data);

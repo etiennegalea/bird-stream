@@ -11,8 +11,8 @@ function Weather() {
       setLoading(true);
       // const response = await fetch('/weather');
       const protocol = window.location.protocol === "https:" ? "https" : "http";
-      // const chatWs = new WebSocket(`${protocol}://cam.lifeofarobin.com/chat?username=${encodeURIComponent(username)}`);
-      const response = await fetch(`${protocol}://localhost:8000/weather`);
+      const response = await fetch(`${protocol}://cam.lifeofarobin.com/weather`);
+      // const response = await fetch(`${protocol}://localhost:8000/weather`);
       
       if (!response.ok) {
         throw new Error('Weather data not available');
