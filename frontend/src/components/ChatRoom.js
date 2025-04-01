@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import '../styles/ChatRoom.css';
 import DOMPurify from 'dompurify';
 
-function ChatRoom() {
+function ChatRoom({ onNewMessage }) {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [username, setUsername] = useState('');
@@ -10,12 +10,18 @@ function ChatRoom() {
   const messagesEndRef = useRef(null);
   const [ws, setWs] = useState(null);
 
+  const onNewMessageRef = useRef(onNewMessage);
+
+  useEffect(() => {
+    onNewMessageRef.current = onNewMessage;
+  }, [onNewMessage]);
+
   // Initialize WebSocket connection
   useEffect(() => {
     if (isUsernameSet) {
       const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-      const chatWs = new WebSocket(`${protocol}://cam.lifeofarobin.com/chat?username=${encodeURIComponent(username)}`);
-      // const chatWs = new WebSocket(`${protocol}://localhost:8000/chat?username=${encodeURIComponent(username)}`);
+      // const chatWs = new WebSocket(`${protocol}://cam.lifeofarobin.com/chat?username=${encodeURIComponent(username)}`);
+      const chatWs = new WebSocket(`${protocol}://localhost:8000/chat?username=${encodeURIComponent(username)}`);
 
       chatWs.onopen = () => {
         console.log("Chat WebSocket connection established");
@@ -24,6 +30,12 @@ function ChatRoom() {
       chatWs.onmessage = (event) => {
         const data = JSON.parse(event.data);
         console.log("Received message:", data);
+
+        // Notify parent component about new message (if it's not from history)
+        // if (data.type === "message" && onNewMessage && typeof onNewMessage === 'function') {
+        onNewMessageRef.current();
+        console.log("New message received, calling onNewMessage");
+        // }
 
         // Check if the date is different from current date
         const messageDate = new Date(data.timestamp);
@@ -66,7 +78,10 @@ function ChatRoom() {
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Only scroll if the chat is visible
+    if (!document.querySelector('.chat-section').classList.contains('chat-hidden')) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
     console.log("Messages updated:", messages);
   }, [messages]);
 
@@ -129,11 +144,13 @@ function ChatRoom() {
             {msg.type === 'system' 
               ? <span className="message-text">{DOMPurify.sanitize(msg.text)}</span>
               : (
-                <>
+                <div className="message-line">
                   <span className="timestamp">{new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                  <span className="username">{msg.username}:</span>
-                  <span className="message-text">{DOMPurify.sanitize(msg.text)}</span>
-                </>
+                  <div className="message-content">
+                    <span className="username">{msg.username}: </span>
+                    <span className="message-text">{DOMPurify.sanitize(msg.text)}</span>
+                  </div>
+                </div>
               )
             }
           </div>

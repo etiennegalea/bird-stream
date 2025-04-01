@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import './styles/App.css';
 import ChatRoom from './components/ChatRoom';
 
@@ -8,12 +8,13 @@ function CameraStream() {
   const [videoSrc, setVideoSrc] = useState("");
   const [fps, setFps] = useState(0);
   const [isChatVisible, setIsChatVisible] = useState(true);
+  const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
   const videoRef = useRef(null);
 
   useEffect(() => {
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${protocol}://cam.lifeofarobin.com/stream`);
-    // const ws = new WebSocket(`${protocol}://localhost:8000/stream`);
+    // const ws = new WebSocket(`${protocol}://cam.lifeofarobin.com/stream`);
+    const ws = new WebSocket(`${protocol}://localhost:8000/stream`);
 
     ws.onmessage = (event) => {
       const framedata = JSON.parse(event.data);
@@ -35,8 +36,21 @@ function CameraStream() {
     return () => ws.close(); // Cleanup WebSocket on component unmount
   }, []);
 
+  // Handle new message notifications
+  const handleNewMessage = useCallback(() => {
+    if (!isChatVisible) {
+      setHasUnreadMessages(true);
+      console.log("New message received, setting hasUnreadMessages to true");
+    }
+  }, [isChatVisible]);
+
   const toggleChat = () => {
     setIsChatVisible(!isChatVisible);
+    if (!isChatVisible) {
+      // When opening chat, clear the notification
+      setHasUnreadMessages(false);
+      console.log("Chat opened, clearing hasUnreadMessages");
+    }
   };
 
   const toggleFullScreen = () => {
@@ -91,16 +105,17 @@ function CameraStream() {
           </div>
         </div>
         
-        <button 
+        <button
           className={`chat-toggle-btn ${!isChatVisible ? 'chat-hidden' : ''}`}
           onClick={toggleChat}
           aria-label={isChatVisible ? "Hide chat" : "Show chat"}
         >
           <img src="/chat_icon.svg" alt="Chat Icon" />
+          <span className={`notification-marker ${!hasUnreadMessages ? 'seen' : ''}`}></span>
         </button>
         
         <div className={`chat-section ${!isChatVisible ? 'chat-hidden' : ''}`}>
-          <ChatRoom />
+          <ChatRoom onNewMessage={handleNewMessage} />
         </div>
       </div>
     </div>

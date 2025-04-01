@@ -27,13 +27,14 @@
   flex-direction: column;
   /* gap: 4px; */
   background-color: #fff;
-  height: calc(100% - 60px); /* Calculate height minus the form height */
+  /* height: calc(100% - 60px); Calculate height minus the form height */
+  height: 500px;
   border-radius: 8px 8px 0 0; /* Rounded corners only at the top */
   border-bottom: 1px solid #ddd; /* Add bottom border to separate from form */
 }
 
 .message {
-    padding: 6px 8px;
+    padding: 4px 8px;
     line-height: 1;
     word-wrap: break-word;
     display: flex;
@@ -45,10 +46,31 @@
     /* border-bottom: 1px solid #f0f0f0; */
 }
 
+.message-line {
+  display: flex;
+  margin-bottom: 4px;
+}
+
+.timestamp {
+  flex-shrink: 0;
+  font-size: 10px;
+  margin-right: 8px;
+  margin-top: 5px;
+}
+
+.message-content {
+  display: inline;
+  word-wrap: break-word;
+}
+
 .username {
     font-weight: bold;
-    margin-right: 8px;
-    color: #333;
+    white-space: nowrap;
+}
+
+.message-text {
+    word-wrap: break-word;
+    line-height: 1.2;
 }
 
 .message.me {
@@ -56,18 +78,6 @@
 }
 .message.me .username {
     color: #27a9f9;
-}
-
-.message-text {
-    word-break: break-word;
-    flex: 1;
-}
-
-.timestamp {
-    color: #888;
-    font-size: 0.75rem;
-    margin-right: 8px;
-    font-weight: normal;
 }
 
 .message.system {
