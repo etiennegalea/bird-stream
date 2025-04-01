@@ -7,8 +7,8 @@ WORKDIR /app
 # Copy package.json and package-lock.json first for better caching
 COPY package*.json ./
 
-# Install dependencies and build the React app
-RUN npm install
+# Install dependencies with explicit install of react-scripts
+RUN npm install && npm install react-scripts --save-dev
 
 # Copy the rest of the application code
 COPY . .
