@@ -10,6 +10,7 @@ import html
 from src.components.connection_manager import ConnectionManager
 from src.components.video_stream import VideoStream
 from src.components.chat_room import ChatRoom
+from src.components.weather import get_weather
 
 
 logging.basicConfig(
@@ -138,3 +139,8 @@ async def chat_endpoint(websocket: WebSocket):
     except Exception as e:
         logger.error(f"Error in chat WebSocket endpoint: {e}")
         await chatroom.disconnect(websocket)
+
+@app.get("/weather")
+async def weather_endpoint():
+    """Endpoint to get weather data for Rotterdam"""
+    return await get_weather()

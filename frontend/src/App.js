@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import './styles/App.css';
 import ChatRoom from './components/ChatRoom';
+import Weather from './components/Weather';
 
 
 function CameraStream() {
@@ -100,7 +101,13 @@ function CameraStream() {
             </div>
           </div>
           <div className="stream-info">
-            <div className="viewer-count">👥 Viewers: {viewerCount}</div>
+            <div className="viewer-count">
+              <img src="/viewers_icon.svg" alt="viewers" />
+              <span>{viewerCount}</span>
+            </div>
+            <div className="weather-info">
+              <Weather />
+            </div>
             <p>FPS: {fps}</p>
           </div>
         </div>

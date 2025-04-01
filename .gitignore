@@ -130,3 +130,6 @@ dmypy.json
 
 # MAC Stuff
 .DS_Store
+
+# api keys
+.secrets.yaml
