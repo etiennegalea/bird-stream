@@ -28,6 +28,9 @@ WORKDIR /app
 # Copy only the requirements file first
 COPY requirements.txt /app/requirements.txt
 
+# Upgrade pip
+RUN python -m pip install --upgrade pip
+
 # Install Python dependencies
 RUN pip install --timeout=250 --retries=10 -r /app/requirements.txt
 
