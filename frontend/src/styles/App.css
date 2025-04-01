@@ -50,7 +50,7 @@ body {
 .chat-section {
   position: relative;
   width: 350px;
-  height: 500px; /* Set a fixed height */
+  height: 500px;
   opacity: 1;
   max-width: 350px;
   overflow: hidden; /* Ensure overflow is hidden */
@@ -164,8 +164,41 @@ body {
   border-radius: 25px;
 }
 
+.notification-marker {
+  position: absolute;
+  top: -2px;
+  right: 0px;
+  background-color: #ff4e33;
+  color: white;
+  padding: 5px 5px;
+  border-radius: 25px;
+  font-size: 12px;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+  z-index: 25;
+}
+
+.notification-marker.seen {
+  opacity: 0;
+}
 
 @media (min-width: 1200px) {
+  .main-content {
+    align-items: stretch;
+  }
+
+  .main-content .stream-section {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .chat-section {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    align-self: stretch;
+  }
+  
   .chat-toggle-btn {
     position: absolute;
     top: 0px;
