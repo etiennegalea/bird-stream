@@ -131,7 +131,11 @@ body {
   justify-content: space-between;
   align-items: center;
   margin-top: 10px;
-  padding: 0 10px;
+  padding: 0px 15px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  background-color: #fff;
 }
 
 .viewer-count {
