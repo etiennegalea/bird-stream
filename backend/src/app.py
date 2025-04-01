@@ -67,6 +67,8 @@ async def websocket_endpoint(websocket: WebSocket):
             frame_data['viewers'] = len(videoManager.active_connections)
             await videoManager.broadcast(frame_data)
     except Exception as e:
+        await videoManager.disconnect(websocket)
+        
         logger.error(f"Error in WebSocket endpoint: {e}")
 
 @app.websocket("/chat")
