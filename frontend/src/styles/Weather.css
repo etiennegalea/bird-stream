@@ -51,7 +51,19 @@
   }
 
   .weather-detail .wind-arrow {
-    transition: transform 0.3s ease;
+    transition: transform 0.5s ease-in-out;
+    will-change: transform;
+  }
+
+  @keyframes strongWind {
+    0% { transform: rotate(var(--wind-deg)); }
+    25% { transform: rotate(calc(var(--wind-deg) - 3deg)); }
+    75% { transform: rotate(calc(var(--wind-deg) + 3deg)); }
+    100% { transform: rotate(var(--wind-deg)); }
+  }
+
+  .wind-arrow.strong {
+    animation: strongWind 2s ease-in-out infinite;
   }
 
   .wind-detail-label {
