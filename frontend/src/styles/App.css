@@ -136,6 +136,7 @@ body {
   border: 1px solid #ddd;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
   background-color: #fff;
+  font-size: 0.7rem;
 }
 
 .viewer-count {
@@ -143,12 +144,31 @@ body {
 }
 
 .viewer-count img {
-  width: 20px;
-  height: 20px;
+  width: 15px;
+  height: 15px;
   margin-right: 5px;
   margin-bottom: -4px;
-
 }
+
+.fps-container {
+  position: relative;
+  display: inline-block;
+  min-width: 40px;
+  text-align: center;
+  margin-left: 10px;
+}
+
+.fps-value {
+  font-size: 0.7rem;
+  display: block;
+}
+
+.fps-label {
+  font-size: 0.4rem;
+  position: absolute;
+  right: -1px;
+}
+
 
 /* Chat toggle button */
 .chat-toggle-btn {
