@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import '../styles/Weather.css';
+import { getApiBaseUrl } from '../utils';
 
 function Weather() {
   const [weatherData, setWeatherData] = useState(null);
@@ -9,10 +10,8 @@ function Weather() {
   const fetchWeatherData = async () => {
     try {
       setLoading(true);
-      // const response = await fetch('/weather');
-      const protocol = window.location.protocol === "https:" ? "https" : "http";
-      const response = await fetch(`${protocol}://cam.lifeofarobin.com/weather`);
-      // const response = await fetch(`${protocol}://localhost:8000/weather`);
+
+      const response = await fetch(`${getApiBaseUrl()}/weather`);
       
       if (!response.ok) {
         throw new Error('Weather data not available');

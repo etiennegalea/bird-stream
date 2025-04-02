@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from "react";
 import './styles/App.css';
 import ChatRoom from './components/ChatRoom';
 import Weather from './components/Weather';
-
+import { getApiBaseUrl } from './utils';
 
 function CameraStream() {
   const [viewerCount, setViewerCount] = useState(0);
@@ -13,9 +13,7 @@ function CameraStream() {
   const videoRef = useRef(null);
 
   useEffect(() => {
-    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${protocol}://cam.lifeofarobin.com/stream`);
-    // const ws = new WebSocket(`${protocol}://localhost:8000/stream`);
+    const ws = new WebSocket(`${getApiBaseUrl()}/stream`);
 
     ws.onmessage = (event) => {
       const framedata = JSON.parse(event.data);

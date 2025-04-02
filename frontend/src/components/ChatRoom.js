@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import '../styles/ChatRoom.css';
 import DOMPurify from 'dompurify';
+import { getApiBaseUrl } from '../utils';
 
 function ChatRoom({ onNewMessage }) {
   const [messages, setMessages] = useState([]);
@@ -19,9 +20,7 @@ function ChatRoom({ onNewMessage }) {
   // Initialize WebSocket connection
   useEffect(() => {
     if (isUsernameSet) {
-      const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-      const chatWs = new WebSocket(`${protocol}://cam.lifeofarobin.com/chat?username=${encodeURIComponent(username)}`);
-      // const chatWs = new WebSocket(`${protocol}://localhost:8000/chat?username=${encodeURIComponent(username)}`);
+      const chatWs = new WebSocket(`${getApiBaseUrl(true)}/chat?username=${encodeURIComponent(username)}`);
 
       chatWs.onopen = () => {
         console.log("Chat WebSocket connection established");
