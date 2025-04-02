@@ -61,7 +61,8 @@ function Weather() {
         </div>
         <div className="weather-detail">
           <img className="wind-arrow" src="/down_arrow.svg" alt="wind" />
-          <span className="detail-value">{Math.round(wind.speed * 3.6)} km/h</span>
+          <span className="value">{Math.round(wind.speed * 3.6)}</span>
+          <span className="wind-detail-label">km/h</span>
         </div>
       </div>
     </div>

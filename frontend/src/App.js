@@ -106,9 +106,9 @@ function CameraStream() {
             <div className="weather-info">
               <Weather />
             </div>
-            <div className="fps-container">
-              <span className="fps-label">FPS</span>
-              <span className="fps-value">{fps}</span>
+            <div className="info-container">
+              <span className="label">FPS</span>
+              <span className="value">{fps}</span>
             </div>
           </div>
         </div>

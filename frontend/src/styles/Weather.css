@@ -54,6 +54,13 @@
     transition: transform 0.3s ease;
   }
 
+  .wind-detail-label {
+    font-size: 0.4rem;
+    bottom: 0;
+    margin-bottom: -4px;
+    margin-left: 2px;
+  }
+
   .weather-loading, .weather-error {
     font-size: 0.8rem;
     color: #666;
