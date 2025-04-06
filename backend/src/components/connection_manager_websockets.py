@@ -7,7 +7,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
-logger = logging.getLogger("connection_manager")
+logger = logging.getLogger("backend | connection_manager")
 
 class ConnectionManager:
     def __init__(self):

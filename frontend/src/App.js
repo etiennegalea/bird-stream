@@ -197,14 +197,11 @@ function CameraStream() {
           </video>
         )}
       </div>
-      <div className="connection-status">
-        Status: {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
             {/* {videoSrc && (
               <div className="fullscreen-hint">
                 <span>Click to toggle fullscreen</span>
               </div>
             )} */}
-          </div>
           <div className="stream-info">
             <div className="viewer-count">
               <img src="/viewers_icon.svg" alt="viewers" />
@@ -213,6 +210,10 @@ function CameraStream() {
             <div className="weather-info">
               <Weather />
             </div>
+            <div className="connection-status">
+              {isConnected ? '🟢' : '🔴'}
+            </div>
+
             {/* <div className="info-container">
               <span className="label">FPS</span>
               <span className="value">{fps}</span>

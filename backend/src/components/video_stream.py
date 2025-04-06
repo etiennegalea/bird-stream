@@ -1,75 +1,87 @@
 from datetime import datetime
-import pytz
-import cv2
-import base64
-import asyncio
-from time import time
 import logging
+import sys
+from aiortc import MediaStreamTrack, VideoStreamTrack
+from av import VideoFrame
+import cv2
+import pytz
+from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder, MediaRelay
+from aiortc.rtcrtpsender import RTCRtpSender
 
+# Logger setup
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
-logger = logging.getLogger("backend | video_stream")
+
+logger = logging.getLogger("videostream")
 
 
-class VideoStream:
-    def __init__(self, device_id=0):
-        self.camera = cv2.VideoCapture(device_id)
-        self.global_frame_data = None
-        self.lock = asyncio.Lock()
-        self.running = True
-        self.timezone = pytz.timezone('Europe/Amsterdam')  # UTC+1 timezone
+class VideoTrack(VideoStreamTrack):
+    kind = "video"
 
-    async def cleanup(self):
-        self.running = False
-        if self.camera:
-            self.camera.release()
-        logger.info("Camera resources released")
+    def __init__(self):
+        super().__init__()
+        # self.camera = cv2.VideoCapture(0)
+        self.camera = cv2.VideoCapture("/dev/video0")
+        self.timezone = pytz.timezone('Europe/Amsterdam')
+        logger.info("init video stream capture ...")
 
-    async def video_stream(self):
-        try:
-            last_frame_time = time()
-            while True:
-                success, frame = self.camera.read()
-                if not success:
-                    logger.error("Failed to capture frame from camera")
-                    break
+    async def recv(self):
+        success, frame = self.camera.read()
+        if not success:
+            logger.error("Failed to capture frame from camera")
+            return None
 
-                # Calculate FPS
-                current_time = time()
-                fps = 1 / max((current_time - last_frame_time), 1e-6)
-                last_frame_time = current_time
+        # Add timestamp to the frame
+        local_time = datetime.now(self.timezone)
+        timestamp = local_time.strftime("%Y-%m-%d %H:%M:%S")
+        cv2.putText(
+            frame, 
+            timestamp, 
+            (10, frame.shape[0] - 10), 
+            cv2.FONT_HERSHEY_SIMPLEX, 
+            0.7, 
+            (255, 255, 255), 
+            1, 
+            cv2.LINE_AA
+        )
 
-                # Add timestamp to the frame
-                local_time = datetime.now(self.timezone)
-                timestamp = local_time.strftime("%Y-%m-%d %H:%M:%S")
-                cv2.putText(
-                    frame, 
-                    timestamp, 
-                    (10, frame.shape[0] - 10), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 
-                    0.7, 
-                    (255, 255, 255), 
-                    1, 
-                    cv2.LINE_AA
-                )
+        # Convert to RGB for VideoFrame
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        
+        # Create VideoFrame
+        video_frame = VideoFrame.from_ndarray(frame, format="rgb24")
+        video_frame.pts = video_frame.time = 0
 
-                # Encode the frame as JPEG
-                _, encoded_frame = cv2.imencode(".jpg", frame)
+        logger.info(f"video_frame: {video_frame}")
 
-                # Update global frame data
-                async with self.lock:
-                    self.global_frame_data = {
-                        "type": "video",
-                        "frame": base64.b64encode(encoded_frame).decode("utf-8"),
-                        "fps": round(fps, 2),
-                        "timestamp": timestamp
-                    }
+        return video_frame
 
-                # Limit FPS to ~30 video generation
-                await asyncio.sleep(1 / 30)
-        except Exception as e:
-            logger.error(f"Error in video stream: {e}")
-        finally:
-            await self.cleanup()
+    def stop(self):
+        super().stop()
+        self.camera.release()
+
+
+def create_local_tracks(play_from=False, decode=True):
+    global relay, webcam
+
+    if play_from:
+        player = MediaPlayer(play_from, decode=decode)
+        return player.audio, player.video
+    else:
+        options = {"framerate": "30", "video_size": "640x480"}
+        print("::::: SYS PLATFORM :::::", sys.platform)
+        if sys.platform == 'darwin':
+            webcam = MediaPlayer("default:none", format="avfoundation", options=options)
+        else:
+            webcam = MediaPlayer("/dev/video0", options=options)
+        return None, webcam.video
+
+def force_codec(pc, sender, forced_codec="video/H264"):
+    kind = forced_codec.split("/")[0]
+    codecs = RTCRtpSender.getCapabilities(kind).codecs
+    transceiver = next(t for t in pc.getTransceivers() if t.sender == sender)
+    transceiver.setCodecPreferences(
+        [codec for codec in codecs if codec.mimeType == forced_codec]
+    )

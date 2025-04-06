@@ -3,8 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from aiortc import RTCConfiguration, RTCIceServer, RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaRelay
-import src.video_stream as vs
-from src.models import ClientModel
 from datetime import datetime
 import asyncio
 import logging
@@ -12,9 +10,10 @@ import json
 import html
 
 from src.components.connection_manager import ConnectionManager
-from src.components.video_stream import VideoStream
+from src.components.video_stream import create_local_tracks, force_codec
 from src.components.chat_room import ChatRoom
 from src.components.weather import fetch_weather_periodically, WEATHER_DATA
+from src.models import ClientModel
 
 
 logging.basicConfig(
@@ -33,8 +32,8 @@ async def lifespan(app: FastAPI):
     global video
 
     logger.info("Application is starting up...")
-    audio, video = vs.create_local_tracks()
-    # audio, video = vs.create_local_tracks("/app/media/birbs-of-paradise.mp4")
+    audio, video = create_local_tracks()
+    # audio, video = create_local_tracks("/app/media/birbs-of-paradise.mp4")
 
     asyncio.create_task(fetch_weather_periodically(cache_expiration=3600))
 
@@ -113,7 +112,7 @@ async def offer(peer: ClientModel = Body(...)):
     # Set remote description only once
     await pc.setRemoteDescription(RTCSessionDescription(sdp=peer.offer.sdp, type=peer.offer.type))
     
-    vs.force_codec(pc, video_sender)
+    force_codec(pc, video_sender)
 
     # Create and set local description
     answer = await pc.createAnswer()
