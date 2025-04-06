@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import '../styles/Weather.css';
 import { getApiBaseUrl } from '../utils';
+import { LoadingDots, LoadingCircle, LoadingCircleDots} from './Loading';
 
 function Weather() {
   const [weatherData, setWeatherData] = useState(null);
@@ -64,7 +65,8 @@ function Weather() {
     return () => clearInterval(intervalId);
   }, [weatherData]);
 
-  if (loading) return <div className="weather-loading">Loading weather...</div>;
+
+  if (loading) return <LoadingCircleDots small className="weather-loading" />;
   if (error) return <div className="weather-error">{error}</div>;
   if (!weatherData) return null;
 

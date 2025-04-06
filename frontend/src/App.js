@@ -3,6 +3,8 @@ import './styles/App.css';
 import ChatRoom from './components/ChatRoom';
 import Weather from './components/Weather';
 import { getApiBaseUrl } from './utils';
+import { LoadingDots, LoadingCircle, LoadingCircleDots } from './components/Loading';
+
 
 function CameraStream() {
   const [viewerCount, setViewerCount] = useState(0);
@@ -88,15 +90,20 @@ function CameraStream() {
       <div className={`main-content ${!isChatVisible ? 'chat-hidden' : ''}`}>
         <div className="stream-section">
           <div className="stream-viewport" onClick={toggleFullScreen}>
-            <img 
-              ref={videoRef} 
-              src={videoSrc} 
-              alt="Camera Stream" 
-              className="stream-image"
-            />
-            <div className="fullscreen-hint">
-              <span>Click to toggle fullscreen</span>
-            </div>
+            {!videoSrc && <LoadingCircleDots />}
+            {videoSrc && (
+              <img
+                ref={videoRef}
+                src={videoSrc}
+                alt="Camera Stream"
+                className="stream-image"
+              />
+            )}
+            {videoSrc && (
+              <div className="fullscreen-hint">
+                <span>Click to toggle fullscreen</span>
+              </div>
+            )}
           </div>
           <div className="stream-info">
             <div className="viewer-count">
