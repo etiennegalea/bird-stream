@@ -10,7 +10,7 @@ import html
 from src.components.connection_manager import ConnectionManager
 from src.components.video_stream import VideoStream
 from src.components.chat_room import ChatRoom
-from src.components.weather import get_weather
+from src.components.weather import fetch_weather_periodically, WEATHER_DATA
 
 
 logging.basicConfig(
@@ -25,9 +25,13 @@ chatroom = ChatRoom()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Load the ML model
+    logger.info("Starting up...")
     asyncio.create_task(vs.video_stream())
+    asyncio.create_task(fetch_weather_periodically(cache_expiration=3600))
+
     yield
+
+    logger.info("Shutting down...")
 
 app = FastAPI(lifespan=lifespan)
 
@@ -143,4 +147,8 @@ async def chat_endpoint(websocket: WebSocket):
 @app.get("/weather")
 async def weather_endpoint():
     """Endpoint to get weather data for Rotterdam"""
-    return await get_weather()
+
+    return {
+        "data": WEATHER_DATA["data"],
+        "last_updated": WEATHER_DATA["last_updated"]
+    }

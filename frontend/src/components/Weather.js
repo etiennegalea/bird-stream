@@ -33,8 +33,7 @@ function Weather() {
     // Fetch weather data immediately on component mount
     fetchWeatherData();
     
-    // Set up polling every hour (3600000 ms)
-    const intervalId = setInterval(fetchWeatherData, 3600000);
+    const intervalId = setInterval(fetchWeatherData, 1800000);
     
     // Clean up interval on component unmount
     return () => clearInterval(intervalId);
@@ -60,7 +59,7 @@ function Weather() {
       if (Math.random() < 0.3) {
         trembleArrow();
       }
-    }, 2000); // Check every 2 seconds
+    }, 2000);
     
     return () => clearInterval(intervalId);
   }, [weatherData]);
@@ -69,7 +68,8 @@ function Weather() {
   if (error) return <div className="weather-error">{error}</div>;
   if (!weatherData) return null;
 
-  const { main, weather, wind } = weatherData;
+  const { main, weather, wind } = weatherData.data;
+  const last_updated = new Date(weatherData.last_updated);
   
   // Determine if the wind is strong (over 15 km/h)
   const isStrongWind = (wind.speed * 3.6) > 15;
