@@ -12,5 +12,8 @@ RUN mkdir -p /var/log/coturn && \
     touch /var/log/coturn/turnserver.log && \
     chmod -R 755 /var/log/coturn
 
+# Copy your custom configuration
+COPY turnserver.conf /etc/turnserver.conf
+
 # Start coturn with logging enabled
-CMD turnserver -v --log-file=/var/log/coturn/turnserver.log --no-stdout-log=0 && tail -f /var/log/coturn/turnserver.log
+CMD ["sh", "-c", "turnserver -v --log-file=/var/log/coturn/turnserver.log --no-stdout-log=0 && tail -f /var/log/coturn/turnserver.log"]

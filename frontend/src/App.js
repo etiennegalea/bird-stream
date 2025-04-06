@@ -30,16 +30,33 @@ function CameraStream() {
 
       try {
         const pc = new RTCPeerConnection({
+          // iceServers: [
+            // {
+              // urls: "stun:77.174.190.102:3478",
+              // urls: "stun:stun.l.google.com:19302"
+              // urls: "stun:127.0.0.1:3478"
+            // },
+            // {
+            //   urls: "turn:127.0.0.1:3478",
+            //   username: "user",
+            //   credential: "supersecretpassword",
+            // }
+          // ]
           iceServers: [
             {
-              urls: "stun:77.174.190.102:3478",
+              urls: "stun:stun.relay.metered.ca:80",
             },
             {
-              urls: "turn:77.174.190.102:3478",
-              username: "user",
-              credential: "supersecretpassword",
-            }
-          ]
+              urls: [
+                "turn:global.relay.metered.ca:80",
+                "turn:global.relay.metered.ca:80?transport=tcp",
+                "turn:global.relay.metered.ca:443",
+                "turns:global.relay.metered.ca:443?transport=tcp",
+              ],
+              username: "aeb080153f16a0064c851fbc",
+              credential: "7/0VXUlIGZJG6MGd",
+            },
+        ],
         });
 
         pc.ontrack = (event) => {
@@ -196,12 +213,12 @@ function CameraStream() {
             <track kind="captions" label="Captions" />
           </video>
         )}
+        {isConnected && (
+          <div className="fullscreen-hint">
+            <span>Click to toggle fullscreen</span>
+          </div>
+        )}
       </div>
-            {/* {videoSrc && (
-              <div className="fullscreen-hint">
-                <span>Click to toggle fullscreen</span>
-              </div>
-            )} */}
           <div className="stream-info">
             <div className="viewer-count">
               <img src="/viewers_icon.svg" alt="viewers" />

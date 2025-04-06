@@ -14,6 +14,7 @@ from src.components.video_stream import create_local_tracks, force_codec
 from src.components.chat_room import ChatRoom
 from src.components.weather import fetch_weather_periodically, WEATHER_DATA
 from src.models import ClientModel
+from src.utils import load_turn_credentials
 
 
 logging.basicConfig(
@@ -69,9 +70,25 @@ def print_pcs(pcs):
 @app.post("/webrtc/offer")
 async def offer(peer: ClientModel = Body(...)): 
 
+    user, password = load_turn_credentials()
+    print(f' ---> {user}, {password}')
+
     config = RTCConfiguration([
-        RTCIceServer(urls=["stun:stun.l.google.com:19302", "stun:77.174.190.102:3478"]),
-        RTCIceServer(urls=["turn:77.174.190.102:3478"], username="user", credential="supersecretpassword")
+        # RTCIceServer(urls=["stun:stun.l.google.com:19302"]),
+        # RTCIceServer(urls=["stun:127.0.0.1:3478"]),
+        RTCIceServer(
+            urls=[
+                "turn:global.relay.metered.ca:80",
+                "turn:global.relay.metered.ca:80?transport=tcp",
+                "turn:global.relay.metered.ca:443",
+                "turns:global.relay.metered.ca:443?transport=tcp",
+                # "turn:0.0.0.0:5349"
+            ],
+            # username="user",
+            # credential="supersecretpassword",
+            username=user,
+            credential=password
+        )
     ])
     
     pc = RTCPeerConnection(config)
