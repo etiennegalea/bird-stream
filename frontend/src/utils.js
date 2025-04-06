@@ -17,7 +17,6 @@ export const getApiBaseUrl = (ws = false) => {
     }
 
     const baseURL = `${protocol}://${process.env.REACT_APP_API_URL}`;
-    console.log(baseURL)
     
     return baseURL;
   };

@@ -72,7 +72,7 @@ body {
   border: none;
 }
 
-.chicken-viewport {
+.stream-viewport {
   width: 100%;
   border-radius: 8px;
   overflow: hidden;
@@ -81,7 +81,7 @@ body {
   cursor: pointer;
 }
 
-.chicken-viewport:hover .fullscreen-hint {
+.stream-viewport:hover .fullscreen-hint {
   opacity: 1;
 }
 

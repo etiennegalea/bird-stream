@@ -87,7 +87,7 @@ function CameraStream() {
       
       <div className={`main-content ${!isChatVisible ? 'chat-hidden' : ''}`}>
         <div className="stream-section">
-          <div className="chicken-viewport" onClick={toggleFullScreen}>
+          <div className="stream-viewport" onClick={toggleFullScreen}>
             <img 
               ref={videoRef} 
               src={videoSrc} 

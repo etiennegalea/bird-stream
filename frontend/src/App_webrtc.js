@@ -104,7 +104,7 @@ function CameraStream() {
         <h1>BIRB STREAM</h1>
         <p>Bringing you beautiful Rotterdam birbs live!</p>
       </div>
-      <div className="chicken-viewport">
+      <div className="stream-viewport">
         {error ? (
           <div className="error-message">{error}</div>
         ) : (
@@ -112,7 +112,7 @@ function CameraStream() {
             ref={videoRef}
             autoPlay
             playsInline
-            className="chicken-viewport"
+            className="stream-viewport"
           />
         )}
       </div>
