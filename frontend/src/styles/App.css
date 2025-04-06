@@ -228,7 +228,7 @@ body {
   }
 
   .chat-section {
-    height: auto;
+    height: 500px;
     min-height: 0;
     max-height: none;
     align-self: stretch;
@@ -251,6 +251,11 @@ body {
   .stream-section, .chat-section {
     width: 100%;
     max-width: 100%;
+  }
+
+  .chat-section {
+    max-height: 325px;
+    align-self: stretch;
   }
   
   .chat-toggle-btn {

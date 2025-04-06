@@ -154,11 +154,12 @@
     cursor: pointer;
 }
 
-/* Responsive adjustments */
 @media (max-width: 900px) {
     .chat-container {
       width: 100%;
       max-width: 600px;
       height: 400px;
+      margin-left: auto;
+      margin-right: auto;
     }
 }

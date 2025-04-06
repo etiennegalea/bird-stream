@@ -163,6 +163,7 @@ function ChatRoom({ onNewMessage }) {
           onChange={(e) => setNewMessage(e.target.value)}
           placeholder="Type a message..."
           maxLength={255}
+          autoFocus={isUsernameSet}
         />
         <button type="submit">Send</button>
       </form>
