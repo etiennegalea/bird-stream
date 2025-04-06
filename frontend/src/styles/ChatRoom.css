@@ -1,0 +1,165 @@
+/* Chat container */
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  background-color: #f8f8f8;
+  transition: width 0.3s ease, opacity 0.3s ease;
+  flex: 1; /* Take up all available space */
+  overflow: hidden; /* Hide overflow */
+  border-radius: 8px;
+  /* Remove box-shadow from here since it's now in chat-section */
+}
+
+.chat-container h2 {
+    text-align: center;
+    margin: 10px 0;
+    color: #333;
+    padding-bottom: 10px;
+    /* border-bottom: 1px solid #eee; */
+}
+
+/* Chat messages container */
+.chat-messages {
+  flex: 1; /* Take up all available space */
+  overflow-y: auto; /* Enable vertical scrolling */
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  /* gap: 4px; */
+  background-color: #fff;
+  /* height: calc(100% - 60px); Calculate height minus the form height */
+  height: 500px;
+  border-radius: 8px 8px 0 0; /* Rounded corners only at the top */
+  border-bottom: 1px solid #ddd; /* Add bottom border to separate from form */
+}
+
+.message {
+    padding: 4px 8px;
+    line-height: 1;
+    word-wrap: break-word;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    border-radius: 4px;
+    max-width: 100%;
+    align-self: flex-start;
+    /* border-bottom: 1px solid #f0f0f0; */
+}
+
+.message-line {
+  display: flex;
+  margin-bottom: 4px;
+}
+
+.timestamp {
+  flex-shrink: 0;
+  font-size: 10px;
+  margin-right: 8px;
+  margin-top: 5px;
+}
+
+.message-content {
+  display: inline;
+  word-wrap: break-word;
+}
+
+.username {
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+.message-text {
+    word-wrap: break-word;
+    line-height: 1.2;
+}
+
+.message.me {
+    /* background-color: #f0f7ff; */
+}
+.message.me .username {
+    color: #27a9f9;
+}
+
+.message.system {
+    justify-content: center;
+    text-align: center;
+    color: #666;
+    font-style: italic;
+    padding: 4px 8px;
+
+    margin: 4px auto;
+    width: 80%;
+    border-radius: 4px;
+    align-self: center;
+}
+
+.message.system .message-text {
+    flex: none;
+    color: inherit;
+}
+
+/* Message form */
+.message-form {
+  display: flex;
+  padding: 10px;
+  border-top: 1px solid #ddd;
+  background-color: #f8f8f8;
+  height: 60px; /* Fixed height for the form */
+  box-sizing: border-box;
+}
+
+.message-form input {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    margin-right: 8px;
+}
+
+.message-form button {
+    padding: 8px 16px;
+    background-color: #4caf50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.message-form button:hover {
+    background-color: #45a049;
+}
+
+/* Username form */
+.username-form {
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  gap: 10px;
+  flex: 1;
+  justify-content: center;
+}
+
+.username-form input {
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.username-form button {
+    padding: 10px;
+    background-color: #4caf50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+@media (max-width: 900px) {
+    .chat-container {
+      width: 100%;
+      max-width: 600px;
+      height: 400px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+}

@@ -1,12 +1,18 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import './styles/App.css';
+import ChatRoom from './components/ChatRoom';
+import Weather from './components/Weather';
+import { getApiBaseUrl } from './utils';
+import { LoadingDots, LoadingCircle, LoadingCircleDots } from './components/Loading';
 import VideoPlayer from "./VideoPlayer";
 
 function CameraStream() {
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState(null);
-  const videoRef = useRef(null);
+  const [isChatVisible, setIsChatVisible] = useState(true);
+  const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
   const peerConnectionRef = useRef(null);
+  const videoRef = useRef(null);
   
   useEffect(() => {
     const cleanup = () => {
@@ -72,9 +78,10 @@ function CameraStream() {
 
         // Send offer to server
         console.log(`client name: ${name} | Offer created: ${offer}`);
-        const response = await fetch(`https://${process.env.REACT_APP_API_URL}:${process.env.REACT_APP_API_PORT}/webrtc/offer`, {
+        // const response = await fetch(`https://${process.env.REACT_APP_API_URL}:${process.env.REACT_APP_API_PORT}/webrtc/offer`, {
         // const response = await fetch(`http://localhost:8051/webrtc/offer`, {
         // const response = await fetch(`http://127.0.0.1:8000/webrtc/offer`, {
+        const response = await fetch(`${getApiBaseUrl()}/webrtc/offer`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -121,23 +128,70 @@ function CameraStream() {
     return prefix + Math.random().toString(36).substring(2, 15);
   }
 
+  // Handle new message notifications
+  const handleNewMessage = useCallback(() => {
+    if (!isChatVisible) {
+      setHasUnreadMessages(true);
+      console.log("New message received, setting hasUnreadMessages to true");
+    }
+  }, [isChatVisible]);
+
+  const toggleChat = () => {
+    setIsChatVisible(!isChatVisible);
+    if (!isChatVisible) {
+      // When opening chat, clear the notification
+      setHasUnreadMessages(false);
+      console.log("Chat opened, clearing hasUnreadMessages");
+    }
+  };
+
+  const toggleFullScreen = () => {
+    const videoElement = videoRef.current;
+    
+    if (!videoElement) return;
+    
+    if (!document.fullscreenElement) {
+      // Enter fullscreen
+      if (videoElement.requestFullscreen) {
+        videoElement.requestFullscreen();
+      } else if (videoElement.webkitRequestFullscreen) { /* Safari */
+        videoElement.webkitRequestFullscreen();
+      } else if (videoElement.msRequestFullscreen) { /* IE11 */
+        videoElement.msRequestFullscreen();
+      }
+    } else {
+      // Exit fullscreen
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) { /* Safari */
+        document.webkitExitFullscreen();
+      } else if (document.msExitFullscreen) { /* IE11 */
+        document.msExitFullscreen();
+      }
+    }
+  };
+
   return (
-    <div className="stream-container">
+    <div className="app-container">
       <div className="header">
         <h1>BIRB STREAM</h1>
         <p>Bringing you beautiful Rotterdam birbs live!</p>
       </div>
-      <div className="chicken-viewport">
-        {error ? (
-          <div className="error-message">{error}</div>
-        ) : (
+      
+      <div className={`main-content ${!isChatVisible ? 'chat-hidden' : ''}`}>
+        <div className="stream-section">
+          <div className="stream-viewport" onClick={toggleFullScreen}>
+            {/* {!videoSrc && <LoadingCircleDots />} */}
+          {error ? (
+            <div className="error-message">{error}</div>
+          ) : (
           // <VideoPlayer peerConnection={peerConnectionRef.current} />
           <video
             ref={videoRef}
             autoPlay
             playsInline
             muted
-            className="chicken-viewport"
+            className="stream-viewport"
             style={{ width: '100%', height: '100%'}}>
             <track kind="captions" label="Captions" />
           </video>
@@ -145,6 +199,39 @@ function CameraStream() {
       </div>
       <div className="connection-status">
         Status: {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
+            {/* {videoSrc && (
+              <div className="fullscreen-hint">
+                <span>Click to toggle fullscreen</span>
+              </div>
+            )} */}
+          </div>
+          <div className="stream-info">
+            <div className="viewer-count">
+              <img src="/viewers_icon.svg" alt="viewers" />
+              {/* <span>{viewerCount}</span> */}
+            </div>
+            <div className="weather-info">
+              <Weather />
+            </div>
+            {/* <div className="info-container">
+              <span className="label">FPS</span>
+              <span className="value">{fps}</span>
+            </div> */}
+          </div>
+        </div>
+        
+        <button
+          className={`chat-toggle-btn ${!isChatVisible ? 'chat-hidden' : ''}`}
+          onClick={toggleChat}
+          aria-label={isChatVisible ? "Hide chat" : "Show chat"}
+        >
+          <img src="/chat_icon.svg" alt="Chat Icon" />
+          <span className={`notification-marker ${!hasUnreadMessages ? 'seen' : ''}`}></span>
+        </button>
+        
+        <div className={`chat-section ${!isChatVisible ? 'chat-hidden' : ''}`}>
+          <ChatRoom onNewMessage={handleNewMessage} />
+        </div>
       </div>
     </div>
   );

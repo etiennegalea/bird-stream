@@ -11,26 +11,31 @@ WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    python3-dev \
-    python3-opencv \
+    curl\
+    ffmpeg \
     gcc \
     g++ \
-    ffmpeg \
-    pkg-config \
     libavdevice-dev \
     libavfilter-dev \
     libopus-dev \
     libvpx-dev \
     libsrtp2-dev \
     libopencv-dev \
+    pkg-config \
+    python3-dev \
+    python3-opencv \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the application files
 COPY ./src /app
 COPY requirements.txt /tmp/
 
-# Install Python dependencies
+# Upgrade pip
+RUN pip install --upgrade pip
+
+# Install requirements from tmp dir
 RUN pip install --requirement /tmp/requirements.txt
+
 COPY . /tmp/
 
 # Expose the port

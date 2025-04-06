@@ -1,36 +1,42 @@
-from fastapi import FastAPI, Body
+from fastapi import FastAPI, Body, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-import asyncio
-import logging
 from aiortc import RTCConfiguration, RTCIceServer, RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaRelay
-
-
-from src.connection_manager import ConnectionManager
 import src.video_stream as vs
 from src.models import ClientModel
+from datetime import datetime
+import asyncio
+import logging
+import json
+import html
 
-# Logger setup
+from src.components.connection_manager import ConnectionManager
+from src.components.video_stream import VideoStream
+from src.components.chat_room import ChatRoom
+from src.components.weather import fetch_weather_periodically, WEATHER_DATA
+
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
+logger = logging.getLogger("backend | main")
 
-logger = logging.getLogger("backend")
 pcs_manager = ConnectionManager()
 relay = MediaRelay()
+chatroom = ChatRoom()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global video
-    # Startup: runs before the app starts
+
     logger.info("Application is starting up...")
     audio, video = vs.create_local_tracks()
     # audio, video = vs.create_local_tracks("/app/media/birbs-of-paradise.mp4")
 
-    # Initialize resources here (database connections, caches, etc.)
+    asyncio.create_task(fetch_weather_periodically(cache_expiration=3600))
 
     yield
     
@@ -39,7 +45,6 @@ async def lifespan(app: FastAPI):
     logger.info("Application is shutting down...")
     print("shutdown")
 
-    # Cleanup resources here (close connections, etc.)
     pcs_manager.clean_up()
 
 app = FastAPI(
@@ -126,3 +131,80 @@ async def get_peers(verbose: bool = False):
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
+
+@app.websocket("/chat")
+async def chat_endpoint(websocket: WebSocket):
+    # Extract username from query parameters
+    username = html.escape(websocket.query_params.get("username", "Anonymous"))[:20]
+    
+    await chatroom.connect(websocket)
+    logger.info(f"User {username} connected to chat. Total chat users: {len(chatroom.active_connections)}")
+
+    # Send a system message about the new user
+    await chatroom.broadcast_message({
+        "type": "system",
+        "text": f"{username} has joined the chat",
+        "timestamp": datetime.now().isoformat(' ')
+    })
+
+    try:
+        while True:
+            # Wait for messages from the client
+            data = await websocket.receive_text()
+            
+            try:
+                # Parse the message
+                message_data = json.loads(data)
+                
+                # Validate message format
+                if "username" not in message_data or "text" not in message_data:
+                    logger.warning(f"Received invalid message format: {message_data}")
+                    continue
+                
+                # Sanitize and limit message length
+                msg_username = message_data["username"][:20]
+                text = html.escape(message_data["text"])[:500]
+                
+                # Verify username matches the connected user
+                if msg_username != username:
+                    logger.warning(f"Username mismatch: {msg_username} vs {username}")
+                    msg_username = username  # Force the correct username
+                
+                # Create the message object
+                chat_message = {
+                    "type": "message",
+                    "username": msg_username,
+                    "text": text,
+                    "timestamp": message_data.get("timestamp", datetime.now().isoformat())
+                }
+                
+                # Broadcast the message to all clients
+                await chatroom.broadcast_message(chat_message)
+                logger.info(f"Message from {msg_username}: {text[:30]}...")
+                
+            except json.JSONDecodeError:
+                logger.warning(f"Received invalid JSON: {data}")
+            except Exception as e:
+                logger.error(f"Error processing message: {e}")
+                
+    except WebSocketDisconnect:
+        # disconnect the user first
+        await chatroom.disconnect(websocket)
+        # Send a system message about the user leaving
+        await chatroom.broadcast_message({
+            "type": "system",
+            "text": f"{username} has left the chat",
+            "timestamp": datetime.now().isoformat(' ')
+        })
+    except Exception as e:
+        logger.error(f"Error in chat WebSocket endpoint: {e}")
+        await chatroom.disconnect(websocket)
+
+@app.get("/weather")
+async def weather_endpoint():
+    """Endpoint to get weather data for Rotterdam"""
+
+    return {
+        "data": WEATHER_DATA["data"],
+        "last_updated": WEATHER_DATA["last_updated"]
+    }

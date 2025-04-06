@@ -4,11 +4,17 @@ FROM node:18 AS build
 # Set working directory
 WORKDIR /app
 
-# Copy project files
+# Copy package.json and package-lock.json first for better caching
+COPY package*.json ./
+
+# Install dependencies with explicit install of react-scripts
+RUN npm install && npm install react-scripts --save-dev
+
+# Copy the rest of the application code
 COPY . .
 
-# Install dependencies and build the React app
-RUN npm install && npm run build
+# Build the React app
+RUN npm run build
 
 # Use a lightweight server to serve the built files
 FROM nginx:alpine
