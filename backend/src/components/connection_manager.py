@@ -46,7 +46,6 @@ class ConnectionManager():
                     track.receiver.track.stop()
             await pc.close()
             removed_pc = self.pcs.pop(peer_id, None)
-            print(f":::: {removed_pc} ::::")
             logger.info(f"Removing peer {peer_id} -> {removed_pc} ({removed_pc.connectionState})")
         else:
             logger.warning(f"Peer not found: {peer_id} -> {pc}")
