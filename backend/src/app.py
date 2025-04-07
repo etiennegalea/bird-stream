@@ -43,7 +43,6 @@ async def lifespan(app: FastAPI):
     # Shutdown: runs when the app is shutting down
     await pcs_manager.clean_up()
     logger.info("Application is shutting down...")
-    print("shutdown")
 
     pcs_manager.clean_up()
 
@@ -71,7 +70,6 @@ def print_pcs(pcs):
 async def offer(peer: ClientModel = Body(...)): 
 
     user, password = load_turn_credentials()
-    print(f' ---> {user}, {password}')
 
     config = RTCConfiguration([
         # RTCIceServer(urls=["stun:stun.l.google.com:19302"]),

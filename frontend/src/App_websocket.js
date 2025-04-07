@@ -24,7 +24,7 @@ function CameraStream() {
     };
 
     ws.onclose = () => {
-      console.log("WebSocket connection closed");
+      // console.log("WebSocket connection closed");
     };
 
     return () => ws.close(); // Cleanup WebSocket on component unmount

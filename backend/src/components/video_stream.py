@@ -71,7 +71,6 @@ def create_local_tracks(play_from=False, decode=True):
         return player.audio, player.video
     else:
         options = {"framerate": "30", "video_size": "640x480"}
-        print("::::: SYS PLATFORM :::::", sys.platform)
         if sys.platform == 'darwin':
             webcam = MediaPlayer("default:none", format="avfoundation", options=options)
         else:

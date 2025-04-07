@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from "react";
 import './styles/App.css';
 import ChatRoom from './components/ChatRoom';
 import Weather from './components/Weather';
-import { getApiBaseUrl } from './utils';
+import { getApiBaseUrl, getTurnServers } from './utils';
 import { LoadingDots, LoadingCircle, LoadingCircleDots } from './components/Loading';
 import VideoPlayer from "./VideoPlayer";
 
@@ -46,24 +46,15 @@ function CameraStream() {
             {
               urls: "stun:stun.relay.metered.ca:80",
             },
-            {
-              urls: [
-                "turn:global.relay.metered.ca:80",
-                "turn:global.relay.metered.ca:80?transport=tcp",
-                "turn:global.relay.metered.ca:443",
-                "turns:global.relay.metered.ca:443?transport=tcp",
-              ],
-              username: "aeb080153f16a0064c851fbc",
-              credential: "7/0VXUlIGZJG6MGd",
-            },
+            ...getTurnServers()
         ],
         });
 
         pc.ontrack = (event) => {
-          console.log('Received track:', event.track);
+          // console.log('Received track:', event.track);
           if (videoRef.current && event.streams[0]) {
             videoRef.current.srcObject = event.streams[0];
-            console.log('Set video source:', event.streams[0]);
+            // console.log('Set video source:', event.streams[0]);
           }
         };
         peerConnectionRef.current = pc;
@@ -94,7 +85,7 @@ function CameraStream() {
         const name = getRandomName();
 
         // Send offer to server
-        console.log(`client name: ${name} | Offer created: ${offer}`);
+        // console.log(`client name: ${name} | Offer created: ${offer}`);
         // const response = await fetch(`https://${process.env.REACT_APP_API_URL}:${process.env.REACT_APP_API_PORT}/webrtc/offer`, {
         // const response = await fetch(`http://localhost:8051/webrtc/offer`, {
         // const response = await fetch(`http://127.0.0.1:8000/webrtc/offer`, {
@@ -113,23 +104,23 @@ function CameraStream() {
           throw new Error('Failed to connect to server');
         }
 
-        console.log('Response from server:', response);
+        // console.log('Response from server:', response);
 
         const answerData = await response.json();
         await pc.setRemoteDescription(new RTCSessionDescription(answerData));
 
-        console.log('Answer received:', answerData);
+        // console.log('Answer received:', answerData);
       
         // Handle remote stream
         const remoteStream = peerConnectionRef.current.getRemoteStreams()[0];
         if (videoRef.current && remoteStream) {
           videoRef.current.srcObject = remoteStream;
-          console.log('Remote stream:', remoteStream);
+          // console.log('Remote stream:', remoteStream);
         } else {
           console.error('Failed to get remote stream');
         }
         
-        console.log('Peer connection:', peerConnectionRef.current);
+        // console.log('Peer connection:', peerConnectionRef.current);
 
       } catch (err) {
         console.error('Error setting up WebRTC:', err);
@@ -149,7 +140,7 @@ function CameraStream() {
   const handleNewMessage = useCallback(() => {
     if (!isChatVisible) {
       setHasUnreadMessages(true);
-      console.log("New message received, setting hasUnreadMessages to true");
+      // console.log("New message received, setting hasUnreadMessages to true");
     }
   }, [isChatVisible]);
 
@@ -158,7 +149,7 @@ function CameraStream() {
     if (!isChatVisible) {
       // When opening chat, clear the notification
       setHasUnreadMessages(false);
-      console.log("Chat opened, clearing hasUnreadMessages");
+      // console.log("Chat opened, clearing hasUnreadMessages");
     }
   };
 
@@ -198,7 +189,7 @@ function CameraStream() {
       <div className={`main-content ${!isChatVisible ? 'chat-hidden' : ''}`}>
         <div className="stream-section">
           <div className="stream-viewport" onClick={toggleFullScreen}>
-            {/* {!videoSrc && <LoadingCircleDots />} */}
+            {!isConnected && <LoadingCircleDots />}
           {error ? (
             <div className="error-message">{error}</div>
           ) : (
