@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from aiortc import RTCConfiguration, RTCIceServer, RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaRelay
+from aiortc.rtcrtpsender import RTCRtpSender
 from datetime import datetime
 import asyncio
 import logging
@@ -37,6 +38,11 @@ async def lifespan(app: FastAPI):
     # audio, video = create_local_tracks("/app/media/birbs-of-paradise.mp4")
 
     asyncio.create_task(fetch_weather_periodically(cache_expiration=3600))
+    
+    # Limit the ports used for media to a range of 100 ports
+    RTCRtpSender.TRANSPORT_POOL_SIZE = 849
+    RTCRtpSender.TRANSPORT_PORT_MIN = 49152
+    RTCRtpSender.TRANSPORT_PORT_MAX = 50000
 
     yield
     
@@ -221,4 +227,14 @@ async def weather_endpoint():
     return {
         "data": WEATHER_DATA["data"],
         "last_updated": WEATHER_DATA["last_updated"]
+    }
+
+@app.get("/webrtc/config")
+async def get_webrtc_config():
+    """Return the current WebRTC port configuration"""
+    return {
+        "pool_size": RTCRtpSender.TRANSPORT_POOL_SIZE,
+        "port_min": RTCRtpSender.TRANSPORT_PORT_MIN,
+        "port_max": RTCRtpSender.TRANSPORT_PORT_MAX,
+        "port_range": RTCRtpSender.TRANSPORT_PORT_MAX - RTCRtpSender.TRANSPORT_PORT_MIN + 1
     }

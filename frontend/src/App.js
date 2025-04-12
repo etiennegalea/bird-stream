@@ -189,7 +189,7 @@ function CameraStream() {
       <div className={`main-content ${!isChatVisible ? 'chat-hidden' : ''}`}>
         <div className="stream-section">
           <div className="stream-viewport" onClick={toggleFullScreen}>
-            {!isConnected && <LoadingCircleDots />}
+            {!isConnected && !error && <LoadingCircleDots />}
           {error ? (
             <div className="error-message">{error}</div>
           ) : (
