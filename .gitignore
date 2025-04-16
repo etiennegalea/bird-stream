@@ -133,3 +133,6 @@ dmypy.json
 
 # api keys
 .secrets.yaml
+
+# coturn keys
+coturn/certs/
