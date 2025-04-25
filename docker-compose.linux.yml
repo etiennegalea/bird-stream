@@ -22,7 +22,9 @@ services:
     volumes:
       - ./backend:/app
     restart: unless-stopped
-    network-mode: "host"
+    devices:
+      - "/dev/video0:/dev/video0"
+    network_mode: host
     environment:
       - DEVELOPMENT_MODE=true
 
