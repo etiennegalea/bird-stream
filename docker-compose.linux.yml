@@ -11,8 +11,7 @@ services:
       - ./frontend:/app
       - /app/node_modules
     restart: unless-stopped
-    networks:
-      - app-network
+    network_mode: host
 
 
   backend:
