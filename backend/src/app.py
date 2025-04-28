@@ -79,13 +79,7 @@ async def offer(peer: ClientModel = Body(...)):
 
     config = RTCConfiguration([
         # Add multiple STUN servers for better NAT traversal
-        RTCIceServer(urls=[
-            "stun:stun.l.google.com:19302",
-            "stun:stun1.l.google.com:19302",
-            "stun:stun2.l.google.com:19302",
-            "stun:stun3.l.google.com:19302",
-            "stun:stun4.l.google.com:19302"]
-        ),
+        RTCIceServer(urls=["stun:stun.l.google.com:19302"]),
         # TURN server configuration
         RTCIceServer(
             urls=[
@@ -98,6 +92,9 @@ async def offer(peer: ClientModel = Body(...)):
             credential=password
         )
     ])
+    
+    # Force IPv4
+    config.iceTransportPolicy = "relay"
     
     pc = RTCPeerConnection(config)
 
