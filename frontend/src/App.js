@@ -35,8 +35,7 @@ function CameraStream() {
               urls: ["stun:stun.l.google.com:19302"],
             },
             ...getTurnServers()
-          ],
-          iceTransportPolicy: "relay"
+          ]
         });
 
         pc.ontrack = (event) => {
