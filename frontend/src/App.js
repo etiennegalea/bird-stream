@@ -6,6 +6,12 @@ import { getApiBaseUrl, getTurnServers } from './utils';
 import { LoadingDots, LoadingCircle, LoadingCircleDots } from './components/Loading';
 import VideoPlayer from "./VideoPlayer";
 
+// Add console logger
+const logger = {
+  info: (...args) => console.log(...args),
+  error: (...args) => console.error(...args)
+};
+
 function CameraStream() {
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState(null);
@@ -32,11 +38,35 @@ function CameraStream() {
         const pc = new RTCPeerConnection({
           iceServers: [
             {
-              urls: ["stun:stun.l.google.com:19302"],
+              urls: [
+                "stun:stun.l.google.com:19302",
+                "stun:stun1.l.google.com:19302",
+                "stun:stun2.l.google.com:19302",
+                "stun:stun3.l.google.com:19302",
+                "stun:stun4.l.google.com:19302"
+              ],
             },
             ...getTurnServers()
-          ]
+          ],
+          iceCandidatePoolSize: 0,
+          bundlePolicy: "max-bundle",
+          rtcpMuxPolicy: "require",
+          iceTransportPolicy: "all"
         });
+
+        // Filter out IPv6 candidates
+        pc.onicecandidate = (event) => {
+          if (event.candidate) {
+            // Only keep IPv4 candidates
+            if (event.candidate.candidate.indexOf('udp') !== -1 && 
+                event.candidate.candidate.indexOf(':') !== -1 && 
+                event.candidate.candidate.indexOf('::') === -1) {
+              logger.info('Using IPv4 candidate:', event.candidate.candidate);
+            } else {
+              logger.info('Filtering out non-IPv4 candidate:', event.candidate.candidate);
+            }
+          }
+        };
 
         pc.ontrack = (event) => {
           if (videoRef.current && event.streams[0]) {
