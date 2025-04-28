@@ -30,31 +30,23 @@ function CameraStream() {
 
       try {
         const pc = new RTCPeerConnection({
-          // iceServers: [
-            // {
-              // urls: "stun:77.174.190.102:3478",
-              // urls: "stun:stun.l.google.com:19302"
-              // urls: "stun:127.0.0.1:3478"
-            // },
-            // {
-            //   urls: "turn:127.0.0.1:3478",
-            //   username: "user",
-            //   credential: "supersecretpassword",
-            // }
-          // ]
           iceServers: [
             {
-              urls: "stun:stun.relay.metered.ca:80",
+              urls: [
+                "stun:stun.l.google.com:19302",
+                "stun:stun1.l.google.com:19302",
+                "stun:stun2.l.google.com:19302",
+                "stun:stun3.l.google.com:19302",
+                "stun:stun4.l.google.com:19302"
+              ],
             },
             ...getTurnServers()
         ],
         });
 
         pc.ontrack = (event) => {
-          // console.log('Received track:', event.track);
           if (videoRef.current && event.streams[0]) {
             videoRef.current.srcObject = event.streams[0];
-            // console.log('Set video source:', event.streams[0]);
           }
         };
         peerConnectionRef.current = pc;

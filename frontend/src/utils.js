@@ -43,8 +43,8 @@ export const getTurnServers = () => {
         "turn:global.relay.metered.ca:443",
         "turns:global.relay.metered.ca:443?transport=tcp",
       ],
-      username: "aeb080153f16a0064c851fbc",
-      credential: "7/0VXUlIGZJG6MGd",
+      username: username,
+      credential: credential,
     },
   ];
 };

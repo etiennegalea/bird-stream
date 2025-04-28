@@ -39,10 +39,10 @@ async def lifespan(app: FastAPI):
 
     asyncio.create_task(fetch_weather_periodically(cache_expiration=3600))
     
-    # Limit the ports used for media to a range of 100 ports
-    RTCRtpSender.TRANSPORT_POOL_SIZE = 849
+    # Increase port range for better connectivity
+    RTCRtpSender.TRANSPORT_POOL_SIZE = 1000
     RTCRtpSender.TRANSPORT_PORT_MIN = 49152
-    RTCRtpSender.TRANSPORT_PORT_MAX = 50000
+    RTCRtpSender.TRANSPORT_PORT_MAX = 65535
 
     yield
     
@@ -78,18 +78,22 @@ async def offer(peer: ClientModel = Body(...)):
     user, password = load_turn_credentials()
 
     config = RTCConfiguration([
-        # RTCIceServer(urls=["stun:stun.l.google.com:19302"]),
-        # RTCIceServer(urls=["stun:127.0.0.1:3478"]),
+        # Add multiple STUN servers for better NAT traversal
+        RTCIceServer(urls=[
+            "stun:stun.l.google.com:19302",
+            "stun:stun1.l.google.com:19302",
+            "stun:stun2.l.google.com:19302",
+            "stun:stun3.l.google.com:19302",
+            "stun:stun4.l.google.com:19302"]
+        ),
+        # TURN server configuration
         RTCIceServer(
             urls=[
                 "turn:global.relay.metered.ca:80",
                 "turn:global.relay.metered.ca:80?transport=tcp",
                 "turn:global.relay.metered.ca:443",
                 "turns:global.relay.metered.ca:443?transport=tcp",
-                # "turn:0.0.0.0:5349"
             ],
-            # username="user",
-            # credential="supersecretpassword",
             username=user,
             credential=password
         )
@@ -101,35 +105,38 @@ async def offer(peer: ClientModel = Body(...)):
     pcs_manager.add_peer(peer.id, pc)
 
     video_sender = pc.addTrack(relay.subscribe(video))
-    print(f"video: {video}")
-    print(f"video_sender: {video_sender}")
+    logger.info(f"Video sender created: {video_sender}")
 
     @pc.on("track")
     def on_track(track):
-        print("Received track:", track.kind)
+        logger.info(f"Received track: {track.kind}")
         if track.kind == "video":
-            print("Received video track!!")
+            logger.info("Received video track!!")
 
     @pc.on("iceconnectionstatechange")
     async def on_iceconnectionstatechange():
+        logger.info(f"ICE connection state changed to: {pc.iceConnectionState}")
         if pc.iceConnectionState == "failed" or pc.iceConnectionState == "disconnected":
             try:
-                print(f"ICE Connection failed for peer {peer.id}, cleaning up")
+                logger.info(f"ICE Connection failed for peer {peer.id}, cleaning up")
                 await pcs_manager.remove_peer(peer.id, pc)
             except Exception as e:
                 logger.error(f"Error (ICE) removing peer: {e}")
 
     @pc.on("connectionstatechange")
     async def on_connectionstatechange():
-        print(f"Connection state changed to {pc.connectionState} for peer {peer.id}")
+        logger.info(f"Connection state changed to {pc.connectionState} for peer {peer.id}")
         if pc.connectionState in ["closed", "failed", "disconnected"]:
             try:
-                print(f"Cleaning up connection for peer {peer.id}")
+                logger.info(f"Cleaning up connection for peer {peer.id}")
                 await pcs_manager.remove_peer(peer.id, pc)
             except Exception as e:
                 logger.error(f"Error removing peer: {e}")
 
-    
+    @pc.on("icecandidate")
+    def on_icecandidate(candidate):
+        logger.info(f"New ICE candidate: {candidate}")
+
     # Set remote description only once
     await pc.setRemoteDescription(RTCSessionDescription(sdp=peer.offer.sdp, type=peer.offer.type))
     
