@@ -70,11 +70,16 @@ def create_local_tracks(play_from=False, decode=True):
         player = MediaPlayer(play_from, decode=decode)
         return player.audio, player.video
     else:
-        options = {"framerate": "30", "video_size": "640x480"}
+        options = {
+            "framerate": "30",
+            "video_size": "640x480",
+            "v4l2_format": "yuv420p"  # Use a more compatible format
+        }
+        logger.info(f"VIDEO STREAM options: {options}")
         if sys.platform == 'darwin':
             webcam = MediaPlayer("default:none", format="avfoundation", options=options)
         else:
-            webcam = MediaPlayer("/dev/video0", options=options)
+            webcam = MediaPlayer("/dev/video0", format="v4l2", options=options)
         return None, webcam.video
 
 def force_codec(pc, sender, forced_codec="video/H264"):
