@@ -86,18 +86,25 @@ async def offer(peer: ClientModel = Body(...)):
             "stun:stun3.l.google.com:19302",
             "stun:stun4.l.google.com:19302"
         ]),
-        # TURN server configuration
+        # TURN server configuration with both IPv4 and IPv6 support
         RTCIceServer(
             urls=[
-                # "turn:global.relay.metered.ca:80",
-                # "turn:global.relay.metered.ca:80?transport=tcp",
+                "turn:global.relay.metered.ca:80",
+                "turn:global.relay.metered.ca:80?transport=tcp",
+                "turn:global.relay.metered.ca:80?transport=udp",
                 "turn:global.relay.metered.ca:443",
                 "turns:global.relay.metered.ca:443?transport=tcp",
+                "turn:global.relay.metered.ca:443?transport=udp"
             ],
             username=user,
             credential=password
         )
     ])
+    
+    # Configure for both IPv4 and IPv6
+    config.iceTransportPolicy = "all"
+    config.bundlePolicy = "max-bundle"
+    config.rtcpMuxPolicy = "require"
     
     pc = RTCPeerConnection(config)
 
