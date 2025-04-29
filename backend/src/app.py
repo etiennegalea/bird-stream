@@ -89,7 +89,11 @@ async def offer(peer: ClientModel = Body(...)):
         # TURN server configuration with both IPv4 and IPv6 support
         RTCIceServer(
             urls=[
+                # "turn:global.relay.metered.ca:80",
+                # "turn:global.relay.metered.ca:80?transport=tcp",
                 "turn:global.relay.metered.ca:80?transport=udp",
+                # "turn:global.relay.metered.ca:443",
+                # "turns:global.relay.metered.ca:443?transport=tcp",
                 "turn:global.relay.metered.ca:443?transport=udp"
             ],
             username=user,
@@ -107,8 +111,6 @@ async def offer(peer: ClientModel = Body(...)):
     # store peer connection
     pcs_manager.add_peer(peer.id, pc)
 
-    # Create a new relay for each connection
-    relay = MediaRelay()
     video_sender = pc.addTrack(relay.subscribe(video))
     logger.info(f"Video sender created: {video_sender}")
 
