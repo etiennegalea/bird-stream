@@ -86,7 +86,7 @@ async def offer(peer: ClientModel = Body(...)):
             "stun:stun3.l.google.com:19302",
             "stun:stun4.l.google.com:19302"
         ]),
-        # TURN server configuration with both IPv4 and IPv6 support
+        # TURN server configuration
         RTCIceServer(
             urls=[
                 # "turn:global.relay.metered.ca:80",
@@ -101,8 +101,8 @@ async def offer(peer: ClientModel = Body(...)):
         )
     ])
     
-    # Configure for both IPv4 and IPv6
-    config.iceTransportPolicy = "all"
+    # Force IPv4 only
+    config.iceTransportPolicy = "relay"
     config.bundlePolicy = "max-bundle"
     config.rtcpMuxPolicy = "require"
     

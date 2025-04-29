@@ -45,7 +45,7 @@ function CameraStream() {
           iceCandidatePoolSize: 0,
           bundlePolicy: "max-bundle",
           rtcpMuxPolicy: "require",
-          iceTransportPolicy: "all"
+          iceTransportPolicy: "relay"
         });
 
         pc.ontrack = (event) => {
