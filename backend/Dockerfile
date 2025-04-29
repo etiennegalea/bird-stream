@@ -44,4 +44,4 @@ COPY . /tmp/
 EXPOSE 8051
 
 # Start the application
-CMD ["uvicorn", "src.app:app", "--host", "0.0.0.0", "--port", "8051"]
+CMD ["uvicorn", "src.app:app", "--host", "::", "--port", "8051"]
