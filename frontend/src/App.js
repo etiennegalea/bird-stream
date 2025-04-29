@@ -42,10 +42,9 @@ function CameraStream() {
             },
             ...getTurnServers()
           ],
-          iceCandidatePoolSize: 0,
+          iceTransportPolicy: "relay",
           bundlePolicy: "max-bundle",
-          rtcpMuxPolicy: "require",
-          iceTransportPolicy: "relay"
+          rtcpMuxPolicy: "require"
         });
 
         pc.ontrack = (event) => {
