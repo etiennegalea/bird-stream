@@ -86,13 +86,13 @@ async def offer(peer: ClientModel = Body(...)):
             "stun:stun3.l.google.com:19302",
             "stun:stun4.l.google.com:19302"
         ]),
-        # TURN server configuration
+        # TURN server configuration with both IPv4 and IPv6 support
         RTCIceServer(
             urls=[
-                # "turn:global.relay.metered.ca:80",
+                "turn:global.relay.metered.ca:80",
                 # "turn:global.relay.metered.ca:80?transport=tcp",
                 "turn:global.relay.metered.ca:80?transport=udp",
-                # "turn:global.relay.metered.ca:443",
+                "turn:global.relay.metered.ca:443",
                 # "turns:global.relay.metered.ca:443?transport=tcp",
                 "turn:global.relay.metered.ca:443?transport=udp"
             ],
@@ -101,8 +101,8 @@ async def offer(peer: ClientModel = Body(...)):
         )
     ])
     
-    # Force IPv4 only
-    config.iceTransportPolicy = "relay"
+    # Configure for both IPv4 and IPv6
+    config.iceTransportPolicy = "all"
     config.bundlePolicy = "max-bundle"
     config.rtcpMuxPolicy = "require"
     
@@ -142,12 +142,7 @@ async def offer(peer: ClientModel = Body(...)):
 
     @pc.on("icecandidate")
     def on_icecandidate(candidate):
-        if candidate and candidate.candidate:
-            # Only log IPv4 candidates
-            if "udp" in candidate.candidate and ":" in candidate.candidate and "::" not in candidate.candidate:
-                logger.info(f"Using IPv4 candidate: {candidate.candidate}")
-            else:
-                logger.info(f"Ignoring non-IPv4 candidate: {candidate.candidate}")
+        logger.info(f"New ICE candidate: {candidate}")
 
     # Set remote description only once
     await pc.setRemoteDescription(RTCSessionDescription(sdp=peer.offer.sdp, type=peer.offer.type))
