@@ -42,7 +42,7 @@ function CameraStream() {
             },
             ...getTurnServers()
           ],
-          iceTransportPolicy: "relay",
+          iceTransportPolicy: "all",
           bundlePolicy: "max-bundle",
           rtcpMuxPolicy: "require"
         });

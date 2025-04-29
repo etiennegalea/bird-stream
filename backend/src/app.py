@@ -102,7 +102,7 @@ async def offer(peer: ClientModel = Body(...)):
     ])
     
     # Force IPv4 only
-    config.iceTransportPolicy = "relay"
+    config.iceTransportPolicy = "all"
     config.bundlePolicy = "max-bundle"
     config.rtcpMuxPolicy = "require"
     
