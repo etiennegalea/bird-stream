@@ -47,3 +47,6 @@ networks:
     enable_ipv6: true
     ipam:
       driver: default
+      config:
+        - subnet: "172.18.0.0/16"
+        - subnet: "fd00:1:1::/64"
