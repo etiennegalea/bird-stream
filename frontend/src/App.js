@@ -47,6 +47,20 @@ function CameraStream() {
           rtcpMuxPolicy: "require"
         });
 
+        // Filter out IPv6 candidates
+        pc.onicecandidate = (event) => {
+          if (event.candidate) {
+            // Only keep IPv4 candidates
+            if (event.candidate.candidate.indexOf('udp') !== -1 && 
+                event.candidate.candidate.indexOf(':') !== -1 && 
+                event.candidate.candidate.indexOf('::') === -1) {
+              console.log('Using IPv4 candidate:', event.candidate.candidate);
+            } else {
+              console.log('Ignoring non-IPv4 candidate:', event.candidate.candidate);
+            }
+          }
+        };
+
         pc.ontrack = (event) => {
           if (videoRef.current && event.streams[0]) {
             videoRef.current.srcObject = event.streams[0];
