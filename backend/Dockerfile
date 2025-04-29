@@ -44,4 +44,5 @@ COPY . /tmp/
 EXPOSE 8051
 
 # Start the application
-CMD ["uvicorn", "src.app:app", "--host", "::", "--port", "8051"]
+COPY server.py /app/
+CMD ["python", "server.py"]
