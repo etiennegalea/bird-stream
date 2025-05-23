@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import './styles/App.css';
+import { getApiBaseUrl } from './utils';
 
 function CameraStream() {
   const [viewerCount, setViewerCount] = useState(0);
@@ -7,8 +8,7 @@ function CameraStream() {
   const [fps, setFps] = useState(0);
 
   useEffect(() => {
-    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${protocol}://cam.lifeofarobin.com/stream`);
+    const ws = new WebSocket(`${getApiBaseUrl(true)}/stream`);
 
     ws.onmessage = (event) => {
       const framedata = JSON.parse(event.data);
