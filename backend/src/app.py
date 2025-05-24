@@ -80,11 +80,7 @@ async def offer(peer: ClientModel = Body(...)):
     config = RTCConfiguration([
         # Add multiple STUN servers for better NAT traversal
         RTCIceServer(urls=[
-            # "stun:stun.l.google.com:19302",
-            # "stun:stun1.l.google.com:19302",
-            # "stun:stun2.l.google.com:19302",
-            # "stun:stun3.l.google.com:19302",
-            # "stun:stun4.l.google.com:19302"
+            "stun:stun.l.google.com:19302" # Google STUN server fallback
         ]),
         # TURN server configuration with both IPv4 and IPv6 support
         RTCIceServer(
@@ -94,18 +90,23 @@ async def offer(peer: ClientModel = Body(...)):
                 # "turn:global.relay.metered.ca:80?transport=udp",
                 # "turn:global.relay.metered.ca:443",
                 # "turns:global.relay.metered.ca:443?transport=tcp",
-                "turn:global.relay.metered.ca:443?transport=udp"
+                # "turn:global.relay.metered.ca:443?transport=udp"
+                "turn:77.174.190.102:3478?transport=udp",
+                "turns:77.174.190.102:5349?transport=udp"
             ],
-            username=user,
-            credential=password
+            username="user",
+            credential="supersecretpassword"
+            # username=user,
+            # credential=password
         )
     ])
     
     # Configure for both IPv4 and IPv6
-    config.iceTransportPolicy = "all"
-    config.bundlePolicy = "max-bundle"
-    config.rtcpMuxPolicy = "require"
-    
+    # config.iceTransportPolicy = "all"
+    # config.bundlePolicy = "max-bundle"
+    # config.rtcpMuxPolicy = "require"
+    config.iceTransportPolicy = "relay"
+
     pc = RTCPeerConnection(config)
 
     # store peer connection

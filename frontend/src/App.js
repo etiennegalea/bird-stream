@@ -31,20 +31,25 @@ function CameraStream() {
       try {
         const pc = new RTCPeerConnection({
           iceServers: [
-            // {
-            //   urls: [
-            //     "stun:stun.l.google.com:19302",
-            //     "stun:stun1.l.google.com:19302",
-            //     "stun:stun2.l.google.com:19302",
-            //     "stun:stun3.l.google.com:19302",
-            //     "stun:stun4.l.google.com:19302"
-            //   ],
-            // },
-            ...getTurnServers()
+            {
+              urls: [
+                "stun:stun.l.google.com:19302" // Google STUN server fallback
+              ],
+            },
+            // ...getTurnServers()
+            {
+              urls: [
+                "turn:77.174.190.102:3478?transport=udp",
+                "turns:77.174.190.102:5349?transport=udp"
+              ],
+              username: "user",
+              credential: "supersecretpassword"
+            }
           ],
-          iceTransportPolicy: "all",
-          bundlePolicy: "max-bundle",
-          rtcpMuxPolicy: "require"
+          // iceTransportPolicy: "all",
+          // bundlePolicy: "max-bundle",
+          // rtcpMuxPolicy: "require"
+          iceTransportPolicy: "relay"
         });
 
         pc.ontrack = (event) => {
