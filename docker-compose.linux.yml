@@ -40,6 +40,11 @@ services:
     - DETECT_RELAY_IP=yes
     network_mode: host
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "turnutils_stunclient", "localhost", "3478"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 networks:
   app-network:
