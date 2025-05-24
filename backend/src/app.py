@@ -91,8 +91,8 @@ async def offer(peer: ClientModel = Body(...)):
                 # "turn:global.relay.metered.ca:443",
                 # "turns:global.relay.metered.ca:443?transport=tcp",
                 # "turn:global.relay.metered.ca:443?transport=udp"
-                "turn:77.174.190.102:3478?transport=udp",
-                "turns:77.174.190.102:5349?transport=udp"
+                "turn:turn.lifeofarobin.com:3478?transport=udp",
+                "turns:turn.lifeofarobin.com:5349?transport=udp"
             ],
             username="user",
             credential="supersecretpassword"

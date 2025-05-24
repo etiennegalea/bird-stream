@@ -39,8 +39,8 @@ function CameraStream() {
             // ...getTurnServers()
             {
               urls: [
-                "turn:77.174.190.102:3478?transport=udp",
-                "turns:77.174.190.102:5349?transport=udp"
+                "turn:turn.lifeofarobin.com:3478?transport=udp",
+                "turns:turn.lifeofarobin.com:5349?transport=udp"
               ],
               username: "user",
               credential: "supersecretpassword"
