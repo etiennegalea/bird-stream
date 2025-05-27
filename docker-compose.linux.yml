@@ -28,23 +28,23 @@ services:
     # environment:
     #   - DEVELOPMENT_MODE=true
 
-  # coturn:
-  #   build: ./coturn
-  #   container_name: coturn
-  #   volumes:
-  #     - ./coturn/turnserver.conf:/etc/turnserver.conf
-  #     - ./coturn/certs:/etc/coturn/certs
-  #     - ./coturn/logs:/var/log/coturn
-  #   environment:
-  #   - DETECT_EXTERNAL_IP=yes
-  #   - DETECT_RELAY_IP=yes
-  #   network_mode: host
-  #   restart: unless-stopped
-  #   healthcheck:
-  #     test: ["CMD", "turnutils_stunclient", "localhost", "3478"]
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 3
+  coturn:
+    build: ./coturn
+    container_name: coturn
+    volumes:
+      - ./coturn/turnserver.conf:/etc/turnserver.conf
+      - ./coturn/certs:/etc/coturn/certs
+      - ./coturn/logs:/var/log/coturn
+    environment:
+    - DETECT_EXTERNAL_IP=yes
+    - DETECT_RELAY_IP=yes
+    network_mode: host
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "turnutils_stunclient", "localhost", "3478"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 networks:
   app-network:
