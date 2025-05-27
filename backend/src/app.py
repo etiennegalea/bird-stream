@@ -102,10 +102,10 @@ async def offer(peer: ClientModel = Body(...)):
     ])
     
     # Configure for both IPv4 and IPv6
-    # config.iceTransportPolicy = "all"
-    # config.bundlePolicy = "max-bundle"
-    # config.rtcpMuxPolicy = "require"
-    config.iceTransportPolicy = "relay"
+    config.iceTransportPolicy = "all"
+    config.bundlePolicy = "max-bundle"
+    config.rtcpMuxPolicy = "require"
+    # config.iceTransportPolicy = "relay"
 
     pc = RTCPeerConnection(config)
 

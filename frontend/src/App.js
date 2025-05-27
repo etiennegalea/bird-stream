@@ -46,10 +46,10 @@ function CameraStream() {
             //   credential: "supersecretpassword"
             // }
           ],
-          // iceTransportPolicy: "all",
-          // bundlePolicy: "max-bundle",
-          // rtcpMuxPolicy: "require"
-          iceTransportPolicy: "relay"
+          iceTransportPolicy: "all",
+          bundlePolicy: "max-bundle",
+          rtcpMuxPolicy: "require"
+          // iceTransportPolicy: "relay"
         });
 
         pc.ontrack = (event) => {
