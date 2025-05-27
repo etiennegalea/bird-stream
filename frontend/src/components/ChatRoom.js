@@ -23,17 +23,17 @@ function ChatRoom({ onNewMessage }) {
       const chatWs = new WebSocket(`${getApiBaseUrl(true)}/chat?username=${encodeURIComponent(username)}`);
 
       chatWs.onopen = () => {
-        console.log("Chat WebSocket connection established");
+        // console.log("Chat WebSocket connection established");
       };
 
       chatWs.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        console.log("Received message:", data);
+        // console.log("Received message:", data);
 
         // Notify parent component about new message (if it's not from history)
         // if (data.type === "message" && onNewMessage && typeof onNewMessage === 'function') {
         onNewMessageRef.current();
-        console.log("New message received, calling onNewMessage");
+        // console.log("New message received, calling onNewMessage");
         // }
 
         // Check if the date is different from current date
@@ -64,7 +64,7 @@ function ChatRoom({ onNewMessage }) {
       };
 
       chatWs.onclose = () => {
-        console.log("Chat WebSocket connection closed");
+        // console.log("Chat WebSocket connection closed");
       };
 
       setWs(chatWs);
@@ -81,7 +81,7 @@ function ChatRoom({ onNewMessage }) {
     if (!document.querySelector('.chat-section').classList.contains('chat-hidden')) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-    console.log("Messages updated:", messages);
+    // console.log("Messages updated:", messages);
   }, [messages]);
 
   const handleSendMessage = (e) => {

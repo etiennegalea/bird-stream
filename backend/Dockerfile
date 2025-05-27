@@ -4,6 +4,12 @@ FROM python:3.11-slim
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+ENV WEBRTC_PORT_MIN=49152
+ENV WEBRTC_PORT_MAX=49251
+
+# Set working directory in the container
+WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -22,9 +28,6 @@ RUN apt-get update && apt-get install -y \
     python3-opencv \
     && rm -rf /var/lib/apt/lists/*
 
-# Set working directory in the container
-WORKDIR /app
-
 # Copy the application files
 COPY ./src /app
 COPY requirements.txt /tmp/
@@ -37,8 +40,9 @@ RUN pip install --requirement /tmp/requirements.txt
 
 COPY . /tmp/
 
-# Expose the port
-EXPOSE 2096
+# Expose the API port
+EXPOSE 8051
 
 # Start the application
-CMD ["uvicorn", "src.app:app", "--host", "0.0.0.0", "--port", "2096"]
+COPY server.py /app/
+CMD ["python", "server.py"]

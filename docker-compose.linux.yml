@@ -1,0 +1,57 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+    container_name: stream-frontend
+    ports:
+      - "8050:80"
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    restart: unless-stopped
+    networks:
+      - app-network
+
+
+  backend:
+    build: 
+      context: ./backend
+    container_name: stream-backend
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+    devices:
+      - "/dev/video0:/dev/video0"
+    network_mode: host
+    # environment:
+    #   - DEVELOPMENT_MODE=true
+
+  coturn:
+    build: ./coturn
+    container_name: coturn
+    volumes:
+      - ./coturn/turnserver.conf:/etc/turnserver.conf
+      - ./coturn/certs:/etc/coturn/certs
+      - ./coturn/logs:/var/log/coturn
+    environment:
+    - DETECT_EXTERNAL_IP=yes
+    - DETECT_RELAY_IP=yes
+    network_mode: host
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "turnutils_stunclient", "localhost", "3478"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  app-network:
+    driver: bridge
+    enable_ipv6: true
+    ipam:
+      driver: default
+      config:
+        - subnet: "172.18.0.0/16"
+        - subnet: "fd00:1:1::/64"

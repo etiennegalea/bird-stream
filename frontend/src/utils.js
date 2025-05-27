@@ -20,3 +20,33 @@ export const getApiBaseUrl = (ws = false) => {
     
     return baseURL;
   };
+
+/**
+ * Get the TURN server configuration with credentials from environment variables
+ * @returns {Array} Array of TURN server configurations for RTCPeerConnection
+ */
+export const getTurnServers = () => {
+  const username = process.env.REACT_APP_OPENRELAY_TURN_USERNAME;
+  const credential = process.env.REACT_APP_OPENRELAY_TURN_CREDENTIAL;
+  
+  // Check if credentials are available
+  if (!username || !credential) {
+    console.warn('TURN server credentials not found in environment variables');
+    return [];
+  }
+  
+  return [
+    {
+      urls: [
+        // "turn:global.relay.metered.ca:80",
+        // "turn:global.relay.metered.ca:80?transport=tcp",
+        "turn:global.relay.metered.ca:80?transport=udp",
+        // "turn:global.relay.metered.ca:443",
+        // "turns:/global.relay.metered.ca:443?transport=tcp",
+        "turn:global.relay.metered.ca:443?transport=udp"
+      ],
+      username: username,
+      credential: credential,
+    },
+  ];
+};

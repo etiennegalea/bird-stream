@@ -2,46 +2,145 @@ import React, { useEffect, useState, useRef, useCallback } from "react";
 import './styles/App.css';
 import ChatRoom from './components/ChatRoom';
 import Weather from './components/Weather';
-import { getApiBaseUrl } from './utils';
+import { getApiBaseUrl, getTurnServers } from './utils';
 import { LoadingDots, LoadingCircle, LoadingCircleDots } from './components/Loading';
-
+import VideoPlayer from "./VideoPlayer";
 
 function CameraStream() {
-  const [viewerCount, setViewerCount] = useState(0);
-  const [videoSrc, setVideoSrc] = useState("");
-  const [fps, setFps] = useState(0);
+  const [isConnected, setIsConnected] = useState(false);
+  const [error, setError] = useState(null);
   const [isChatVisible, setIsChatVisible] = useState(true);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
+  const peerConnectionRef = useRef(null);
   const videoRef = useRef(null);
-
+  
   useEffect(() => {
-    const ws = new WebSocket(`${getApiBaseUrl()}/stream`);
-
-    ws.onmessage = (event) => {
-      const framedata = JSON.parse(event.data);
-      // Update video stream
-      setVideoSrc(`data:image/jpeg;base64,${framedata.frame}`);
-      setFps(Math.round(framedata.fps)); // Round FPS to 2 decimal places
-      // Update viewer count
-      setViewerCount(framedata.viewers);
+    const cleanup = () => {
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
     };
 
-    ws.onerror = (error) => {
-      console.error("WebSocket error:", error);
+    const startStream = async () => {
+      cleanup();
+
+      try {
+        const pc = new RTCPeerConnection({
+          iceServers: [
+            {
+              urls: [
+                "stun:stun.l.google.com:19302" // Google STUN server fallback
+              ],
+            },
+            // ...getTurnServers()
+            {
+              urls: [
+                "turn:turn.lifeofarobin.com:3478?transport=udp",
+                "turn:turn.lifeofarobin.com:5349?transport=udp"
+              ],
+              username: "user",
+              credential: "supersecretpassword"
+            }
+          ],
+          iceTransportPolicy: "all",
+          bundlePolicy: "max-bundle",
+          rtcpMuxPolicy: "require"
+          // iceTransportPolicy: "relay"
+        });
+
+        pc.ontrack = (event) => {
+          if (videoRef.current && event.streams[0]) {
+            videoRef.current.srcObject = event.streams[0];
+          }
+        };
+        peerConnectionRef.current = pc;
+
+        // Handle connection state changes
+        pc.onconnectionstatechange = (event) => {
+          switch(pc.connectionState) {
+            case "connected":
+              setIsConnected(true);
+              break;
+            case "disconnected":
+            case "failed":
+              setIsConnected(false);
+              setError("Connection lost. Please refresh to try again.");
+              break;
+            default:
+              break;
+          }
+        };
+
+        // Create offer
+        const offer = await pc.createOffer({
+          offerToReceiveVideo: true,
+          offerToReceiveAudio: false,
+        });
+        await pc.setLocalDescription(offer);
+
+        const name = getRandomName();
+
+        // Send offer to server
+        // console.log(`client name: ${name} | Offer created: ${offer}`);
+        // const response = await fetch(`https://${process.env.REACT_APP_API_URL}:${process.env.REACT_APP_API_PORT}/webrtc/offer`, {
+        // const response = await fetch(`http://localhost:8051/webrtc/offer`, {
+        // const response = await fetch(`http://127.0.0.1:8000/webrtc/offer`, {
+        const response = await fetch(`${getApiBaseUrl()}/webrtc/offer`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            id: name,
+            offer: {type: offer.type, sdp: offer.sdp}
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to connect to server');
+        }
+
+        // console.log('Response from server:', response);
+
+        const answerData = await response.json();
+        await pc.setRemoteDescription(new RTCSessionDescription(answerData));
+
+        // console.log('Answer received:', answerData);
+      
+        // Handle remote stream
+        const remoteStream = peerConnectionRef.current.getRemoteStreams()[0];
+        if (videoRef.current && remoteStream) {
+          videoRef.current.srcObject = remoteStream;
+          // console.log('Remote stream:', remoteStream);
+        } else {
+          console.error('Failed to get remote stream');
+        }
+        
+        // console.log('Peer connection:', peerConnectionRef.current);
+
+      } catch (err) {
+        console.error('Error setting up WebRTC:', err);
+        setError('Failed to connect to camera stream. Please refresh to try again.');
+      }
     };
 
-    ws.onclose = () => {
-      console.log("WebSocket connection closed");
-    };
-    
-    return () => ws.close(); // Cleanup WebSocket on component unmount
+    startStream();
+    return cleanup;
   }, []);
+  
+  function getRandomName(prefix="client_") {
+    return prefix + Math.random().toString(36).substring(2, 15);
+  }
 
   // Handle new message notifications
   const handleNewMessage = useCallback(() => {
     if (!isChatVisible) {
       setHasUnreadMessages(true);
-      console.log("New message received, setting hasUnreadMessages to true");
+      // console.log("New message received, setting hasUnreadMessages to true");
     }
   }, [isChatVisible]);
 
@@ -50,7 +149,7 @@ function CameraStream() {
     if (!isChatVisible) {
       // When opening chat, clear the notification
       setHasUnreadMessages(false);
-      console.log("Chat opened, clearing hasUnreadMessages");
+      // console.log("Chat opened, clearing hasUnreadMessages");
     }
   };
 
@@ -90,33 +189,43 @@ function CameraStream() {
       <div className={`main-content ${!isChatVisible ? 'chat-hidden' : ''}`}>
         <div className="stream-section">
           <div className="stream-viewport" onClick={toggleFullScreen}>
-            {!videoSrc && <LoadingCircleDots />}
-            {videoSrc && (
-              <img
-                ref={videoRef}
-                src={videoSrc}
-                alt="Camera Stream"
-                className="stream-image"
-              />
-            )}
-            {videoSrc && (
-              <div className="fullscreen-hint">
-                <span>Click to toggle fullscreen</span>
-              </div>
-            )}
+            {!isConnected && !error && <LoadingCircleDots />}
+          {error ? (
+            <div className="error-message">{error}</div>
+          ) : (
+          // <VideoPlayer peerConnection={peerConnectionRef.current} />
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="stream-viewport"
+            style={{ width: '100%', height: '100%'}}>
+            <track kind="captions" label="Captions" />
+          </video>
+        )}
+        {isConnected && (
+          <div className="fullscreen-hint">
+            <span>Click to toggle fullscreen</span>
           </div>
+        )}
+      </div>
           <div className="stream-info">
             <div className="viewer-count">
               <img src="/viewers_icon.svg" alt="viewers" />
-              <span>{viewerCount}</span>
+              {/* <span>{viewerCount}</span> */}
             </div>
             <div className="weather-info">
               <Weather />
             </div>
-            <div className="info-container">
+            <div className="connection-status">
+              {isConnected ? '🟢' : '🔴'}
+            </div>
+
+            {/* <div className="info-container">
               <span className="label">FPS</span>
               <span className="value">{fps}</span>
-            </div>
+            </div> */}
           </div>
         </div>
         

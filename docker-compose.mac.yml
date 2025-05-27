@@ -1,0 +1,49 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+    container_name: stream-frontend
+    ports:
+      - "8050:80"
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    restart: unless-stopped
+    networks:
+      - app-network
+
+
+  backend:
+    build: 
+      context: ./backend
+    container_name: stream-backend
+    ports:
+      - "8051:8051/tcp"
+      - "8051:8051/udp"
+    volumes:
+      - ./backend:/app
+    # devices:
+    #   - "/dev/video0:/dev/video0"
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  coturn:
+    build: ./coturn
+    container_name: coturn
+    volumes:
+      - ./coturn/turnserver.conf:/etc/turnserver.conf
+      - ./coturn/certs:/etc/coturn/certs
+      # - ./coturn/logs:/var/log
+    environment:
+    - DETECT_EXTERNAL_IP=yes
+    - DETECT_RELAY_IP=yes
+    restart: unless-stopped
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge

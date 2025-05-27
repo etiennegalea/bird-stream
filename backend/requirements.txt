@@ -16,3 +16,4 @@ pytz
 numpy==1.26.1
 requests
 pyyaml
+pydantic==2.4.2

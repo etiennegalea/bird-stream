@@ -1,6 +1,9 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Body, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from aiortc import RTCConfiguration, RTCIceServer, RTCPeerConnection, RTCSessionDescription
+from aiortc.contrib.media import MediaRelay
+from aiortc.rtcrtpsender import RTCRtpSender
 from datetime import datetime
 import asyncio
 import logging
@@ -8,9 +11,11 @@ import json
 import html
 
 from src.components.connection_manager import ConnectionManager
-from src.components.video_stream import VideoStream
+from src.components.video_stream import create_local_tracks, force_codec
 from src.components.chat_room import ChatRoom
 from src.components.weather import fetch_weather_periodically, WEATHER_DATA
+from src.models import ClientModel
+from src.utils import load_turn_credentials
 
 
 logging.basicConfig(
@@ -19,21 +24,39 @@ logging.basicConfig(
 )
 logger = logging.getLogger("backend | main")
 
-vs = VideoStream(0)
-videoManager = ConnectionManager()
+pcs_manager = ConnectionManager()
+relay = MediaRelay()
 chatroom = ChatRoom()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting up...")
-    asyncio.create_task(vs.video_stream())
+    global video
+
+    logger.info("Application is starting up...")
+    audio, video = create_local_tracks()
+    # audio, video = create_local_tracks("/app/media/birbs-of-paradise.mp4")
+
     asyncio.create_task(fetch_weather_periodically(cache_expiration=3600))
+    
+    # Increase port range for better connectivity
+    RTCRtpSender.TRANSPORT_POOL_SIZE = 1000
+    RTCRtpSender.TRANSPORT_PORT_MIN = 49152
+    RTCRtpSender.TRANSPORT_PORT_MAX = 65535
 
     yield
+    
+    # Shutdown: runs when the app is shutting down
+    await pcs_manager.clean_up()
+    logger.info("Application is shutting down...")
 
-    logger.info("Shutting down...")
+    pcs_manager.clean_up()
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title="LoaR Birb Stream",
+    version="v1",
+    lifespan=lifespan
+)
 
 # CORS Middleware
 app.add_middleware(
@@ -44,37 +67,105 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.websocket("/stream")
-async def websocket_endpoint(websocket: WebSocket):
-    await videoManager.connect(websocket)
-    logger.info(f"Active connections: {len(videoManager.active_connections)}")
+def print_pcs(pcs):
+    print(":: ALL PCS ::")
+    for key, value in pcs.items():
+        print(f"key: {key}, value: {value}")
 
-    try:
-        while True:
-            async with vs.lock:
-                frame_data = vs.global_frame_data
+@app.post("/webrtc/offer")
+async def offer(peer: ClientModel = Body(...)): 
 
-            if frame_data:
-                # add viewer number to frame data
-                frame_data['type'] = 'viewerCount'
-                frame_data['viewers'] = len(videoManager.active_connections)
-                # send
-                await websocket.send_json(frame_data)
+    user, password = load_turn_credentials()
 
-            # Send data at ~30 FPS to connected clients
-            await asyncio.sleep(1 / 30)
-    except WebSocketDisconnect:
-        await videoManager.disconnect(websocket)
+    config = RTCConfiguration([
+        # Add multiple STUN servers for better NAT traversal
+        RTCIceServer(urls=[
+            "stun:stun.l.google.com:19302" # Google STUN server fallback
+        ]),
+        # TURN server configuration with both IPv4 and IPv6 support
+        RTCIceServer(
+            urls=[
+                # # "turn:global.relay.metered.ca:80",
+                # # "turn:global.relay.metered.ca:80?transport=tcp",
+                # "turn:global.relay.metered.ca:80?transport=udp",
+                # # "turn:global.relay.metered.ca:443",
+                # # "turns:global.relay.metered.ca:443?transport=tcp",
+                # "turn:global.relay.metered.ca:443?transport=udp"
+                "turn:turn.lifeofarobin.com:3478?transport=udp",
+                "turns:turn.lifeofarobin.com:5349?transport=udp"
+            ],
+            username="user",
+            credential="supersecretpassword"
+            # username=user,
+            # credential=password
+        )
+    ])
+    
+    # Configure for both IPv4 and IPv6
+    config.iceTransportPolicy = "all"
+    config.bundlePolicy = "max-bundle"
+    config.rtcpMuxPolicy = "require"
+    # config.iceTransportPolicy = "relay"
 
-        # Notify remaining clients about updated viewer count
-        if frame_data:
-            frame_data['type'] = 'viewerCount'
-            frame_data['viewers'] = len(videoManager.active_connections)
-            await videoManager.broadcast(frame_data)
-    except Exception as e:
-        await videoManager.disconnect(websocket)
-        
-        logger.error(f"Error in WebSocket endpoint: {e}")
+    pc = RTCPeerConnection(config)
+
+    # store peer connection
+    pcs_manager.add_peer(peer.id, pc)
+
+    video_sender = pc.addTrack(relay.subscribe(video))
+    logger.info(f"Video sender created: {video_sender}")
+
+    @pc.on("track")
+    def on_track(track):
+        logger.info(f"Received track: {track.kind}")
+        if track.kind == "video":
+            logger.info("Received video track!!")
+
+    @pc.on("iceconnectionstatechange")
+    async def on_iceconnectionstatechange():
+        logger.info(f"ICE connection state changed to: {pc.iceConnectionState}")
+        if pc.iceConnectionState == "failed" or pc.iceConnectionState == "disconnected":
+            try:
+                logger.info(f"ICE Connection failed for peer {peer.id}, cleaning up")
+                await pcs_manager.remove_peer(peer.id, pc)
+            except Exception as e:
+                logger.error(f"Error (ICE) removing peer: {e}")
+
+    @pc.on("connectionstatechange")
+    async def on_connectionstatechange():
+        logger.info(f"Connection state changed to {pc.connectionState} for peer {peer.id}")
+        if pc.connectionState in ["closed", "failed", "disconnected"]:
+            try:
+                logger.info(f"Cleaning up connection for peer {peer.id}")
+                await pcs_manager.remove_peer(peer.id, pc)
+            except Exception as e:
+                logger.error(f"Error removing peer: {e}")
+
+    @pc.on("icecandidate")
+    def on_icecandidate(candidate):
+        logger.info(f"New ICE candidate: {candidate}")
+
+    # Set remote description only once
+    await pc.setRemoteDescription(RTCSessionDescription(sdp=peer.offer.sdp, type=peer.offer.type))
+    
+    force_codec(pc, video_sender)
+
+    # Create and set local description
+    answer = await pc.createAnswer()
+    await pc.setLocalDescription(answer)
+
+    return {
+        "sdp": pc.localDescription.sdp,
+        "type": pc.localDescription.type
+    }
+
+@app.get("/webrtc/getpeers")
+async def get_peers(verbose: bool = False):
+    return pcs_manager.get_peers(verbose=verbose)
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
 
 @app.websocket("/chat")
 async def chat_endpoint(websocket: WebSocket):
@@ -151,4 +242,14 @@ async def weather_endpoint():
     return {
         "data": WEATHER_DATA["data"],
         "last_updated": WEATHER_DATA["last_updated"]
+    }
+
+@app.get("/webrtc/config")
+async def get_webrtc_config():
+    """Return the current WebRTC port configuration"""
+    return {
+        "pool_size": RTCRtpSender.TRANSPORT_POOL_SIZE,
+        "port_min": RTCRtpSender.TRANSPORT_PORT_MIN,
+        "port_max": RTCRtpSender.TRANSPORT_PORT_MAX,
+        "port_range": RTCRtpSender.TRANSPORT_PORT_MAX - RTCRtpSender.TRANSPORT_PORT_MIN + 1
     }
