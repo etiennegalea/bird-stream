@@ -36,15 +36,15 @@ function CameraStream() {
                 "stun:stun.l.google.com:19302" // Google STUN server fallback
               ],
             },
-            // ...getTurnServers()
-            {
-              urls: [
-                "turn:turn.lifeofarobin.com:3478?transport=udp",
-                "turns:turn.lifeofarobin.com:5349?transport=udp"
-              ],
-              username: "user",
-              credential: "supersecretpassword"
-            }
+            ...getTurnServers()
+            // {
+            //   urls: [
+            //     "turn:turn.lifeofarobin.com:3478?transport=udp",
+            //     "turns:turn.lifeofarobin.com:5349?transport=udp"
+            //   ],
+            //   username: "user",
+            //   credential: "supersecretpassword"
+            // }
           ],
           // iceTransportPolicy: "all",
           // bundlePolicy: "max-bundle",
