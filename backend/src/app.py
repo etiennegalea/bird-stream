@@ -85,11 +85,11 @@ async def offer(peer: ClientModel = Body(...)):
         # TURN server configuration with both IPv4 and IPv6 support
         RTCIceServer(
             urls=[
-                "turn:global.relay.metered.ca:80",
-                "turn:global.relay.metered.ca:80?transport=tcp",
+                # "turn:global.relay.metered.ca:80",
+                # "turn:global.relay.metered.ca:80?transport=tcp",
                 "turn:global.relay.metered.ca:80?transport=udp",
-                "turn:global.relay.metered.ca:443",
-                "turns:global.relay.metered.ca:443?transport=tcp",
+                # "turn:global.relay.metered.ca:443",
+                # "turns:global.relay.metered.ca:443?transport=tcp",
                 "turn:global.relay.metered.ca:443?transport=udp"
                 # "turn:turn.lifeofarobin.com:3478?transport=udp",
                 # "turns:turn.lifeofarobin.com:5349?transport=udp"

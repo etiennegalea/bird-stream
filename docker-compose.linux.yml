@@ -25,8 +25,8 @@ services:
     devices:
       - "/dev/video0:/dev/video0"
     network_mode: host
-    environment:
-      - DEVELOPMENT_MODE=true
+    # environment:
+    #   - DEVELOPMENT_MODE=true
 
   # coturn:
   #   build: ./coturn
