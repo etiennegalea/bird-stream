@@ -4,7 +4,7 @@ import ChatRoom from './components/ChatRoom';
 import Weather from './components/Weather';
 import { getApiBaseUrl, getTurnServers } from './utils';
 import { LoadingDots, LoadingCircle, LoadingCircleDots } from './components/Loading';
-import VideoPlayer from "./VideoPlayer";
+
 
 function CameraStream() {
   const [isConnected, setIsConnected] = useState(false);
@@ -153,32 +153,6 @@ function CameraStream() {
     }
   };
 
-  const toggleFullScreen = () => {
-    const videoElement = videoRef.current;
-    
-    if (!videoElement) return;
-    
-    if (!document.fullscreenElement) {
-      // Enter fullscreen
-      if (videoElement.requestFullscreen) {
-        videoElement.requestFullscreen();
-      } else if (videoElement.webkitRequestFullscreen) { /* Safari */
-        videoElement.webkitRequestFullscreen();
-      } else if (videoElement.msRequestFullscreen) { /* IE11 */
-        videoElement.msRequestFullscreen();
-      }
-    } else {
-      // Exit fullscreen
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-      } else if (document.webkitExitFullscreen) { /* Safari */
-        document.webkitExitFullscreen();
-      } else if (document.msExitFullscreen) { /* IE11 */
-        document.msExitFullscreen();
-      }
-    }
-  };
-
   return (
     <div className="app-container">
       <div className="header">
@@ -188,7 +162,7 @@ function CameraStream() {
       
       <div className={`main-content ${!isChatVisible ? 'chat-hidden' : ''}`}>
         <div className="stream-section">
-          <div className="stream-viewport" onClick={toggleFullScreen}>
+          <div className="stream-viewport">
             {!isConnected && !error && <LoadingCircleDots />}
           {error ? (
             <div className="error-message">{error}</div>
@@ -203,11 +177,6 @@ function CameraStream() {
             style={{ width: '100%', height: '100%'}}>
             <track kind="captions" label="Captions" />
           </video>
-        )}
-        {isConnected && (
-          <div className="fullscreen-hint">
-            <span>Click to toggle fullscreen</span>
-          </div>
         )}
       </div>
           <div className="stream-info">
