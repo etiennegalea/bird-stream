@@ -35,7 +35,6 @@ body {
   align-items: stretch;
   position: relative;
   transition: all 0.3s ease;
-  min-height: 500px;
 }
 
 .main-content .stream-section {
@@ -53,10 +52,8 @@ body {
 .chat-section {
   position: relative;
   width: 350px;
-  height: 100%;
-  max-height: none;
-  opacity: 1;
   max-width: 350px;
+  opacity: 1;
   overflow: hidden;
   transition: opacity 0.5s ease, max-width 0.5s ease, margin 0.5s ease, padding 0.5s ease, border 0.5s ease;
   display: flex;
@@ -64,7 +61,7 @@ body {
   border-radius: 8px;
   border: 1px solid #ddd;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  align-self: stretch;
+  flex: 0 0 350px; /* Don't grow or shrink, maintain width */
 }
 
 .chat-section.chat-hidden {
@@ -251,7 +248,6 @@ body {
   .main-content {
     flex-direction: column;
     align-items: center;
-    min-height: auto;
   }
   
   .stream-section, .chat-section {
@@ -261,8 +257,7 @@ body {
 
   .chat-section {
     max-height: 325px;
-    height: auto;
-    align-self: center;
+    flex: 0 0 auto; /* Reset flex properties for mobile */
   }
   
   .chat-toggle-btn {
