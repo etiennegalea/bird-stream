@@ -54,6 +54,7 @@ body {
 .chat-section {
   position: relative;
   width: 350px;
+  height: 640px;
   max-width: 350px;
   opacity: 1;
   overflow: hidden;
@@ -63,8 +64,7 @@ body {
   border-radius: 8px;
   border: 1px solid #ddd;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  flex: 0 0 350px; /* Don't grow or shrink, maintain width */
-  height: 100%;
+  flex: 0 0 350px;
 }
 
 /* Add styles for the chat messages container */
@@ -240,7 +240,6 @@ body {
   }
 
   .chat-section {
-    height: 500px;
     min-height: 0;
     max-height: none;
     align-self: stretch;
@@ -267,8 +266,6 @@ body {
   }
 
   .chat-section {
-    max-height: 325px;
-    height: 325px;
     flex: 0 0 auto;
   }
   
