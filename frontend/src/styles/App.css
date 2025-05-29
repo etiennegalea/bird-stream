@@ -35,6 +35,7 @@ body {
   align-items: stretch;
   position: relative;
   transition: all 0.3s ease;
+  height: 100%;
 }
 
 .main-content .stream-section {
@@ -43,6 +44,7 @@ body {
   transition: max-width 0.5s ease;
   display: flex;
   flex-direction: column;
+  height: 100%;
 }
 
 .main-content.chat-hidden .stream-section {
@@ -62,6 +64,14 @@ body {
   border: 1px solid #ddd;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
   flex: 0 0 350px; /* Don't grow or shrink, maintain width */
+  height: 100%;
+}
+
+/* Add styles for the chat messages container */
+.chat-section > div {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .chat-section.chat-hidden {
@@ -248,6 +258,7 @@ body {
   .main-content {
     flex-direction: column;
     align-items: center;
+    height: auto;
   }
   
   .stream-section, .chat-section {
@@ -257,7 +268,8 @@ body {
 
   .chat-section {
     max-height: 325px;
-    flex: 0 0 auto; /* Reset flex properties for mobile */
+    height: 325px;
+    flex: 0 0 auto;
   }
   
   .chat-toggle-btn {
