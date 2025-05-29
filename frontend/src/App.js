@@ -11,9 +11,39 @@ function CameraStream() {
   const [error, setError] = useState(null);
   const [isChatVisible, setIsChatVisible] = useState(true);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
+  const [viewerCount, setViewerCount] = useState(0);
   const peerConnectionRef = useRef(null);
   const videoRef = useRef(null);
+  const peerCountWsRef = useRef(null);
   
+  useEffect(() => {
+    const setupPeerCountWs = () => {
+      const ws = new WebSocket(`wss://cam.lifeofarobin.com/peer-count`);
+      // const ws = new WebSocket(`ws://localhost:8000/peer-count`);
+      
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        setViewerCount(data.count);
+      };
+
+      // Try to reconnect after 5 seconds
+      ws.onclose = () => {
+        setTimeout(setupPeerCountWs, 5000);
+      };
+
+      peerCountWsRef.current = ws;
+    };
+
+    setupPeerCountWs();
+
+    // Cleanup WebSocket on component unmount
+    return () => {
+      if (peerCountWsRef.current) {
+        peerCountWsRef.current.close();
+      }
+    };
+  }, []);
+
   useEffect(() => {
     const cleanup = () => {
       if (peerConnectionRef.current) {
@@ -89,7 +119,8 @@ function CameraStream() {
         // const response = await fetch(`https://${process.env.REACT_APP_API_URL}:${process.env.REACT_APP_API_PORT}/webrtc/offer`, {
         // const response = await fetch(`http://localhost:8051/webrtc/offer`, {
         // const response = await fetch(`http://127.0.0.1:8000/webrtc/offer`, {
-        const response = await fetch(`${getApiBaseUrl()}/webrtc/offer`, {
+        const response = await fetch(`https://cam.lifeofarobin.com/webrtc/offer`, {
+        // const response = await fetch(`${getApiBaseUrl()}/webrtc/offer`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -174,8 +205,7 @@ function CameraStream() {
             autoPlay
             playsInline
             muted
-            className="stream-viewport"
-            style={{ width: '100%', height: '100%'}}>
+            className="stream-viewport">
             <track kind="captions" label="Captions" />
           </video>
         )}
@@ -183,7 +213,7 @@ function CameraStream() {
           <div className="stream-info">
             <div className="viewer-count">
               <img src="/viewers_icon.svg" alt="viewers" />
-              {/* <span>{viewerCount}</span> */}
+              <span>{viewerCount}</span>
             </div>
             <div className="weather-info">
               <Weather />

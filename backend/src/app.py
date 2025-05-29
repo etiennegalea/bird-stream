@@ -28,6 +28,8 @@ pcs_manager = ConnectionManager()
 relay = MediaRelay()
 chatroom = ChatRoom()
 
+# Add a new connection manager for peer count WebSocket connections
+peer_count_manager = ConnectionManager()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -163,6 +165,7 @@ async def offer(peer: ClientModel = Body(...)):
 async def get_peers(verbose: bool = False):
     return pcs_manager.get_peers(verbose=verbose)
 
+
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
@@ -253,3 +256,21 @@ async def get_webrtc_config():
         "port_max": RTCRtpSender.TRANSPORT_PORT_MAX,
         "port_range": RTCRtpSender.TRANSPORT_PORT_MAX - RTCRtpSender.TRANSPORT_PORT_MIN + 1
     }
+
+@app.websocket("/peer-count")
+async def peer_count_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    logger.info("New peer count WebSocket connection")
+    
+    try:
+        while True:
+            # Get current peer count
+            peer_count = len(pcs_manager.get_peers())
+            # Send the count to the client
+            await websocket.send_json({"count": peer_count})
+            # Wait for 5 seconds before sending the next update
+            await asyncio.sleep(5)
+    except WebSocketDisconnect:
+        logger.info("Peer count WebSocket disconnected")
+    except Exception as e:
+        logger.error(f"Error in peer count WebSocket: {e}")
