@@ -32,15 +32,18 @@ body {
   flex-direction: row;
   gap: 20px;
   justify-content: center;
-  align-items: flex-start;
+  align-items: stretch;
   position: relative;
   transition: all 0.3s ease;
+  min-height: 500px;
 }
 
 .main-content .stream-section {
   flex: 1;
   max-width: 800px;
   transition: max-width 0.5s ease;
+  display: flex;
+  flex-direction: column;
 }
 
 .main-content.chat-hidden .stream-section {
@@ -50,17 +53,18 @@ body {
 .chat-section {
   position: relative;
   width: 350px;
-  height: auto;
-  max-height: 500px; /* Set a specific max-height */
+  height: 100%;
+  max-height: none;
   opacity: 1;
   max-width: 350px;
   overflow: hidden;
-  transition: opacity 0.5s ease, max-width 0.5s ease, max-height 0.5s ease, margin 0.5s ease, padding 0.5s ease, border 0.5s ease;
+  transition: opacity 0.5s ease, max-width 0.5s ease, margin 0.5s ease, padding 0.5s ease, border 0.5s ease;
   display: flex;
   flex-direction: column;
   border-radius: 8px;
   border: 1px solid #ddd;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  align-self: stretch;
 }
 
 .chat-section.chat-hidden {
@@ -218,7 +222,7 @@ body {
   opacity: 0;
 }
 
-@media (min-width: 1200px) {
+@media (min-width: 400px) {
   .main-content {
     align-items: stretch;
   }
@@ -243,10 +247,11 @@ body {
 }
 
 
-@media (max-width: 900px) {
+@media (max-width: 840px) {
   .main-content {
     flex-direction: column;
     align-items: center;
+    min-height: auto;
   }
   
   .stream-section, .chat-section {
@@ -256,7 +261,8 @@ body {
 
   .chat-section {
     max-height: 325px;
-    align-self: stretch;
+    height: auto;
+    align-self: center;
   }
   
   .chat-toggle-btn {

@@ -170,6 +170,7 @@ function CameraStream() {
           // <VideoPlayer peerConnection={peerConnectionRef.current} />
           <video
             ref={videoRef}
+            controls
             autoPlay
             playsInline
             muted
