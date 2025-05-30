@@ -33,7 +33,7 @@ peer_count_manager = ConnectionManager()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global video
+    global audio, video
 
     logger.info("Application is starting up...")
     audio, video = create_local_tracks()
@@ -125,6 +125,8 @@ async def offer(peer: ClientModel = Body(...)):
         logger.info(f"Received track: {track.kind}")
         if track.kind == "video":
             logger.info("Received video track!!")
+        if track.kind == "audio":
+            logger.info("Received audio track!!")
 
     @pc.on("iceconnectionstatechange")
     async def on_iceconnectionstatechange():
@@ -153,6 +155,7 @@ async def offer(peer: ClientModel = Body(...)):
     # Set remote description only once
     await pc.setRemoteDescription(RTCSessionDescription(sdp=peer.offer.sdp, type=peer.offer.type))
     
+    force_codec(pc, audio_sender)
     force_codec(pc, video_sender)
 
     # Create and set local description
