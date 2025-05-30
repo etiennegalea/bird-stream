@@ -125,7 +125,7 @@ async def offer(peer: ClientModel = Body(...)):
         logger.info(f"Received track: {track.kind}")
         if track.kind == "video":
             logger.info("Received video track!!")
-        if track.kind == "audio":
+        elif track.kind == "audio":
             logger.info("Received audio track!!")
 
     @pc.on("iceconnectionstatechange")
