@@ -29,7 +29,7 @@ def create_local_tracks(play_from, decode):
         if relay is None:
             webcam = MediaPlayer("/dev/video0", format="v4l2", options=options)
             relay = MediaRelay()
-        return None, relay.subscribe(webcam.video)
+        return relay.subscribe(webcam.audio), relay.subscribe(webcam.video)
 
 
 def force_codec(pc, sender, forced_codec):
