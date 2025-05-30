@@ -115,10 +115,14 @@ async def offer(peer: ClientModel = Body(...)):
     pcs_manager.add_peer(peer.id, pc)
 
     # Add both audio and video tracks
-    audio_sender = pc.addTrack(relay.subscribe(audio))
+    if audio:
+        audio_sender = pc.addTrack(relay.subscribe(audio))
+        logger.info(f"Audio sender created: {audio_sender}")
+        force_codec(pc, audio_sender, "audio/opus")  # Force Opus codec for audio
+
     video_sender = pc.addTrack(relay.subscribe(video))
-    logger.info(f"Audio sender created: {audio_sender}")
     logger.info(f"Video sender created: {video_sender}")
+    force_codec(pc, video_sender, "video/H264")  # Force H264 codec for video
 
     @pc.on("track")
     def on_track(track):
@@ -155,9 +159,6 @@ async def offer(peer: ClientModel = Body(...)):
     # Set remote description only once
     await pc.setRemoteDescription(RTCSessionDescription(sdp=peer.offer.sdp, type=peer.offer.type))
     
-    force_codec(pc, audio_sender)
-    force_codec(pc, video_sender)
-
     # Create and set local description
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)

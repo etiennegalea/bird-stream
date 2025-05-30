@@ -77,10 +77,26 @@ def create_local_tracks(play_from=False, decode=True):
         }
         logger.info(f"VIDEO STREAM options: {options}")
         if sys.platform == 'darwin':
-            webcam = MediaPlayer("default:none", format="avfoundation", options=options)
+            # On macOS, use avfoundation with both audio and video
+            webcam = MediaPlayer("default:none", format="avfoundation", options={
+                **options,
+                "audio": "default",
+                "video": "default"
+            })
         else:
-            webcam = MediaPlayer("/dev/video0", format="v4l2", options=options)
-        return None, webcam.video
+            # On Linux, use v4l2 for video and alsa for audio
+            webcam = MediaPlayer(
+                "/dev/video0",
+                format="v4l2",
+                options={
+                    **options,
+                    "audio": "hw:0,0",  # Use first ALSA device
+                    "audio_format": "s16le",  # 16-bit PCM
+                    "audio_rate": "44100",    # 44.1kHz sample rate
+                    "audio_channels": "2"     # Stereo
+                }
+            )
+        return webcam.audio, webcam.video  # Return both audio and video tracks
 
 def force_codec(pc, sender, forced_codec="video/H264"):
     kind = forced_codec.split("/")[0]

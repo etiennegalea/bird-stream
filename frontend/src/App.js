@@ -108,7 +108,7 @@ function CameraStream() {
         // Create offer
         const offer = await pc.createOffer({
           offerToReceiveVideo: true,
-          offerToReceiveAudio: false,
+          offerToReceiveAudio: true
         });
         await pc.setLocalDescription(offer);
 
