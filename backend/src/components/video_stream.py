@@ -77,27 +77,31 @@ def create_local_tracks(play_from=False, decode=True, enable_audio=False):
             "video_bitrate": "2500k",  # Higher bitrate for better quality
             "video_quality": "high"    # Request high quality from the camera
         }
-        logger.info(f"VIDEO STREAM options: {options}")
-        if sys.platform == 'darwin':
-            # On macOS, use avfoundation with both audio and video
-            webcam = MediaPlayer("default:none", format="avfoundation", options={
-                **options,
-                "audio": "default" if enable_audio else None,
-                "video": "default"
-            })
-        else:
-            # On Linux, use v4l2 for video and alsa for audio
-            webcam = MediaPlayer(
-                "/dev/video0",
-                format="v4l2",
-                options={
-                    **options,
-                    "audio": "hw:0,0" if enable_audio else None,  # Use first ALSA device
+
+        # Add audio options only if enabled
+        if enable_audio:
+            if sys.platform == 'darwin':
+                options.update({
+                    "audio": "default",
+                    "video": "default"
+                })
+            else:
+                options.update({
+                    "audio": "hw:0,0",  # Use first ALSA device
                     "audio_format": "s16le",  # 16-bit PCM
                     "audio_rate": "44100",    # 44.1kHz sample rate
                     "audio_channels": "2"     # Stereo
-                }
-            )
+                })
+
+        logger.info(f"VIDEO STREAM options: {options}")
+        
+        if sys.platform == 'darwin':
+            # On macOS, use avfoundation
+            webcam = MediaPlayer("default:none", format="avfoundation", options=options)
+        else:
+            # On Linux, use v4l2
+            webcam = MediaPlayer("/dev/video0", format="v4l2", options=options)
+
         return (webcam.audio if enable_audio else None), webcam.video  # Return audio only if enabled
 
 def force_codec(pc, sender, forced_codec="video/H264"):
