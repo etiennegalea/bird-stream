@@ -12,10 +12,46 @@ function CameraStream() {
   const [isChatVisible, setIsChatVisible] = useState(true);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
   const [viewerCount, setViewerCount] = useState(0);
+  const [fps, setFps] = useState(0);
   const peerConnectionRef = useRef(null);
   const videoRef = useRef(null);
   const peerCountWsRef = useRef(null);
+  const frameCountRef = useRef(0);
+  const lastFpsUpdateRef = useRef(Date.now());
   
+  // FPS calculation effect
+  useEffect(() => {
+    if (!videoRef.current) return;
+
+    const updateFps = () => {
+      const now = Date.now();
+      const elapsed = now - lastFpsUpdateRef.current;
+      
+      if (elapsed >= 1000) { // Update every second
+        const currentFps = Math.round((frameCountRef.current * 1000) / elapsed);
+        setFps(currentFps);
+        frameCountRef.current = 0;
+        lastFpsUpdateRef.current = now;
+      }
+    };
+
+    const handleVideoFrame = () => {
+      frameCountRef.current++;
+      requestAnimationFrame(updateFps);
+    };
+
+    const video = videoRef.current;
+    video.addEventListener('play', () => {
+      lastFpsUpdateRef.current = Date.now();
+      frameCountRef.current = 0;
+      video.requestVideoFrameCallback(handleVideoFrame);
+    });
+
+    return () => {
+      video.removeEventListener('play', handleVideoFrame);
+    };
+  }, [isConnected]); // Re-run when connection status changes
+
   useEffect(() => {
     const setupPeerCountWs = () => {
       const ws = new WebSocket(`wss://cam.lifeofarobin.com/peer-count`);
@@ -221,10 +257,10 @@ function CameraStream() {
               {isConnected ? '🟢' : '🔴'}
             </div>
 
-            {/* <div className="info-container">
+            <div className="info-container">
               <span className="label">FPS</span>
               <span className="value">{fps}</span>
-            </div> */}
+            </div>
           </div>
         </div>
         

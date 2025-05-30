@@ -71,11 +71,11 @@ def create_local_tracks(play_from=False, decode=True, enable_audio=False):
         return player.audio if enable_audio else None, player.video
     else:
         options = {
-            "framerate": "30",
-            "video_size": "1280x720",  # 720p HD
-            "v4l2_format": "yuv420p",  # Use a more compatible format
-            "video_bitrate": "2500k",  # Higher bitrate for better quality
-            "video_quality": "high"    # Request high quality from the camera
+            "framerate": "24",          # Reduced from 30 to 24 fps for better performance
+            "video_size": "854x480",    # 480p - a good balance between quality and performance
+            "v4l2_format": "yuv420p",   # Use a more compatible format
+            "video_bitrate": "1000k",   # Reduced bitrate for smoother streaming
+            "video_quality": "medium"   # Changed from high to medium for better performance
         }
 
         # Add audio options only if enabled
