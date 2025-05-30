@@ -54,7 +54,7 @@ class VideoTrack(VideoStreamTrack):
         video_frame = VideoFrame.from_ndarray(frame, format="rgb24")
         video_frame.pts = video_frame.time = 0
 
-        logger.info(f"video_frame: {video_frame}")
+        # logger.info(f"video_frame: {video_frame}")
 
         return video_frame
 

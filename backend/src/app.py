@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI):
     global audio, video
 
     logger.info("Application is starting up...")
-    audio, video = create_local_tracks(enable_audio=False)  # Disable audio by default
+    audio, video = create_local_tracks(enable_audio=False)
     # audio, video = create_local_tracks("/app/media/birbs-of-paradise.mp4")
 
     asyncio.create_task(fetch_weather_periodically(cache_expiration=3600))
