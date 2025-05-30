@@ -249,17 +249,17 @@ function CameraStream() {
             <div className="viewer-count">
               <img src="/viewers_icon.svg" alt="viewers" />
               <span>{viewerCount}</span>
+              {/* fps */}
+              <div className="info-container">
+                <span className="label">FPS</span>
+                <span className="value">{fps}</span>
+              </div>
             </div>
             <div className="weather-info">
               <Weather />
             </div>
             <div className="connection-status">
               {isConnected ? '🟢' : '🔴'}
-            </div>
-
-            <div className="info-container">
-              <span className="label">FPS</span>
-              <span className="value">{fps}</span>
             </div>
           </div>
         </div>

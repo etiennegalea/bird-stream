@@ -71,12 +71,13 @@ def create_local_tracks(play_from=False, decode=True, enable_audio=False):
         return player.audio if enable_audio else None, player.video
     else:
         options = {
-            "framerate": "24",          # Reduced from 30 to 24 fps for better performance
-            "video_size": "854x480",    # 480p - a good balance between quality and performance
-            "v4l2_format": "yuv420p",   # Use a more compatible format
-            "video_bitrate": "1000k",   # Reduced bitrate for smoother streaming
-            "video_quality": "medium"   # Changed from high to medium for better performance
+            "framerate": "30",              # 30fps is smoother; 24fps can cause motion blur
+            "video_size": "640x360",        # Try 360p first — less data to process, still decent quality
+            "v4l2_format": "mjpeg",         # Use MJPEG for webcams (better performance and compatibility)
+            "video_bitrate": "1200k",       # Slightly higher bitrate for clarity
+            "video_quality": "medium"       # Keep this or remove if irrelevant to your encoder
         }
+
 
         # Add audio options only if enabled
         if enable_audio:
