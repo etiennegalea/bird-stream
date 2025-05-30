@@ -204,7 +204,6 @@ function CameraStream() {
             controls
             autoPlay
             playsInline
-            muted
             className="stream-viewport">
             <track kind="captions" label="Captions" />
           </video>
