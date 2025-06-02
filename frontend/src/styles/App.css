@@ -265,6 +265,7 @@ body {
 
   .chat-section {
     flex: 0 0 auto;
+    height: 500px;
   }
   
   .chat-toggle-btn {
