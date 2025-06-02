@@ -16,41 +16,45 @@ function CameraStream() {
   const peerConnectionRef = useRef(null);
   const videoRef = useRef(null);
   const peerCountWsRef = useRef(null);
-  const frameCountRef = useRef(0);
-  const lastFpsUpdateRef = useRef(Date.now());
+  const statsIntervalRef = useRef(null);
   
-  // FPS calculation effect
+  // Remove the manual FPS calculation effect and replace with WebRTC stats
   useEffect(() => {
-    if (!videoRef.current) return;
+    if (!peerConnectionRef.current) return;
 
-    const updateFps = () => {
-      const now = Date.now();
-      const elapsed = now - lastFpsUpdateRef.current;
-      
-      if (elapsed >= 1000) { // Update every second
-        const currentFps = Math.round((frameCountRef.current * 1000) / elapsed);
-        setFps(currentFps);
-        frameCountRef.current = 0;
-        lastFpsUpdateRef.current = now;
+    const updateStats = async () => {
+      try {
+        const stats = await peerConnectionRef.current.getStats();
+        stats.forEach(report => {
+          if (report.type === 'inbound-rtp' && report.kind === 'video') {
+            const framesReceived = report.framesReceived;
+            const timestamp = report.timestamp;
+            
+            if (statsIntervalRef.current?.lastFramesReceived !== undefined) {
+              const framesDelta = framesReceived - statsIntervalRef.current.lastFramesReceived;
+              const timeDelta = timestamp - statsIntervalRef.current.lastTimestamp;
+              const currentFps = Math.round((framesDelta / timeDelta) * 1000);
+              setFps(currentFps);
+            }
+            
+            statsIntervalRef.current = {
+              lastFramesReceived: framesReceived,
+              lastTimestamp: timestamp
+            };
+          }
+        });
+      } catch (err) {
+        console.error('Error getting WebRTC stats:', err);
       }
     };
 
-    const handleVideoFrame = () => {
-      frameCountRef.current++;
-      requestAnimationFrame(updateFps);
-    };
-
-    const video = videoRef.current;
-    video.addEventListener('play', () => {
-      lastFpsUpdateRef.current = Date.now();
-      frameCountRef.current = 0;
-      video.requestVideoFrameCallback(handleVideoFrame);
-    });
-
+    // Update stats every second
+    const intervalId = setInterval(updateStats, 1000);
+    
     return () => {
-      video.removeEventListener('play', handleVideoFrame);
+      clearInterval(intervalId);
     };
-  }, [isConnected]); // Re-run when connection status changes
+  }, [isConnected]);
 
   useEffect(() => {
     const setupPeerCountWs = () => {
