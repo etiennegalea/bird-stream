@@ -54,7 +54,6 @@ body {
 .chat-section {
   position: relative;
   width: 350px;
-  height: 640px;
   max-width: 350px;
   opacity: 1;
   overflow: hidden;
@@ -90,7 +89,6 @@ body {
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   position: relative;
   cursor: pointer;
-  min-height: 450px; /* Add minimum height to ensure loading has space */
 }
 
 .stream-viewport:hover .fullscreen-hint {
