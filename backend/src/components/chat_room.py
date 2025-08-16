@@ -31,7 +31,7 @@ class ChatRoom:
 
     async def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
-            self.active_connections.remove(websocket)
+            await self.active_connections.remove(websocket)
             logger.info(f"Chat connection removed. Total chat users: {len(self.active_connections)}")
 
     async def broadcast_message(self, message: Dict[str, Any]):

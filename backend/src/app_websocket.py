@@ -127,25 +127,39 @@ async def websocket_endpoint(websocket: WebSocket):
 
     try:
         while True:
-            async with vs.lock:
-                frame_data = vs.global_frame_data
+            # Only process if there are active connections
+            if len(manager.active_connections) > 0:
+                async with vs.lock:
+                    frame_data = vs.global_frame_data
 
-            if frame_data:
-                # add viewer number to frame data
-                frame_data['type'] = 'viewerCount'
-                frame_data['viewers'] = len(manager.active_connections)
-                # send
-                await websocket.send_json(frame_data)
+                if frame_data:
+                    # Create a copy to avoid modifying the original
+                    frame_data_copy = frame_data.copy()
+                    frame_data_copy['type'] = 'viewerCount'
+                    frame_data_copy['viewers'] = len(manager.active_connections)
+                    
+                    # Send to current client
+                    await websocket.send_json(frame_data_copy)
 
             # Send data at ~30 FPS to connected clients
             await asyncio.sleep(1 / 30)
     except WebSocketDisconnect:
         await manager.disconnect(websocket)
+        logger.info(f"WebSocket disconnected. Active connections: {len(manager.active_connections)}")
 
         # Notify remaining clients about updated viewer count
-        if frame_data:
-            frame_data['type'] = 'viewerCount'
-            frame_data['viewers'] = len(manager.active_connections)
-            await manager.broadcast(frame_data)
+        try:
+            async with vs.lock:
+                current_frame_data = vs.global_frame_data
+            
+            if current_frame_data:
+                viewer_update = {
+                    'type': 'viewerCount',
+                    'viewers': len(manager.active_connections)
+                }
+                await manager.broadcast(viewer_update)
+        except Exception as e:
+            logger.error(f"Error broadcasting viewer count update: {e}")
     except Exception as e:
         logger.error(f"Error in WebSocket endpoint: {e}")
+        await manager.disconnect(websocket)
