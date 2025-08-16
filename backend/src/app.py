@@ -267,13 +267,24 @@ async def peer_count_endpoint(websocket: WebSocket):
     
     try:
         while True:
-            # Get current peer count
-            peer_count = len(pcs_manager.get_peers())
-            # Send the count to the client
-            await websocket.send_json({"count": peer_count})
-            # Wait for 5 seconds before sending the next update
-            await asyncio.sleep(5)
+            # Check if connection is still open before sending
+            if websocket.client_state.value == 1:  # WebSocketState.CONNECTED
+                # Get current peer count
+                peer_count = len(pcs_manager.get_peers())
+                # Send the count to the client
+                await websocket.send_json({"count": peer_count})
+                # Wait for 5 seconds before sending the next update
+                await asyncio.sleep(5)
+            else:
+                # Connection is closed, break out of loop
+                break
     except WebSocketDisconnect:
         logger.info("Peer count WebSocket disconnected")
+        # WebSocket is already closed by the client, no need to close it again
     except Exception as e:
         logger.error(f"Error in peer count WebSocket: {e}")
+        # Only close the WebSocket if there was an unexpected error
+        try:
+            await websocket.close()
+        except:
+            pass  # WebSocket might already be closed
