@@ -75,9 +75,11 @@ def create_local_tracks(play_from=False, decode=True, enable_audio=False):
             "video_size": "640x360",        # Try 360p first — less data to process, still decent quality
             "v4l2_format": "mjpeg",         # Use MJPEG for webcams (better performance and compatibility)
             "video_bitrate": "1200k",       # Slightly higher bitrate for clarity
-            "video_quality": "medium"       # Keep this or remove if irrelevant to your encoder
+            "video_quality": "medium",      # Keep this or remove if irrelevant to your encoder
+            "loglevel": "error",            # Only show errors, suppress info/warning logs
+            "hide_banner": "1",             # Hide FFmpeg banner and version info
+            "stats_period": "0"             # Disable periodic stats output
         }
-
 
         # Add audio options only if enabled
         if enable_audio:
