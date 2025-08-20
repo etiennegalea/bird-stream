@@ -144,6 +144,7 @@ function CameraStream() {
               break;
           }
         };
+        
 
         // Create offer
         const offer = await pc.createOffer({
