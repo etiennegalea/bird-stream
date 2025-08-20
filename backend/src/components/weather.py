@@ -20,7 +20,7 @@ WEATHER_DATA = {"data": None, "last_updated": 0}
 
 
 async def get_weather(cache_expiration):
-    """Get weather data for Rotterdam"""
+    """Get weather data for the server's current location"""
     current_time = datetime.now()
 
     if (WEATHER_DATA["data"] is not None and
@@ -28,6 +28,7 @@ async def get_weather(cache_expiration):
         current_time - WEATHER_DATA["last_updated"] < timedelta(seconds=cache_expiration)):
     
         logger.info("Using cached weather data")
+        return WEATHER_DATA["data"]
     
     else:    
         logger.info("Fetching fresh weather data")
@@ -37,28 +38,48 @@ async def get_weather(cache_expiration):
             raise HTTPException(status_code=500, detail="Weather API not configured")
     
         try:
-            # Make request to OpenWeatherMap API
-            response = requests.get(
+            # Make request to OpenWeatherMap API using IP-based location detection
+            response = await requests.get(
                 "https://api.openweathermap.org/data/2.5/weather",
                 params={
-                    "q": "Rotterdam, nl",
                     "units": "metric",
                     "appid": WEATHER_API_KEY
                 }
             )
             
-            # Check if the request was successful
-            response.raise_for_status()
-            
-            # Parse the JSON response
-            weather_data = response.json()
-            
-            # Update the cache
-            WEATHER_DATA["data"] = weather_data
-            WEATHER_DATA["last_updated"] = current_time
+            if response.status_code == 200:
+                weather_data = response.json()
+                
+                # Extract location information from the response
+                location_info = {
+                    "city": weather_data.get("name", "Unknown"),
+                    "country": weather_data.get("sys", {}).get("country", "Unknown"),
+                    "coordinates": {
+                        "lat": weather_data.get("coord", {}).get("lat"),
+                        "lon": weather_data.get("coord", {}).get("lon")
+                    }
+                }
+                
+                # Add location info to the weather data
+                weather_data["location"] = location_info
+                
+                # Update the cache
+                WEATHER_DATA["data"] = weather_data
+                WEATHER_DATA["last_updated"] = current_time
+                
+                logger.info(f"Weather data fetched for {location_info['city']}, {location_info['country']}")
+                return weather_data
+            else:
+                logger.error(f"Weather API error: {response.status_code}")
+                return None
         
         except requests.exceptions.RequestException as e:
             raise HTTPException(status_code=503, detail=f"Error fetching weather data: {str(e)}")
+
+
+def get_cached_weather():
+    """Get the currently cached weather data without making API calls"""
+    return WEATHER_DATA["data"]
 
 
 async def fetch_weather_periodically(cache_expiration=3600):
@@ -72,8 +93,3 @@ async def fetch_weather_periodically(cache_expiration=3600):
         
         # Wait for 1 hour before refreshing again
         await asyncio.sleep(cache_expiration)
-
-        return {
-            "data": WEATHER_DATA["data"],
-            "last_updated": WEATHER_DATA["last_updated"]
-        }
