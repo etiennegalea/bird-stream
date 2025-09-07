@@ -176,7 +176,7 @@ async def health_check():
 @app.websocket("/chat")
 async def chat_endpoint(websocket: WebSocket):
     # Extract username from query parameters
-    username = html.escape(websocket.query_params.get("username", "Anonymous"))[:20]
+    username = websocket.query_params.get("username")[:20] if websocket.query_params.get("username") else "anon"
     
     await chatroom.connect(websocket)
     logger.info(f"User {username} connected to chat. Total chat users: {len(chatroom.active_connections)}")
@@ -204,7 +204,7 @@ async def chat_endpoint(websocket: WebSocket):
                 
                 # Sanitize and limit message length
                 msg_username = message_data["username"][:20]
-                text = html.escape(message_data["text"])[:500]
+                text = message_data["text"][:500]
                 
                 # Verify username matches the connected user
                 if msg_username != username:
@@ -267,13 +267,23 @@ async def peer_count_endpoint(websocket: WebSocket):
     
     try:
         while True:
-            # Get current peer count
-            peer_count = len(pcs_manager.get_peers())
-            # Send the count to the client
-            await websocket.send_json({"count": peer_count})
-            # Wait for 5 seconds before sending the next update
-            await asyncio.sleep(5)
+            # Check if connection is still open before sending
+            if websocket.client_state.value == 1:  # WebSocketState.CONNECTED
+                # Get current peer count
+                peer_count = len(pcs_manager.get_peers())
+                # Send the count to the client
+                await websocket.send_json({"count": peer_count})
+                # Wait for 2 seconds before sending the next update
+                await asyncio.sleep(2)
+            else:
+                # Connection is closed, break out of loop
+                break
     except WebSocketDisconnect:
         logger.info("Peer count WebSocket disconnected")
     except Exception as e:
         logger.error(f"Error in peer count WebSocket: {e}")
+        # Only close the WebSocket if there was an unexpected error
+        try:
+            await websocket.close()
+        except:
+            pass  # WebSocket might already be closed
