@@ -3,7 +3,7 @@ import '../styles/Weather.css';
 import { getApiBaseUrl } from '../utils';
 import { LoadingDots, LoadingCircle, LoadingCircleDots} from './Loading';
 
-function Weather() {
+function Weather({ onCityChange }) {
   const [weatherData, setWeatherData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -14,13 +14,17 @@ function Weather() {
     try {
       setLoading(true);
 
-      const response = await fetch(`${getApiBaseUrl()}/weather`);
+      const response = await fetch("https://cam.lifeofarobin.com/weather");
       
       if (!response.ok) {
         throw new Error('Weather data not available');
       }
       
       const data = await response.json();
+
+      // Update the city name
+      if (data.data.name) onCityChange(data.data.name);
+
       setWeatherData(data);
       setLoading(false);
     } catch (err) {

@@ -41,7 +41,6 @@ async def get_weather(cache_expiration):
             response = requests.get(
                 "https://api.openweathermap.org/data/2.5/weather",
                 params={
-                    "q": "Rotterdam, nl",
                     "units": "metric",
                     "appid": WEATHER_API_KEY
                 }
@@ -56,6 +55,7 @@ async def get_weather(cache_expiration):
             # Update the cache
             WEATHER_DATA["data"] = weather_data
             WEATHER_DATA["last_updated"] = current_time
+            WEATHER_DATA["city"] = weather_data["name"]
         
         except requests.exceptions.RequestException as e:
             raise HTTPException(status_code=503, detail=f"Error fetching weather data: {str(e)}")
@@ -72,8 +72,3 @@ async def fetch_weather_periodically(cache_expiration=3600):
         
         # Wait for 1 hour before refreshing again
         await asyncio.sleep(cache_expiration)
-
-        return {
-            "data": WEATHER_DATA["data"],
-            "last_updated": WEATHER_DATA["last_updated"]
-        }
