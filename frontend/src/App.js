@@ -17,6 +17,7 @@ function CameraStream() {
   const videoRef = useRef(null);
   const peerCountWsRef = useRef(null);
   const statsIntervalRef = useRef(null);
+  const [city, setCity] = useState("...");
   
   // Remove the manual FPS calculation effect and replace with WebRTC stats
   useEffect(() => {
@@ -229,7 +230,7 @@ function CameraStream() {
     <div className="app-container">
       <div className="header">
         <h1>BIRB STREAM</h1>
-        <p>Bringing you beautiful Rotterdam birbs live!</p>
+        <p>Bringing you beautiful <b>{city}</b> birbs live!</p>
       </div>
       
       <div className={`main-content ${!isChatVisible ? 'chat-hidden' : ''}`}>
@@ -261,7 +262,7 @@ function CameraStream() {
               </div>
             </div>
             <div className="weather-info">
-              <Weather />
+              <Weather onCityChange={setCity}/>
             </div>
             <div className="connection-status">
               {isConnected ? '🟢' : '🔴'}

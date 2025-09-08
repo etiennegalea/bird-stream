@@ -47,31 +47,16 @@ async def get_weather(cache_expiration):
                 }
             )
             
-            if response.status_code == 200:
-                weather_data = response.json()
-                
-                # Extract location information from the response
-                location_info = {
-                    "city": weather_data.get("name", "Unknown"),
-                    "country": weather_data.get("sys", {}).get("country", "Unknown"),
-                    "coordinates": {
-                        "lat": weather_data.get("coord", {}).get("lat"),
-                        "lon": weather_data.get("coord", {}).get("lon")
-                    }
-                }
-                
-                # Add location info to the weather data
-                weather_data["location"] = location_info
-                
-                # Update the cache
-                WEATHER_DATA["data"] = weather_data
-                WEATHER_DATA["last_updated"] = current_time
-                
-                logger.info(f"Weather data fetched for {location_info['city']}, {location_info['country']}")
-                return weather_data
-            else:
-                logger.error(f"Weather API error: {response.status_code}")
-                return None
+            # Check if the request was successful
+            response.raise_for_status()
+            
+            # Parse the JSON response
+            weather_data = response.json()
+            
+            # Update the cache
+            WEATHER_DATA["data"] = weather_data
+            WEATHER_DATA["last_updated"] = current_time
+            WEATHER_DATA["city"] = weather_data["name"]
         
         except requests.exceptions.RequestException as e:
             raise HTTPException(status_code=503, detail=f"Error fetching weather data: {str(e)}")
