@@ -71,13 +71,14 @@ def create_local_tracks(play_from=False, decode=True, enable_audio=False):
         return player.audio if enable_audio else None, player.video
     else:
         options = {
-            "framerate": "30",              # 30fps is smoother; 24fps can cause motion blur
-            "video_size": "640x360",        # Try 360p first — less data to process, still decent quality
-            "v4l2_format": "mjpeg",         # Use MJPEG for webcams (better performance and compatibility)
-            "video_bitrate": "1200k",       # Slightly higher bitrate for clarity
-            "video_quality": "medium"       # Keep this or remove if irrelevant to your encoder
+            "framerate": "30",
+            "video_size": "640x480",
+            "v4l2_format": "mjpeg",
+            "video_bitrate": "1200k",
+            "video_quality": "medium"
         }
 
+        device = "0" if sys.platform == 'darwin' else "/dev/video0"
 
         # Add audio options only if enabled
         if enable_audio:
@@ -86,6 +87,7 @@ def create_local_tracks(play_from=False, decode=True, enable_audio=False):
                     "audio": "default",
                     "video": "default"
                 })
+                device = "0:0"
             else:
                 options.update({
                     "audio": "hw:0,0",  # Use first ALSA device
@@ -98,10 +100,10 @@ def create_local_tracks(play_from=False, decode=True, enable_audio=False):
         
         if sys.platform == 'darwin':
             # On macOS, use avfoundation
-            webcam = MediaPlayer("default:none", format="avfoundation", options=options)
+            webcam = MediaPlayer("0:", format="avfoundation", options=options)
         else:
             # On Linux, use v4l2
-            webcam = MediaPlayer("/dev/video0", format="v4l2", options=options)
+            webcam = MediaPlayer(device, format="v4l2", options=options)
 
         return (webcam.audio if enable_audio else None), webcam.video  # Return audio only if enabled
 
