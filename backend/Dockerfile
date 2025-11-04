@@ -1,5 +1,4 @@
-# Use the official Python image
-FROM python:3.11-slim
+FROM python:3.11-slim-bullseye
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -12,8 +11,7 @@ ENV WEBRTC_PORT_MAX=49251
 WORKDIR /app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
-    curl\
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     gcc \
     g++ \
@@ -28,17 +26,17 @@ RUN apt-get update && apt-get install -y \
     python3-opencv \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the application files
+
+# Copy only dependency file first (better caching)
+COPY requirements.txt .
+
+# Upgrade pip and install Python deps
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy only the application source (this invalidates cache last)
 COPY ./src /app
-COPY requirements.txt /tmp/
-
-# Upgrade pip
-RUN pip install --upgrade pip
-
-# Install requirements from tmp dir
-RUN pip install --requirement /tmp/requirements.txt
-
-COPY . /tmp/
+COPY server.py /app
 
 # Expose the API port
 EXPOSE 8051
