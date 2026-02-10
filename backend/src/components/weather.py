@@ -1,5 +1,5 @@
 import os
-import requests
+import aiohttp
 from fastapi import HTTPException
 import asyncio
 from src.utils import load_api_key
@@ -39,21 +39,21 @@ async def get_weather(lat, lon, cache_expiration):
     
         try:
             # Make request to OpenWeatherMap API using IP-based location detection
-            response = await requests.get(
-                "https://api.openweathermap.org/data/2.5/weather",
-                params={
-                    "lat": lat,
-                    "lon": lon,
-                    "units": "metric",
-                    "appid": WEATHER_API_KEY
-                }
-            )
-            
-            # Check if the request was successful
-            response.raise_for_status()
-            
-            # Parse the JSON response
-            weather_data = response.json()
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    "https://api.openweathermap.org/data/2.5/weather",
+                    params={
+                        "lat": lat,
+                        "lon": lon,
+                        "units": "metric",
+                        "appid": WEATHER_API_KEY
+                    }
+                ) as response:
+                    # Check if the request was successful
+                    response.raise_for_status()
+                    
+                    # Parse the JSON response
+                    weather_data = await response.json()
 
             if "gemeente" in weather_data["name"].lower():
                 weather_data["name"] = weather_data["name"].replace("gemeente ", "")
@@ -64,7 +64,7 @@ async def get_weather(lat, lon, cache_expiration):
             WEATHER_DATA["last_updated"] = current_time
             WEATHER_DATA["city"] = weather_data["name"]
         
-        except requests.exceptions.RequestException as e:
+        except aiohttp.ClientError as e:
             raise HTTPException(status_code=503, detail=f"Error fetching weather data: {str(e)}")
 
 
@@ -77,8 +77,15 @@ async def fetch_weather_periodically(cache_expiration=3600):
     """Background task to refresh weather data periodically"""
 
     # Get current location
-    ip_info = requests.get("http://ip-api.com/json/").json()
-    lat, lon = ip_info["lat"], ip_info["lon"]
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get("http://ip-api.com/json/") as resp:
+                ip_info = await resp.json()
+                lat, lon = ip_info["lat"], ip_info["lon"]
+    except Exception as e:
+        logger.error(f"Failed to fetch ID info: {e}")
+        # Default to Rotterdam if IP location fails
+        lat, lon = 51.9225, 4.47917
 
     while True:
         try:

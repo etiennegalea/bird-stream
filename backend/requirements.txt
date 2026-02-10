@@ -13,7 +13,7 @@ websockets==12.0
 
 # Other utilities
 pytz
-numpy==1.26.1
+numpy
 requests
 pyyaml
 pydantic==2.4.2

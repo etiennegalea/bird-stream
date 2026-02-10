@@ -1,6 +1,7 @@
 from datetime import datetime
 import logging
 import sys
+import asyncio
 from aiortc import MediaStreamTrack, VideoStreamTrack
 from av import VideoFrame
 import cv2
@@ -22,13 +23,21 @@ class VideoTrack(VideoStreamTrack):
 
     def __init__(self):
         super().__init__()
-        # self.camera = cv2.VideoCapture(0)
-        self.camera = cv2.VideoCapture("/dev/video0")
+        # Use index 0 for default camera on Windows/Mac, or specific path on Linux if needed
+        # On Windows, 0 is usually the default webcam.
+        if sys.platform == 'win32':
+             self.camera = cv2.VideoCapture(0)
+        else:
+             self.camera = cv2.VideoCapture("/dev/video0")
+             
         self.timezone = pytz.timezone('Europe/Amsterdam')
         logger.info("init video stream capture ...")
 
     async def recv(self):
-        success, frame = self.camera.read()
+        # Run blocking camera read in executor
+        loop = asyncio.get_event_loop()
+        success, frame = await loop.run_in_executor(None, self.camera.read)
+        
         if not success:
             logger.error("Failed to capture frame from camera")
             return None
@@ -102,6 +111,11 @@ def create_local_tracks(play_from=False, decode=True, enable_audio=False):
         if sys.platform == 'darwin':
             # On macOS, use avfoundation
             webcam = MediaPlayer("0:", format="avfoundation", options=options)
+        elif sys.platform == 'win32':
+            # On Windows, use VideoTrack with OpenCV as MediaPlayer dshow is tricky without device names
+            logger.info("Using OpenCV VideoTrack for Windows")
+            video_track = VideoTrack()
+            return (None, video_track)
         else:
             # On Linux, use v4l2
             webcam = MediaPlayer(device, format="v4l2", options=options)
