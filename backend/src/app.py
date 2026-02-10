@@ -176,7 +176,7 @@ async def health_check():
 @app.websocket("/chat")
 async def chat_endpoint(websocket: WebSocket):
     # Extract username from query parameters
-    username = html.escape(websocket.query_params.get("username", "Anonymous"))[:20]
+    username = websocket.query_params.get("username")[:20] if websocket.query_params.get("username") else "anon"
     
     await chatroom.connect(websocket)
     logger.info(f"User {username} connected to chat. Total chat users: {len(chatroom.active_connections)}")
@@ -204,7 +204,7 @@ async def chat_endpoint(websocket: WebSocket):
                 
                 # Sanitize and limit message length
                 msg_username = message_data["username"][:20]
-                text = html.escape(message_data["text"])[:500]
+                text = message_data["text"][:500]
                 
                 # Verify username matches the connected user
                 if msg_username != username:
@@ -283,6 +283,11 @@ async def peer_count_endpoint(websocket: WebSocket):
         # WebSocket is already closed by the client, no need to close it again
     except Exception as e:
         logger.error(f"Error in peer count WebSocket: {e}")
+        # Only close the WebSocket if there was an unexpected error
+        try:
+            await websocket.close()
+        except:
+            pass  # WebSocket might already be closed
         # Only close the WebSocket if there was an unexpected error
         try:
             await websocket.close()

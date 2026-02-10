@@ -88,6 +88,7 @@ def create_local_tracks(play_from=False, decode=True, enable_audio=False):
                     "audio": "default",
                     "video": "default"
                 })
+                device = "0:0"
             else:
                 options.update({
                     "audio": "hw:0,0",  # Use first ALSA device
@@ -100,10 +101,10 @@ def create_local_tracks(play_from=False, decode=True, enable_audio=False):
         
         if sys.platform == 'darwin':
             # On macOS, use avfoundation
-            webcam = MediaPlayer("default:none", format="avfoundation", options=options)
+            webcam = MediaPlayer("0:", format="avfoundation", options=options)
         else:
             # On Linux, use v4l2
-            webcam = MediaPlayer("/dev/video0", format="v4l2", options=options)
+            webcam = MediaPlayer(device, format="v4l2", options=options)
 
         return (webcam.audio if enable_audio else None), webcam.video  # Return audio only if enabled
 

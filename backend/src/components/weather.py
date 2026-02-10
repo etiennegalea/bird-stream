@@ -19,8 +19,8 @@ WEATHER_API_KEY = load_api_key('WEATHER_API_KEY')
 WEATHER_DATA = {"data": None, "last_updated": 0}
 
 
-async def get_weather(cache_expiration):
-    """Get weather data for the server's current location"""
+async def get_weather(lat, lon, cache_expiration):
+    """Get weather data for Rotterdam"""
     current_time = datetime.now()
 
     if (WEATHER_DATA["data"] is not None and
@@ -42,6 +42,8 @@ async def get_weather(cache_expiration):
             response = await requests.get(
                 "https://api.openweathermap.org/data/2.5/weather",
                 params={
+                    "lat": lat,
+                    "lon": lon,
                     "units": "metric",
                     "appid": WEATHER_API_KEY
                 }
@@ -52,7 +54,11 @@ async def get_weather(cache_expiration):
             
             # Parse the JSON response
             weather_data = response.json()
-            
+
+            if "gemeente" in weather_data["name"].lower():
+                weather_data["name"] = weather_data["name"].replace("gemeente ", "")
+            print(weather_data["name"])
+
             # Update the cache
             WEATHER_DATA["data"] = weather_data
             WEATHER_DATA["last_updated"] = current_time
@@ -69,10 +75,15 @@ def get_cached_weather():
 
 async def fetch_weather_periodically(cache_expiration=3600):
     """Background task to refresh weather data periodically"""
+
+    # Get current location
+    ip_info = requests.get("http://ip-api.com/json/").json()
+    lat, lon = ip_info["lat"], ip_info["lon"]
+
     while True:
         try:
             logger.info("Refreshing weather data in background task")
-            await get_weather(cache_expiration=cache_expiration)
+            await get_weather(lat=lat, lon=lon, cache_expiration=cache_expiration)
         except Exception as e:
             logger.error(f"Error refreshing weather data: {e}")
         
