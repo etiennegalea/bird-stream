@@ -16,6 +16,7 @@ dependencies = [
     "requests",
     "pyyaml",
     "pydantic==2.4.2",
+    "paho-mqtt>=1.6.1",
 ]
 
 [tool.uv]

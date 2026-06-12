@@ -14,8 +14,10 @@ from src.components.connection_manager import ConnectionManager
 from src.components.video_stream import create_local_tracks, force_codec
 from src.components.chat_room import ChatRoom
 from src.components.weather import fetch_weather_periodically, WEATHER_DATA
-from src.models import ClientModel
+from src.models import ClientModel, CameraControlModel
 from src.utils import load_turn_credentials
+from src.components.mqtt_handler import start_mqtt_client, stop_mqtt_client, send_camera_command, get_camera_status
+from src.components.event_logger import read_events
 
 
 logging.basicConfig(
@@ -41,6 +43,9 @@ async def lifespan(app: FastAPI):
 
     asyncio.create_task(fetch_weather_periodically(cache_expiration=3600))
     
+    # Start the MQTT client connection to the Pi agent
+    start_mqtt_client()
+    
     # Increase port range for better connectivity
     RTCRtpSender.TRANSPORT_POOL_SIZE = 1000
     RTCRtpSender.TRANSPORT_PORT_MIN = 49152
@@ -49,10 +54,9 @@ async def lifespan(app: FastAPI):
     yield
     
     # Shutdown: runs when the app is shutting down
+    stop_mqtt_client()
     await pcs_manager.clean_up()
     logger.info("Application is shutting down...")
-
-    pcs_manager.clean_up()
 
 app = FastAPI(
     title="LoaR Birb Stream",
@@ -259,6 +263,39 @@ async def get_webrtc_config():
         "port_max": RTCRtpSender.TRANSPORT_PORT_MAX,
         "port_range": RTCRtpSender.TRANSPORT_PORT_MAX - RTCRtpSender.TRANSPORT_PORT_MIN + 1
     }
+
+@app.get("/camera/status")
+async def camera_status_endpoint():
+    """Returns the current camera status reported by the Pi agent."""
+    return get_camera_status()
+
+@app.post("/camera/control")
+async def camera_control_endpoint(cmd: CameraControlModel):
+    """Sends start/stop commands to the Pi agent."""
+    params = {}
+    if cmd.srt_host is not None:
+        params["srt_host"] = cmd.srt_host
+    if cmd.srt_port is not None:
+        params["srt_port"] = cmd.srt_port
+    if cmd.width is not None:
+        params["width"] = cmd.width
+    if cmd.height is not None:
+        params["height"] = cmd.height
+    if cmd.fps is not None:
+        params["fps"] = cmd.fps
+    if cmd.bitrate is not None:
+        params["bitrate"] = cmd.bitrate
+        
+    success = send_camera_command(cmd.action, params)
+    if success:
+        return {"status": "success", "message": f"Command '{cmd.action}' sent successfully"}
+    else:
+        return {"status": "error", "message": "Failed to send command to camera"}
+
+@app.get("/camera/events")
+async def camera_events_endpoint(limit: int = 100):
+    """Returns the history of camera events from the weekly rotating log."""
+    return read_events(limit)
 
 @app.websocket("/peer-count")
 async def peer_count_endpoint(websocket: WebSocket):
