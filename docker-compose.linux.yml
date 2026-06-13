@@ -14,11 +14,13 @@ services:
     networks:
       - app-network
 
-
   backend:
-    build: 
+    build:
       context: ./backend
     container_name: stream-backend
+    depends_on:
+      db:
+        condition: service_healthy
     volumes:
       - ./backend:/app
     restart: unless-stopped
@@ -28,6 +30,25 @@ services:
     # environment:
     #   - DEVELOPMENT_MODE=true
 
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=birb_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
   coturn:
     build: ./coturn
     container_name: coturn
@@ -36,12 +57,12 @@ services:
       - ./coturn/certs:/etc/coturn/certs
       - ./coturn/logs:/var/log/coturn
     environment:
-    - DETECT_EXTERNAL_IP=yes
-    - DETECT_RELAY_IP=yes
+      - DETECT_EXTERNAL_IP=yes
+      - DETECT_RELAY_IP=yes
     network_mode: host
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "turnutils_stunclient", "localhost", "3478"]
+      test: [ "CMD", "turnutils_stunclient", "localhost", "3478" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -55,3 +76,6 @@ networks:
       config:
         - subnet: "172.18.0.0/16"
         - subnet: "fd00:1:1::/64"
+
+volumes:
+  postgres_data:
