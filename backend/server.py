@@ -9,7 +9,7 @@ sock.bind(("::", 8051))
 sock.listen(100)
 
 # Configure and run Uvicorn using the existing ASGI app
-config = Config("src.app:app", log_level="info", workers=1)
+config = Config("main:app", log_level="info", workers=1)
 server = Server(config)
 
 if __name__ == "__main__":

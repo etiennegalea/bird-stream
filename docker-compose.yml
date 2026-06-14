@@ -24,10 +24,11 @@ services:
     ports:
       - "8051:8051/tcp"
       - "8051:8051/udp"
+    environment:
+      - VIDEO_SOURCE=${VIDEO_SOURCE:-/app/media/birbs-of-paradise.mp4}
     volumes:
       - ./backend:/app
-    # devices:
-    #   - "/dev/video0:/dev/video0"
+      - /app/.venv
     restart: unless-stopped
     networks:
       - app-network
@@ -57,11 +58,15 @@ services:
     volumes:
       - ./coturn/turnserver.conf:/etc/turnserver.conf
       - ./coturn/certs:/etc/coturn/certs
-      # - ./coturn/logs:/var/log
     environment:
       - DETECT_EXTERNAL_IP=yes
       - DETECT_RELAY_IP=yes
-    # restart: unless-stopped
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "turnutils_stunclient", "localhost", "3478" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
       - app-network
 
