@@ -59,8 +59,7 @@ function CameraStream() {
 
   useEffect(() => {
     const setupPeerCountWs = () => {
-      const ws = new WebSocket(`wss://cam.lifeofarobin.com/peer-count`);
-      // const ws = new WebSocket(`ws://localhost:8000/peer-count`);
+      const ws = new WebSocket(`${getApiBaseUrl(true)}/peer-count`);
       
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
@@ -156,12 +155,7 @@ function CameraStream() {
         const name = getRandomName();
 
         // Send offer to server
-        // console.log(`client name: ${name} | Offer created: ${offer}`);
-        // const response = await fetch(`https://${process.env.REACT_APP_API_URL}:${process.env.REACT_APP_API_PORT}/webrtc/offer`, {
-        // const response = await fetch(`http://localhost:8051/webrtc/offer`, {
-        // const response = await fetch(`http://127.0.0.1:8000/webrtc/offer`, {
-        const response = await fetch(`https://cam.lifeofarobin.com/webrtc/offer`, {
-        // const response = await fetch(`${getApiBaseUrl()}/webrtc/offer`, {
+        const response = await fetch(`${getApiBaseUrl()}/webrtc/offer`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

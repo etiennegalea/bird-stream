@@ -44,13 +44,10 @@ async def lifespan(app: Litestar):
         logger.info("Application is shutting down...")
 
 
-# NOTE: browsers reject `allow_credentials=True` together with a wildcard
-# origin. Once cookie-based auth lands, pin `allow_origins` to the frontend host.
 cors_config = CORSConfig(
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
-    allow_credentials=True,
 )
 
 app = Litestar(

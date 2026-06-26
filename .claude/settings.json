@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s http://localhost:8051/weather)",
+      "Bash(python3 -m json.tool)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('weather data:', d['data']['name'], d['data']['main']['temp'], '°C'\\)\")",
+      "Bash(curl -sv -X OPTIONS http://localhost:8051/webrtc/offer -H 'Origin: http://localhost:8050' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: Content-Type')",
+      "Bash(curl -si -X OPTIONS http://localhost:8051/webrtc/offer -H 'Origin: http://localhost:8050' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: Content-Type')",
+      "Bash(docker exec *)"
+    ]
+  }
+}
