@@ -2,6 +2,7 @@ import logging
 
 from litestar import Controller, get, post
 from litestar.datastructures import State
+from litestar.exceptions import ValidationException
 
 from models.datastructures import ClientModel
 from services.webrtc_service import handle_offer, pcs_manager, get_webrtc_config
@@ -15,9 +16,8 @@ class WebRTCController(Controller):
 
     @post("/offer")
     async def offer(self, data: ClientModel, state: State) -> dict:
-        # `data` is decoded and validated from the JSON body by Litestar
-        # (native msgspec.Struct support); malformed input yields a 422
-        # automatically, so no manual decode/try-except is needed.
+        if not data.offer.sdp:
+            raise ValidationException("offer.sdp cannot be empty")
         return await handle_offer(data, state.audio, state.video)
 
     @get("/getpeers")
