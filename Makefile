@@ -1,6 +1,6 @@
 UNAME := $(shell uname -s)
 
-.PHONY: up down build logs dev-backend dev-frontend
+.PHONY: up down build logs dev-backend dev-frontend migrate
 
 # Run backend locally (uses macOS camera automatically via AVFoundation)
 dev-backend:
@@ -9,6 +9,10 @@ dev-backend:
 # Run frontend dev server
 dev-frontend:
 	cd frontend && npm run dev
+
+# Run Alembic migrations (requires DB to be running)
+migrate:
+	cd backend && uv run alembic upgrade head
 
 up:
 ifeq ($(UNAME),Darwin)

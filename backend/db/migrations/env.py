@@ -22,8 +22,7 @@ if database_url:
 
 # Import Base and all models so Alembic can detect schema changes for autogenerate.
 # Any new models added to db/models.py will be picked up automatically.
-from models.orm.base import Base  # noqa: E402
-import models.orm  # noqa: E402, F401 — registers all models on Base.metadata
+from models.orm import Base, ChatMessage, BirdDetection  # noqa: E402, F401
 
 target_metadata = Base.metadata
 

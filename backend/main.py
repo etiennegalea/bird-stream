@@ -11,6 +11,7 @@ from controllers.health_controller import health_check
 from controllers.peer_count_controller import peer_count_endpoint
 from controllers.weather_controller import weather_endpoint
 from controllers.webrtc_controller import WebRTCController
+from db.session import SessionLocal
 from services.video_service import create_local_tracks
 from services.weather_service import fetch_weather_periodically
 from services.webrtc_service import pcs_manager
@@ -25,6 +26,7 @@ logger = logging.getLogger("main")
 @asynccontextmanager
 async def lifespan(app: Litestar):
     logger.info("Application is starting up...")
+    app.state.db = SessionLocal
     audio, video = create_local_tracks(enable_audio=False)
     app.state.audio = audio
     app.state.video = video

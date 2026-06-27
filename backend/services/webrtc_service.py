@@ -9,7 +9,8 @@ from aiortc import (
 from aiortc.contrib.media import MediaRelay
 from aiortc.rtcrtpsender import RTCRtpSender
 
-from models.schemas.webrtc import ClientModel
+from models.datastructures import ClientModel
+from services.config_service import load_turn_credentials
 from services.connection_manager import ConnectionManager
 from services.video_service import force_codec
 
@@ -31,6 +32,7 @@ def get_webrtc_config() -> dict:
 
 
 async def handle_offer(peer: ClientModel, audio, video) -> dict:
+    turn_username, turn_credential = load_turn_credentials()
     config = RTCConfiguration(
         [
             RTCIceServer(urls=["stun:stun.l.google.com:19302"]),
@@ -39,8 +41,8 @@ async def handle_offer(peer: ClientModel, audio, video) -> dict:
                     "turn:turn.lifeofarobin.com:3478?transport=udp",
                     "turns:turn.lifeofarobin.com:5349?transport=udp",
                 ],
-                username="user",
-                credential="supersecretpassword",
+                username=turn_username,
+                credential=turn_credential,
             ),
         ]
     )
@@ -75,8 +77,8 @@ async def handle_offer(peer: ClientModel, audio, video) -> dict:
             try:
                 logger.info(f"ICE Connection failed for peer {peer.id}, cleaning up")
                 await pcs_manager.remove_peer(peer.id, pc)
-            except Exception as e:
-                logger.error(f"Error (ICE) removing peer: {e}")
+            except Exception:
+                logger.exception(f"Error (ICE) removing peer: {peer.id}")
 
     @pc.on("connectionstatechange")
     async def on_connectionstatechange():
@@ -85,8 +87,8 @@ async def handle_offer(peer: ClientModel, audio, video) -> dict:
             try:
                 logger.info(f"Cleaning up connection for peer {peer.id}")
                 await pcs_manager.remove_peer(peer.id, pc)
-            except Exception as e:
-                logger.error(f"Error removing peer: {e}")
+            except Exception:
+                logger.exception(f"Error removing peer: {peer.id}")
 
     @pc.on("icecandidate")
     def on_icecandidate(candidate):

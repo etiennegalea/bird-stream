@@ -26,6 +26,7 @@ services:
       - "8051:8051/udp"
     environment:
       - VIDEO_SOURCE=${VIDEO_SOURCE:-/app/media/birbs-of-paradise.mp4}
+      - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/birb_db
     volumes:
       - ./backend:/app
       - /app/.venv

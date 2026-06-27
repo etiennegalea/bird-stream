@@ -3,7 +3,7 @@ import logging
 from litestar import Controller, get, post
 from litestar.datastructures import State
 
-from models.schemas.webrtc import ClientModel
+from models.datastructures import ClientModel
 from services.webrtc_service import handle_offer, pcs_manager, get_webrtc_config
 
 logger = logging.getLogger("webrtc_controller")
