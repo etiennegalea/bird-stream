@@ -1,6 +1,14 @@
 UNAME := $(shell uname -s)
 
-.PHONY: up down build logs
+.PHONY: up down build logs dev-backend dev-frontend
+
+# Run backend locally (uses macOS camera automatically via AVFoundation)
+dev-backend:
+	cd backend && uv run python server.py
+
+# Run frontend dev server
+dev-frontend:
+	cd frontend && npm run dev
 
 up:
 ifeq ($(UNAME),Darwin)

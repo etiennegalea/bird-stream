@@ -18,9 +18,16 @@ class VideoTrack(VideoStreamTrack):
 
     def __init__(self):
         super().__init__()
-        self.camera = cv2.VideoCapture(os.environ.get("VIDEO_SOURCE", "/dev/video0"))
+        video_source = os.environ.get("VIDEO_SOURCE", None)
+        if video_source is None:
+            source = 0 if sys.platform == "darwin" else "/dev/video0"
+        elif video_source.lstrip("-").isdigit():
+            source = int(video_source)
+        else:
+            source = video_source
+        self.camera = cv2.VideoCapture(source)
         self.timezone = pytz.timezone("Europe/Amsterdam")
-        logger.info("init video stream capture ...")
+        logger.info(f"init video stream capture from {source!r} ...")
 
     async def recv(self):
         success, frame = self.camera.read()
@@ -62,19 +69,26 @@ def create_local_tracks(play_from=False, decode=True, enable_audio=False):
         player = MediaPlayer(play_from, decode=decode, loop=True)
         return player.audio if enable_audio else None, player.video
 
-    options = {
-        "framerate": "30",
-        "video_size": "640x480",
-        "v4l2_format": "mjpeg",
-        "video_bitrate": "1200k",
-        "video_quality": "medium",
-    }
-
-    if enable_audio:
-        if sys.platform == "darwin":
-            options.update({"audio": "default", "video": "default"})
-            video_source = "0:0"
+    if sys.platform == "darwin":
+        options = {
+            "framerate": "30",
+            "video_size": "640x480",
+        }
+        if enable_audio:
+            options["audio"] = "default"
+            source = "0:0"
         else:
+            source = "0:"
+        webcam = MediaPlayer(source, format="avfoundation", options=options)
+    else:
+        options = {
+            "framerate": "30",
+            "video_size": "640x480",
+            "v4l2_format": "mjpeg",
+            "video_bitrate": "1200k",
+            "video_quality": "medium",
+        }
+        if enable_audio:
             options.update(
                 {
                     "audio": "hw:0,0",
@@ -83,14 +97,9 @@ def create_local_tracks(play_from=False, decode=True, enable_audio=False):
                     "audio_channels": "2",
                 }
             )
-
-    logger.info(f"VIDEO STREAM options: {options}")
-
-    if sys.platform == "darwin":
-        webcam = MediaPlayer("0:", format="avfoundation", options=options)
-    else:
         webcam = MediaPlayer(video_source, format="v4l2", options=options)
 
+    logger.info(f"VIDEO STREAM options: {options}")
     return (webcam.audio if enable_audio else None), webcam.video
 
 
