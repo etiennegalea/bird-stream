@@ -55,7 +55,7 @@ async def handle_offer(peer: ClientModel, audio, video) -> dict:
     config.iceInactiveTimeout = 3
 
     pc = RTCPeerConnection(config)
-    pcs_manager.add_peer(peer.id, pc)
+    await pcs_manager.add_peer(peer.id, pc)
 
     if audio:
         audio_sender = pc.addTrack(relay.subscribe(audio))

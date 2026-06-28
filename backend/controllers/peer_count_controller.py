@@ -14,12 +14,23 @@ async def peer_count_endpoint(socket: WebSocket) -> None:
     await socket.accept()
     logger.info("New peer count WebSocket connection")
 
+    change_event = asyncio.Event()
+
+    def on_peer_change() -> None:
+        change_event.set()
+
+    pcs_manager.on_change(on_peer_change)
+
     async def _send_loop() -> None:
         try:
             while True:
-                peer_count = len(pcs_manager.get_peers())
-                await socket.send_json({"count": peer_count})
-                await asyncio.sleep(2)
+                await socket.send_json({"count": len(pcs_manager.get_peers())})
+                # Block until a peer is added/removed, or 5 s pass (fallback refresh).
+                try:
+                    await asyncio.wait_for(change_event.wait(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    pass
+                change_event.clear()
         except Exception:
             pass
 
@@ -29,7 +40,8 @@ async def peer_count_endpoint(socket: WebSocket) -> None:
     except WebSocketDisconnect:
         logger.info("Peer count WebSocket disconnected")
     except Exception as e:
-        logger.error(f"Error in peer count WebSocket: {e}")
+        logger.exception(f"Error in peer count WebSocket: {e}")
     finally:
+        pcs_manager.remove_change_listener(on_peer_change)
         send_task.cancel()
         await asyncio.gather(send_task, return_exceptions=True)
