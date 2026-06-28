@@ -1,6 +1,6 @@
 UNAME := $(shell uname -s)
 
-.PHONY: up down build logs dev-backend dev-frontend migrate
+.PHONY: up down build logs dev-backend dev-frontend migrate cli
 
 # Run backend locally (uses macOS camera automatically via AVFoundation)
 dev-backend:
@@ -33,3 +33,8 @@ down:
 
 logs:
 	docker compose logs -f
+
+# Typer CLI — wraps all commands above with --help support.
+# Usage: make cli ARGS="up --detach"  or  make cli ARGS="--help"
+cli:
+	uv run --project backend python cli.py $(ARGS)
