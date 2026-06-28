@@ -1,0 +1,15 @@
+mqtt:
+  host: "localhost"
+  port: 1883
+  keepalive: 60
+  client_id: "pi_camera_agent"
+  # Optional auth:
+  # username: ""
+  # password: ""
+camera:
+  device: "/dev/video0"
+  width: 1280
+  height: 720
+  fps: 30
+  bitrate: "1500k"
+  use_hw_acceleration: true

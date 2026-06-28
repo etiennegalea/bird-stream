@@ -1,0 +1,16 @@
+[Unit]
+Description=Bird Streamer Pi Agent
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/bird-stream/pi-agent
+ExecStart=/home/pi/bird-stream/pi-agent/.venv/bin/python agent.py
+Restart=always
+RestartSec=5
+StandardOutput=inherit
+StandardError=inherit
+
+[Install]
+WantedBy=multi-user.target

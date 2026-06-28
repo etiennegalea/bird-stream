@@ -1,0 +1,112 @@
+import logging
+import os
+import sys
+
+import cv2
+import pytz
+from aiortc import VideoStreamTrack
+from aiortc.contrib.media import MediaPlayer
+from aiortc.rtcrtpsender import RTCRtpSender
+from av import VideoFrame
+from datetime import datetime
+
+logger = logging.getLogger("videostream")
+
+
+class VideoTrack(VideoStreamTrack):
+    kind = "video"
+
+    def __init__(self):
+        super().__init__()
+        video_source = os.environ.get("VIDEO_SOURCE", None)
+        if video_source is None:
+            source = 0 if sys.platform == "darwin" else "/dev/video0"
+        elif video_source.lstrip("-").isdigit():
+            source = int(video_source)
+        else:
+            source = video_source
+        self.camera = cv2.VideoCapture(source)
+        self.timezone = pytz.timezone("Europe/Amsterdam")
+        logger.info(f"init video stream capture from {source!r} ...")
+
+    async def recv(self):
+        success, frame = self.camera.read()
+        if not success:
+            logger.error("Failed to capture frame from camera")
+            return None
+
+        local_time = datetime.now(self.timezone)
+        timestamp = local_time.strftime("%Y-%m-%d %H:%M:%S")
+        cv2.putText(
+            frame,
+            timestamp,
+            (10, frame.shape[0] - 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 255, 255),
+            1,
+            cv2.LINE_AA,
+        )
+
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        video_frame = VideoFrame.from_ndarray(frame, format="rgb24")
+        video_frame.pts = video_frame.time = 0
+        return video_frame
+
+    def stop(self):
+        super().stop()
+        self.camera.release()
+
+
+def create_local_tracks(play_from=False, decode=True, enable_audio=False):
+    video_source = os.environ.get("VIDEO_SOURCE", "/dev/video0")
+
+    # If VIDEO_SOURCE points to a file (not a device), stream it on loop
+    if not play_from and not video_source.startswith("/dev/"):
+        play_from = video_source
+
+    if play_from:
+        player = MediaPlayer(play_from, decode=decode, loop=True)
+        return player.audio if enable_audio else None, player.video
+
+    if sys.platform == "darwin":
+        options = {
+            "framerate": "30",
+            "video_size": "640x480",
+        }
+        if enable_audio:
+            options["audio"] = "default"
+            source = "0:0"
+        else:
+            source = "0:"
+        webcam = MediaPlayer(source, format="avfoundation", options=options)
+    else:
+        options = {
+            "framerate": "30",
+            "video_size": "640x480",
+            "v4l2_format": "mjpeg",
+            "video_bitrate": "1200k",
+            "video_quality": "medium",
+        }
+        if enable_audio:
+            options.update(
+                {
+                    "audio": "hw:0,0",
+                    "audio_format": "s16le",
+                    "audio_rate": "44100",
+                    "audio_channels": "2",
+                }
+            )
+        webcam = MediaPlayer(video_source, format="v4l2", options=options)
+
+    logger.info(f"VIDEO STREAM options: {options}")
+    return (webcam.audio if enable_audio else None), webcam.video
+
+
+def force_codec(pc, sender, forced_codec="video/H264"):
+    kind = forced_codec.split("/")[0]
+    codecs = RTCRtpSender.getCapabilities(kind).codecs
+    transceiver = next(t for t in pc.getTransceivers() if t.sender == sender)
+    transceiver.setCodecPreferences(
+        [codec for codec in codecs if codec.mimeType == forced_codec]
+    )

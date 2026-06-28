@@ -1,5 +1,8 @@
 # Use the official Python image
-FROM python:3.11-slim
+FROM python:3.12-slim
+
+# Install uv for fast dependency management
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -12,8 +15,8 @@ ENV WEBRTC_PORT_MAX=49251
 WORKDIR /app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
-    curl\
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
     ffmpeg \
     gcc \
     g++ \
@@ -25,24 +28,22 @@ RUN apt-get update && apt-get install -y \
     libopencv-dev \
     pkg-config \
     python3-dev \
-    python3-opencv \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the application files
-COPY ./src /app
-COPY requirements.txt /tmp/
+# Copy dependency definition files first (leverage Docker build cache)
+COPY pyproject.toml uv.lock ./
 
-# Upgrade pip
-RUN pip install --upgrade pip
+# Install dependencies using uv sync (creates a virtual environment in /app/.venv)
+RUN uv sync --frozen --no-install-project --no-dev
 
-# Install requirements from tmp dir
-RUN pip install --requirement /tmp/requirements.txt
+# Copy the rest of the application files
+COPY . .
 
-COPY . /tmp/
+# Add the virtual environment to PATH so the application runs within it
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Expose the API port
 EXPOSE 8051
 
 # Start the application
-COPY server.py /app/
 CMD ["python", "server.py"]

@@ -113,6 +113,7 @@ venv.bak/
 # IDE
 .vscode/
 .idea/
+.claude
 
 # Spyder project settings
 .spyderproject
