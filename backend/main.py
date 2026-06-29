@@ -1,11 +1,18 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from aiortc.rtcrtpsender import RTCRtpSender
+from dotenv import load_dotenv
 from litestar import Litestar
 from litestar.config.cors import CORSConfig
 
+_backend_dir = Path(__file__).resolve().parent
+load_dotenv(_backend_dir / ".env")                  # local overrides (DB URLs, etc.)
+load_dotenv(_backend_dir.parent / ".env")           # root .env (shared secrets)
+
+from controllers.auth_controller import AuthController
 from controllers.chat_controller import chat_endpoint
 from controllers.health_controller import health_check
 from controllers.peer_count_controller import peer_count_endpoint
@@ -57,6 +64,7 @@ app = Litestar(
         health_check,
         weather_endpoint,
         WebRTCController,
+        AuthController,
         chat_endpoint,
         peer_count_endpoint,
     ],

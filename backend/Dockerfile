@@ -1,49 +1,49 @@
-# Use the official Python image
-FROM python:3.12-slim
+FROM python:3.14-slim
 
-# Install uv for fast dependency management
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/app
-ENV WEBRTC_PORT_MIN=49152
-ENV WEBRTC_PORT_MAX=49251
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    WEBRTC_PORT_MIN=49152 \
+    WEBRTC_PORT_MAX=49251 \
+    # Venv lives outside /app so the ./backend:/app bind-mount never overwrites it.
+    UV_PROJECT_ENVIRONMENT=/venv
 
-# Set working directory in the container
 WORKDIR /app
 
-# Install system dependencies
+# System deps + non-root user in a single layer.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    ffmpeg \
-    gcc \
-    g++ \
-    libavdevice-dev \
-    libavfilter-dev \
-    libopus-dev \
-    libvpx-dev \
-    libsrtp2-dev \
-    libopencv-dev \
-    pkg-config \
-    python3-dev \
-    && rm -rf /var/lib/apt/lists/*
+    curl ffmpeg gcc g++ \
+    libavdevice-dev libavfilter-dev libopus-dev libvpx-dev libsrtp2-dev \
+    libopencv-dev pkg-config python3-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system appgroup \
+    && useradd --system --gid appgroup --no-create-home appuser
 
-# Copy dependency definition files first (leverage Docker build cache)
+# Install dependencies (separate layer for cache efficiency).
 COPY pyproject.toml uv.lock ./
-
-# Install dependencies using uv sync (creates a virtual environment in /app/.venv)
 RUN uv sync --frozen --no-install-project --no-dev
 
-# Copy the rest of the application files
-COPY . .
+# Copy application source explicitly — keeps secrets (.env, .secrets.yaml)
+# and tests out of the image without relying solely on .dockerignore.
+COPY controllers/ controllers/
+COPY data/ data/
+COPY db/ db/
+COPY media/ media/
+COPY models/ models/
+COPY services/ services/
+COPY src/ src/
+COPY types/ types/
+COPY alembic.ini entrypoint.sh main.py server.py ./
 
-# Add the virtual environment to PATH so the application runs within it
-ENV PATH="/app/.venv/bin:$PATH"
+ENV PATH="/venv/bin:$PATH"
 
-# Expose the API port
+# Set ownership and make entrypoint executable in one layer.
+RUN chmod +x entrypoint.sh \
+    && chown -R appuser:appgroup /app /venv
+
+USER appuser
+
 EXPOSE 8051
-
-# Start the application
-CMD ["python", "server.py"]
+CMD ["/bin/sh", "entrypoint.sh"]

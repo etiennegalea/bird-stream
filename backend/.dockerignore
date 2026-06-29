@@ -5,3 +5,6 @@ __pycache__/
 *.pyd
 .git/
 .vscode/
+.env
+.secrets.yaml
+tests/

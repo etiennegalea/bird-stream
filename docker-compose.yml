@@ -2,6 +2,11 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        - VITE_API_URL=${VITE_API_URL}
+        - VITE_NODE_ENV=${VITE_NODE_ENV:-production}
+        - VITE_OPENRELAY_TURN_USERNAME=${VITE_OPENRELAY_TURN_USERNAME}
+        - VITE_OPENRELAY_TURN_CREDENTIAL=${VITE_OPENRELAY_TURN_CREDENTIAL}
     container_name: stream-frontend
     ports:
       - "8050:80"
@@ -24,12 +29,10 @@ services:
     ports:
       - "8051:8051/tcp"
       - "8051:8051/udp"
-    environment:
-      - VIDEO_SOURCE=${VIDEO_SOURCE:-/app/media/birbs-of-paradise.mp4}
-      - DATABASE_URL=postgresql+psycopg2://postgres:postgres@db:5432/birb_db
+    env_file:
+      - .env
     volumes:
       - ./backend:/app
-      - /app/.venv
     restart: unless-stopped
     networks:
       - app-network

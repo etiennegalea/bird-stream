@@ -1,8 +1,10 @@
 <script>
   import { onMount } from 'svelte';
+  import Auth from './components/Auth.svelte';
   import ChatRoom from './components/ChatRoom.svelte';
   import Weather from './components/Weather.svelte';
   import LoadingCircleDots from './components/LoadingCircleDots.svelte';
+  import { auth } from './stores/auth.js';
   import { getApiBaseUrl } from './utils.js';
 
   let isConnected = false;
@@ -18,6 +20,11 @@
   let peerCountWs = null;
   let statsInterval = null;
   let statsState = null;
+
+  // Auth overlay state
+  let authView = null;       // null = hidden, else 'login' | 'signup' | 'forgot' | 'reset' | 'verify'
+  let resetToken = '';
+  let verifyToken = '';
 
   function startFpsTracking() {
     if (statsInterval) clearInterval(statsInterval);
@@ -161,7 +168,27 @@
     }
   }
 
+  function handleLogout() {
+    auth.logout();
+  }
+
   onMount(() => {
+    // Handle special URL tokens for email verification and password reset.
+    const params = new URLSearchParams(window.location.search);
+    const vt = params.get('verify-token');
+    const rt = params.get('reset-token');
+
+    if (vt) {
+      verifyToken = vt;
+      authView = 'verify';
+      // Clean the token from the URL bar without a page reload.
+      history.replaceState(null, '', window.location.pathname);
+    } else if (rt) {
+      resetToken = rt;
+      authView = 'reset';
+      history.replaceState(null, '', window.location.pathname);
+    }
+
     setupPeerCountWs();
     startStream();
 
@@ -176,6 +203,16 @@
   <div class="header">
     <h1>BIRB STREAM</h1>
     <p>Bringing you beautiful <b>{city}</b> birbs live!</p>
+
+    <div class="auth-header">
+      {#if $auth}
+        <span class="auth-username">👤 {$auth.user.username}</span>
+        <button class="auth-btn secondary" on:click={handleLogout}>Log out</button>
+      {:else}
+        <button class="auth-btn" on:click={() => authView = 'login'}>Log in</button>
+        <button class="auth-btn secondary" on:click={() => authView = 'signup'}>Sign up</button>
+      {/if}
+    </div>
   </div>
 
   <div class="main-content" class:chat-hidden={!isChatVisible}>
@@ -232,3 +269,48 @@
     </div>
   </div>
 </div>
+
+{#if authView}
+  <Auth
+    view={authView}
+    {resetToken}
+    {verifyToken}
+    on:authenticated={() => { authView = null; }}
+    on:close={() => { authView = null; }}
+  />
+{/if}
+
+<style>
+  .auth-header {
+    position: absolute;
+    top: 1rem;
+    right: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .auth-username {
+    font-size: 0.85rem;
+    color: #ccc;
+  }
+
+  .auth-btn {
+    padding: 0.35rem 0.85rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    background: #7c6fe0;
+    color: #fff;
+    transition: background 0.15s;
+  }
+  .auth-btn:hover { background: #6a5ecb; }
+  .auth-btn.secondary {
+    background: transparent;
+    border: 1px solid #555;
+    color: #ccc;
+  }
+  .auth-btn.secondary:hover { border-color: #888; color: #fff; }
+</style>

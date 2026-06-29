@@ -1,19 +1,48 @@
 import msgspec
 
 
+class BaseStruct(msgspec.Struct):
+    """Base for all msgspec request/response structs."""
+
+
 # WebRTC signalling
-class OfferModel(msgspec.Struct):
+class OfferModel(BaseStruct):
     sdp: str
     type: str
 
 
-class ClientModel(msgspec.Struct):
+class ClientModel(BaseStruct):
     id: str
     offer: OfferModel
 
 
+# Auth
+class RegisterRequest(BaseStruct):
+    email: str
+    username: str
+    password: str
+
+
+class LoginRequest(BaseStruct):
+    email: str
+    password: str
+
+
+class VerifyEmailRequest(BaseStruct):
+    token: str
+
+
+class ForgotPasswordRequest(BaseStruct):
+    email: str
+
+
+class ResetPasswordRequest(BaseStruct):
+    token: str
+    password: str
+
+
 # Chat WebSocket messages
-class ChatMessageData(msgspec.Struct):
+class ChatMessageData(BaseStruct):
     type: str  # "message" | "system" | "history"
     username: str | None = None
     text: str | None = None
@@ -22,7 +51,7 @@ class ChatMessageData(msgspec.Struct):
 
 
 # Bird detection result (used once object recognition is wired in)
-class BirdDetectionData(msgspec.Struct):
+class BirdDetectionData(BaseStruct):
     species: str
     confidence: float
     detected_at: str
