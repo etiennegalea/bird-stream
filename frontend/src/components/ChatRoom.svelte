@@ -110,7 +110,7 @@
         messages = data.messages.filter(msg => msg.type !== 'system');
       } else if (data.type === 'message') {
         messages = [...messages, data];
-      } else if (data.type === 'system' && !data.text.includes(username)) {
+      } else if (data.type === 'system') {
         messages = [...messages, data];
       }
     };

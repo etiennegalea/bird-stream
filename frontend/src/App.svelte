@@ -23,6 +23,9 @@
   let statsInterval = null;
   let statsState = null;
 
+  let queuePosition = null;
+  let queueWs = null;
+
   let authView = null;       // null = hidden, else 'login' | 'signup' | 'forgot' | 'reset' | 'verify'
   let resetToken = '';
   let verifyToken = '';
@@ -94,6 +97,34 @@
     if (videoEl) {
       videoEl.srcObject = null;
     }
+    if (queueWs) {
+      queueWs.close();
+      queueWs = null;
+    }
+    queuePosition = null;
+  }
+
+  function enterQueue() {
+    cleanup();
+    const ws = new WebSocket(`${getApiBaseUrl(true)}/queue`);
+    queueWs = ws;
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === 'ready') {
+        queuePosition = null;
+        ws.close();
+        queueWs = null;
+        startStream();
+      } else if (data.type === 'queued') {
+        queuePosition = data.position;
+      }
+    };
+
+    ws.onerror = () => {
+      error = 'Could not connect to stream. Please refresh.';
+      queueWs = null;
+    };
   }
 
   async function startStream() {
@@ -220,7 +251,7 @@
     }
 
     setupPeerCountWs();
-    startStream();
+    enterQueue();
 
     return () => {
       cleanup();
@@ -274,12 +305,18 @@
   <div class="main-content" class:chat-hidden={!isChatVisible}>
     <div class="stream-section">
       <div class="stream-viewport">
-        {#if !isConnected && !error}
-          <LoadingCircleDots />
-        {/if}
-        {#if error}
+        {#if queuePosition !== null}
+          <div class="queue-display">
+            <p class="queue-label">Stream is full</p>
+            <p class="queue-position">#{queuePosition}</p>
+            <p class="queue-sublabel">You're in the queue</p>
+          </div>
+        {:else if error}
           <div class="error-message">{error}</div>
         {:else}
+          {#if !isConnected}
+            <LoadingCircleDots />
+          {/if}
           <video
             bind:this={videoEl}
             controls

@@ -80,10 +80,7 @@ async def chat_endpoint(socket: WebSocket, state: State) -> None:
     await chat_service.connect(socket, username, is_account, user_id, state.db)
     logger.info(f"User {username} connected. Total users: {len(chat_service.active_connections)}")
 
-    await chat_service.broadcast_message(
-        {"type": "system", "text": f"{username} has joined the chat"},
-        state.db,
-    )
+    await socket.send_json({"type": "system", "text": "You joined the chat", "timestamp": int(_time() * 1000)})
     await chat_service.broadcast_participants()
 
     try:
@@ -96,10 +93,6 @@ async def chat_endpoint(socket: WebSocket, state: State) -> None:
 
     except WebSocketDisconnect:
         chat_service.disconnect(socket)
-        await chat_service.broadcast_message(
-            {"type": "system", "text": f"{username} has left the chat"},
-            state.db,
-        )
         await chat_service.broadcast_participants()
     except Exception as e:
         logger.exception(f"Error in chat WebSocket endpoint: {e}")

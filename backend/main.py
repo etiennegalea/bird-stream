@@ -16,9 +16,11 @@ from controllers.auth_controller import AuthController
 from controllers.chat_controller import chat_endpoint, chat_usernames
 from controllers.health_controller import health_check
 from controllers.peer_count_controller import peer_count_endpoint
+from controllers.queue_controller import queue_endpoint
 from controllers.weather_controller import weather_endpoint
 from controllers.webrtc_controller import WebRTCController
 from db.session import SessionLocal
+from services.queue_service import QueueService
 from services.video_service import create_local_tracks
 from services.weather_service import fetch_weather_periodically
 from services.webrtc_service import pcs_manager
@@ -34,6 +36,7 @@ logger = logging.getLogger("main")
 async def lifespan(app: Litestar):
     logger.info("Application is starting up...")
     app.state.db = SessionLocal
+    app.state.queue_service = QueueService(pcs_manager)
     audio, video = create_local_tracks(enable_audio=True)
     app.state.audio = audio
     app.state.video = video
@@ -68,6 +71,7 @@ app = Litestar(
         chat_endpoint,
         chat_usernames,
         peer_count_endpoint,
+        queue_endpoint,
     ],
     lifespan=[lifespan],
     cors_config=cors_config,

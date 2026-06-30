@@ -25,22 +25,26 @@ async def test_join_system_message(client):
     with await client.websocket_connect("/chat?username=bird") as ws:
         msg = recv(ws)
         assert msg["type"] == "system"
-        assert "bird" in msg["text"]
         assert "joined" in msg["text"]
 
 
 async def test_default_username_is_anon(client):
+    # System message is now private ("You joined the chat") so we verify the
+    # default username via the participants update that follows.
     with await client.websocket_connect("/chat") as ws:
-        msg = recv(ws)
-        assert msg["type"] == "system"
-        assert "anon" in msg["text"]
+        recv(ws)  # join system message
+        p = ws.receive_json()  # participants update
+        assert "anon" in p.get("guests", [])
 
 
 async def test_username_capped_at_20_chars(client):
+    # The join message no longer echoes the username; check via participants.
     with await client.websocket_connect("/chat?username=" + "x" * 30) as ws:
-        msg = recv(ws)
-        username_word = next(w for w in msg["text"].split() if set(w) == {"x"})
-        assert len(username_word) == 20
+        recv(ws)  # join system message
+        p = ws.receive_json()  # participants update
+        all_names = p.get("accounts", []) + p.get("guests", [])
+        xname = next(n for n in all_names if set(n) == {"x"})
+        assert len(xname) == 20
 
 
 async def test_history_delivered_on_connect(client, db_factory):
@@ -80,8 +84,8 @@ async def test_participants_distinguishes_accounts_and_guests(client, make_token
         recv_participants(alice)
 
         with await client.websocket_connect("/chat?username=bird") as bird:
-            recv(alice)   # bird joined (alice sees)
-            recv(bird)    # bird joined (bird sees)
+            recv_participants(alice)  # participants update when bird joins (no system msg for alice)
+            recv(bird)    # bird's own join message
             p = recv_participants(bird)
 
         assert "alice" in p["accounts"]
@@ -95,14 +99,12 @@ async def test_participants_updated_on_leave(client):
         recv_participants(watcher)
 
         with await client.websocket_connect("/chat?username=leaver") as leaver:
-            recv(watcher)
-            recv(leaver)
-            recv_participants(watcher)
+            recv_participants(watcher)  # participants update when leaver joins (no system msg for watcher)
+            recv(leaver)    # leaver's own join message
             recv_participants(leaver)
         # leaver disconnects
 
-        recv(watcher)  # "leaver left" system message
-        p = recv_participants(watcher)
+        p = recv_participants(watcher)  # participants update on disconnect
         assert p["count"] == 1
         assert "leaver" not in p["guests"]
 
@@ -164,9 +166,8 @@ async def test_message_broadcast_to_other_client(client, make_token):
         recv_participants(alice)
 
         with await client.websocket_connect(f"/chat?username=bob&token={make_token('bob')}") as bob:
-            recv(alice)   # bob joined (alice sees)
-            recv(bob)     # bob joined (bob sees)
-            recv_participants(alice)
+            recv_participants(alice)  # participants update when bob joins (no system msg for alice)
+            recv(bob)     # bob's own join message
             recv_participants(bob)
 
             alice.send_json({"username": "alice", "text": "hey bob"})
@@ -291,19 +292,19 @@ async def test_rate_limit_fires_for_account_user(client, make_token):
 
 # ── disconnect ────────────────────────────────────────────────────────────────
 
-async def test_disconnect_broadcasts_leave(client):
+async def test_disconnect_updates_participants_for_others(client):
+    # Leave messages are private (only sent to the leaving user, who is already
+    # gone). Verify that other viewers see a participants update instead.
     with await client.websocket_connect("/chat?username=watcher") as watcher:
-        recv(watcher)  # watcher joined
+        recv(watcher)  # watcher's own join message
         recv_participants(watcher)
 
         with await client.websocket_connect("/chat?username=leaver") as leaver:
-            recv(watcher)   # leaver joined (watcher sees)
-            recv(leaver)    # leaver joined (leaver sees)
-            recv_participants(watcher)
+            recv_participants(watcher)  # participants update when leaver joins
+            recv(leaver)    # leaver's own join message
             recv_participants(leaver)
         # leaver disconnects here
 
-        leave_msg = recv(watcher)
-        assert leave_msg["type"] == "system"
-        assert "leaver" in leave_msg["text"]
-        assert "left" in leave_msg["text"]
+        p = recv_participants(watcher)  # participants update on disconnect
+        assert p["count"] == 1
+        assert "leaver" not in p["guests"]
