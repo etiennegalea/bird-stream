@@ -102,6 +102,10 @@
   align-items: start;
 }
 
+.msg-row.gap-above {
+  margin-top: 5px;
+}
+
 .msg-time {
   font-size: 10px;
   color: #c0c0c0;
@@ -131,6 +135,7 @@
   text-align: center;
   color: #666;
   font-style: italic;
+  font-size: 13px;
   padding: 4px 8px;
   margin: 4px auto;
   width: 80%;

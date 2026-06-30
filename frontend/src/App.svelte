@@ -310,6 +310,10 @@
       </div>
     </div>
 
+    <div class="chat-section" class:chat-hidden={!isChatVisible}>
+      <ChatRoom onNewMessage={handleNewMessage} {isChatVisible} />
+    </div>
+
     <div class="side-buttons">
       <button
         class="chat-toggle-btn"
@@ -320,10 +324,6 @@
         <img src="/chat_icon.svg" alt="Chat Icon" />
         <span class="notification-marker" class:seen={!hasUnreadMessages}></span>
       </button>
-    </div>
-
-    <div class="chat-section" class:chat-hidden={!isChatVisible}>
-      <ChatRoom onNewMessage={handleNewMessage} {isChatVisible} />
     </div>
   </div>
 </div>
@@ -432,5 +432,8 @@
     display: flex;
     flex-direction: column;
     align-items: center;
+    flex: 0 0 36px;
+    padding: 8px 0;
+    gap: 8px;
   }
 </style>

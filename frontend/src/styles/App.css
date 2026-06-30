@@ -40,7 +40,7 @@ html, body {
   min-height: 0;
   display: flex;
   flex-direction: row;
-  gap: 20px;
+  gap: 10px;
   justify-content: center;
   align-items: stretch;
   position: relative;
@@ -51,7 +51,7 @@ html, body {
   flex: 1;
   min-height: 0;
   max-width: 800px;
-  transition: max-width 0.5s ease;
+  transition: max-width 0.35s ease;
   display: flex;
   flex-direction: column;
 }
@@ -64,9 +64,13 @@ html, body {
   position: relative;
   flex: 0 0 350px;
   min-height: 0;
-  opacity: 1;
   overflow: hidden;
-  transition: opacity 0.5s ease, max-width 0.5s ease, margin 0.5s ease, padding 0.5s ease, border 0.5s ease;
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    flex-basis 0.35s ease,
+    transform 0.35s ease,
+    opacity 0.25s ease;
   display: flex;
   flex-direction: column;
   border-radius: 8px;
@@ -75,12 +79,9 @@ html, body {
 }
 
 .chat-section.chat-hidden {
+  flex-basis: 0;
+  transform: translateX(-350px);
   opacity: 0;
-  max-width: 0;
-  max-height: 0;
-  margin: 0;
-  padding: 0;
-  border: none;
 }
 
 .stream-viewport {
@@ -190,32 +191,24 @@ video.stream-viewport {
 }
 
 
-/* Chat toggle button */
+/* Chat toggle button — lives inside .side-buttons, no positioning hacks */
 .chat-toggle-btn {
-  position: fixed;
-  right: 10px;
-  top: 125px;
-  transform: translateY(-50%);
-  width: 35px;
-  height: 35px;
+  position: relative;
+  width: 32px;
+  height: 32px;
   border: 1px solid #ddd;
-  border-radius: 25px;
+  border-radius: 8px;
   background-color: #fafafa;
   cursor: pointer;
   font-size: 15px;
-  z-index: 10;
-  transition: right 0.3s ease;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: background 0.15s;
 }
 
 .chat-toggle-btn:hover {
   background-color: #fff;
-}
-
-.chat-toggle-btn.chat-hidden {
-  border-radius: 25px;
 }
 
 .notification-marker {
@@ -236,34 +229,31 @@ video.stream-viewport {
   opacity: 0;
 }
 
-/* ── Tablet / desktop toggle button positioning ─────────────────────────── */
-@media (min-width: 400px) {
-  .chat-toggle-btn {
-    position: absolute;
-    top: 0;
-    right: 0;
-  }
-}
-
-/* ── Mobile portrait: stack video + chat, both fit in one screen ────────── */
+/* ── Mobile portrait: grid — stream spans full width, chat+tabs share a row */
 @media (max-width: 840px) and (orientation: portrait) {
   .app-container {
     padding: 10px;
   }
 
   .main-content {
-    flex-direction: column;
-    align-items: stretch;
+    display: grid;
+    grid-template-columns: 1fr 36px;
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "stream stream"
+      "chat   side";
     gap: 8px;
   }
 
   .main-content .stream-section {
-    flex: 0 0 auto;
+    grid-area: stream;
     min-height: 0;
     max-width: 100%;
+    display: flex;
+    flex-direction: column;
   }
 
-  /* Video shrinks to natural aspect-ratio height, capped so chat fits */
+  /* Video capped so the chat row always has room */
   .stream-viewport {
     flex: none;
     height: auto;
@@ -271,16 +261,25 @@ video.stream-viewport {
   }
 
   .chat-section {
-    flex: 1;
+    grid-area: chat;
     min-height: 0;
-    width: 100%;
-    max-width: 100%;
+    min-width: 0;
+    flex: none;
+    transition: opacity 0.3s ease, max-height 0.35s ease;
   }
 
-  .chat-toggle-btn {
-    position: absolute;
-    top: 0;
-    right: -14px;
+  .chat-section.chat-hidden {
+    transform: none;
+    flex-basis: auto;
+    max-height: 0;
+    opacity: 0;
+  }
+
+  .side-buttons {
+    grid-area: side;
+    flex: none;
+    width: 36px;
+    align-self: stretch;
   }
 
   .fullscreen-hint {

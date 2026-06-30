@@ -1,5 +1,6 @@
 import json
 import logging
+from time import time as _time
 
 from litestar import WebSocket, get, websocket
 from litestar.datastructures import State
@@ -37,6 +38,10 @@ async def _process_incoming(data: str, username: str, socket: WebSocket, db_fact
     text = message_data["text"][:500]
 
     if not text.strip():
+        return
+
+    if not chat_service.check_rate_limit(socket):
+        await socket.send_json({"type": "system", "text": "You're sending messages too quickly. Slow down.", "timestamp": int(_time() * 1000)})
         return
 
     if msg_username != username:

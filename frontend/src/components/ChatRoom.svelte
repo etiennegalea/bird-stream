@@ -64,16 +64,18 @@
 
       onNewMessage();
 
-      const messageDate = new Date(data.timestamp);
-      const now = new Date();
-      if (
-        messageDate.getDate() !== now.getDate() ||
-        messageDate.getMonth() !== now.getMonth() ||
-        messageDate.getFullYear() !== now.getFullYear()
-      ) {
-        const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-        const dateStr = `${messageDate.getDate()} ${months[messageDate.getMonth()]} ${messageDate.getFullYear()}`;
-        messages = [...messages, { type: 'system', text: dateStr, timestamp: messageDate.getTime() }];
+      if (data.type === 'message' && data.timestamp) {
+        const messageDate = new Date(data.timestamp);
+        const now = new Date();
+        if (
+          messageDate.getDate() !== now.getDate() ||
+          messageDate.getMonth() !== now.getMonth() ||
+          messageDate.getFullYear() !== now.getFullYear()
+        ) {
+          const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+          const dateStr = `${messageDate.getDate()} ${months[messageDate.getMonth()]} ${messageDate.getFullYear()}`;
+          messages = [...messages, { type: 'system', text: dateStr, timestamp: messageDate.getTime() }];
+        }
       }
 
       if (data.type === 'history') {
@@ -253,11 +255,11 @@
             >{group.username}</span>
           </div>
           <div class="group-messages">
-            {#each group.messages as msg (msg.timestamp)}
-              <div class="msg-row">
-                <span class="msg-time">
-                  {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
+            {#each group.messages as msg, i (msg.timestamp)}
+              {@const timeStr = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              {@const prevTimeStr = i > 0 ? new Date(group.messages[i - 1].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null}
+              <div class="msg-row" class:gap-above={i > 0 && timeStr !== prevTimeStr}>
+                <span class="msg-time">{timeStr !== prevTimeStr ? timeStr : ''}</span>
                 <span class="msg-text">{msg.text}</span>
               </div>
             {/each}
@@ -270,7 +272,7 @@
 </div>
 
 {#if hasJoined}
-  <div class="chat-identity">Chatting as <strong>{username}</strong></div>
+  {#if !isLoggedIn}<div class="chat-identity">Chatting as <strong>{username}</strong></div>{/if}
   <form on:submit={handleSendMessage} class="message-form">
     <input
       type="text"
