@@ -17,7 +17,8 @@ from controllers.health_controller import health_check
 from controllers.peer_count_controller import peer_count_endpoint
 from controllers.weather_controller import weather_endpoint
 from controllers.webrtc_controller import WebRTCController
-from models.orm import Base, ChatMessage
+from models.orm import Base, ChatMessage, User
+from services.auth_service import create_jwt
 
 load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
 
@@ -82,12 +83,49 @@ async def client(litestar_app):
         yield c
 
 
+@pytest.fixture
+def make_token(db_factory):
+    """Create a verified DB user and return a callable that mints their JWT via auth_svc."""
+    from sqlalchemy import select
+
+    def _make(username: str) -> str:
+        with db_factory() as session:
+            user = session.execute(
+                select(User).where(User.username == username)
+            ).scalar_one_or_none()
+            if not user:
+                user = User(
+                    username=username,
+                    email=f"{username}@test.example",
+                    hashed_password="fake:testhash",
+                    is_verified=True,
+                )
+                session.add(user)
+                session.commit()
+                session.refresh(user)
+            # Snapshot scalar attrs before the session closes
+            uid, uname, uemail = user.id, user.username, user.email
+
+        # Build a throw-away User-like object so create_jwt works outside a session
+        stub = type("U", (), {"id": uid, "username": uname, "email": uemail})()
+        return create_jwt(stub)
+
+    return _make
+
+
 @pytest.fixture(autouse=True)
 def isolate(db_factory):
-    """Clear chat connections and wipe test messages around every test."""
+    """Clear all chat service state and wipe test data around every test."""
     chat_service.active_connections.clear()
+    chat_service.account_sockets.clear()
+    chat_service.user_id_map.clear()
+    chat_service.rate_limiters.clear()
     yield
     chat_service.active_connections.clear()
+    chat_service.account_sockets.clear()
+    chat_service.user_id_map.clear()
+    chat_service.rate_limiters.clear()
     with db_factory() as session:
         session.execute(delete(ChatMessage))
+        session.execute(delete(User))
         session.commit()

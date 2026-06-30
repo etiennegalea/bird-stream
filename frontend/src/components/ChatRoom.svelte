@@ -1,5 +1,5 @@
 <script>
-  import { onMount, onDestroy, afterUpdate } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import { get } from 'svelte/store';
   import '../styles/ChatRoom.css';
   import { auth } from '../stores/auth.js';
@@ -7,6 +7,7 @@
 
   export let onNewMessage = () => {};
   export let isChatVisible = true;
+  export let onSignInClick = () => {};
 
   const authState = get(auth);
   const isLoggedIn = !!authState?.user?.username;
@@ -19,6 +20,28 @@
   let hasJoined = false;
   let isCycling = false;
   let isSpinning = false;
+
+  function portal(node) {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        if (node.parentNode) node.parentNode.removeChild(node);
+      }
+    };
+  }
+
+  // Participant list
+  let participants = { count: 0, accounts: [], guests: [] };
+  let showParticipantList = false;
+  let participantPopupPos = { x: 0, y: 0 };
+
+  function openParticipants(e) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const popupWidth = 220;
+    const x = Math.max(8, rect.right - popupWidth);
+    participantPopupPos = { x, y: rect.bottom + 6 };
+    showParticipantList = true;
+  }
 
   // Hover profile popup
   let popup = null;
@@ -61,6 +84,11 @@
 
     chatWs.onmessage = (event) => {
       const data = JSON.parse(event.data);
+
+      if (data.type === 'participants') {
+        participants = data;
+        return;
+      }
 
       onNewMessage();
 
@@ -146,11 +174,15 @@
     }
   });
 
-  afterUpdate(() => {
-    if (hasJoined && isChatVisible && messagesEndEl) {
-      messagesEndEl.scrollIntoView({ behavior: 'smooth' });
-    }
-  });
+  $: {
+    // Track only these three; popup changes won't trigger scroll
+    void messages; void hasJoined; void isChatVisible;
+    tick().then(() => {
+      if (hasJoined && isChatVisible && messagesEndEl) {
+        messagesEndEl.scrollIntoView({ behavior: 'smooth' });
+      }
+    });
+  }
 
   function handleSendMessage(e) {
     e.preventDefault();
@@ -194,6 +226,24 @@
     clearTimeout(hideTimeout);
   });
 </script>
+
+{#if hasJoined}
+  <div class="chat-bar">
+    <div
+      class="participant-pill"
+      on:mouseenter={openParticipants}
+      on:mouseleave={() => showParticipantList = false}
+      role="button"
+      tabindex="0"
+      aria-label="Chat participants"
+    >
+      <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+        <path d="M9 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM17 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 0 0-1.5-4.33A5 5 0 0 1 19 16v1h-6.07zM6 11a5 5 0 0 1 5 5v1H1v-1a5 5 0 0 1 5-5z"/>
+      </svg>
+      {participants.count}
+    </div>
+  </div>
+{/if}
 
 <div class="chat-messages">
   {#if !hasJoined}
@@ -272,21 +322,60 @@
 </div>
 
 {#if hasJoined}
-  {#if !isLoggedIn}<div class="chat-identity">Chatting as <strong>{username}</strong></div>{/if}
-  <form on:submit={handleSendMessage} class="message-form">
-    <input
-      type="text"
-      bind:value={newMessage}
-      placeholder="Type a message..."
-      maxlength="255"
-      autofocus
-    />
-    <button type="submit">Send</button>
-  </form>
+  {#if isLoggedIn}
+    <form on:submit={handleSendMessage} class="message-form">
+      <input
+        type="text"
+        bind:value={newMessage}
+        placeholder="Type a message..."
+        maxlength="255"
+        autofocus
+      />
+      <button type="submit">Send</button>
+    </form>
+  {:else}
+    <div class="read-only-notice">
+      <span>Observing as <strong>{username}</strong></span>
+      <span class="read-only-hint">
+      <button class="sign-in-link" on:click={onSignInClick}>Log in</button> to participate
+    </span>
+    </div>
+  {/if}
+{/if}
+
+{#if showParticipantList && participants.count > 0}
+  <div
+    use:portal
+    class="participant-popup"
+    style="top: {participantPopupPos.y}px; left: {participantPopupPos.x}px"
+    on:mouseenter={() => showParticipantList = true}
+    on:mouseleave={() => showParticipantList = false}
+    role="tooltip"
+  >
+    {#if participants.accounts.length > 0}
+      <div class="pp-section pp-section-members">
+        <span class="pp-section-dot"></span>
+        Members ({participants.accounts.length})
+      </div>
+      {#each participants.accounts as name}
+        <div class="pp-entry pp-account">{name}</div>
+      {/each}
+    {/if}
+    {#if participants.guests.length > 0}
+      <div class="pp-section pp-section-guests">
+        <span class="pp-section-dot"></span>
+        Guests ({participants.guests.length})
+      </div>
+      {#each participants.guests as name}
+        <div class="pp-entry">{name}</div>
+      {/each}
+    {/if}
+  </div>
 {/if}
 
 {#if popup}
   <div
+    use:portal
     class="user-popup"
     style="top: {popup.y}px; left: {popup.x}px"
     on:mouseenter={cancelHidePopup}
@@ -298,15 +387,19 @@
     {:else if popup.profile === null}
       <p class="popup-loading">Profile unavailable</p>
     {:else}
-      {#if popup.profile.avatar}
-        <img src={popup.profile.avatar} alt={popup.profile.username} class="popup-avatar-img" />
-      {:else}
-        <div class="popup-avatar-initial">{popup.profile.username.charAt(0).toUpperCase()}</div>
-      {/if}
-      <p class="popup-username">{popup.profile.username}</p>
-      {#if popup.profile.bio}
-        <p class="popup-bio">{popup.profile.bio}</p>
-      {/if}
+      <div class="popup-img-col">
+        {#if popup.profile.avatar}
+          <img src={popup.profile.avatar} alt={popup.profile.username} class="popup-avatar-img" />
+        {:else}
+          <div class="popup-avatar-initial">{popup.profile.username.charAt(0).toUpperCase()}</div>
+        {/if}
+      </div>
+      <div class="popup-text-col">
+        <p class="popup-username">{popup.profile.username}</p>
+        {#if popup.profile.bio}
+          <p class="popup-bio">{popup.profile.bio}</p>
+        {/if}
+      </div>
     {/if}
   </div>
 {/if}

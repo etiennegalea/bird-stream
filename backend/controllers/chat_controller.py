@@ -40,6 +40,9 @@ async def _process_incoming(data: str, username: str, socket: WebSocket, db_fact
     if not text.strip():
         return
 
+    if not chat_service.is_account_user(socket):
+        return  # Anonymous users are read-only
+
     if not chat_service.check_rate_limit(socket):
         await socket.send_json({"type": "system", "text": "You're sending messages too quickly. Slow down.", "timestamp": int(_time() * 1000)})
         return
@@ -81,6 +84,7 @@ async def chat_endpoint(socket: WebSocket, state: State) -> None:
         {"type": "system", "text": f"{username} has joined the chat"},
         state.db,
     )
+    await chat_service.broadcast_participants()
 
     try:
         while True:
@@ -91,11 +95,12 @@ async def chat_endpoint(socket: WebSocket, state: State) -> None:
                 logger.exception(f"Error processing message: {e}")
 
     except WebSocketDisconnect:
-        await chat_service.disconnect(socket)
+        chat_service.disconnect(socket)
         await chat_service.broadcast_message(
             {"type": "system", "text": f"{username} has left the chat"},
             state.db,
         )
+        await chat_service.broadcast_participants()
     except Exception as e:
         logger.exception(f"Error in chat WebSocket endpoint: {e}")
-        await chat_service.disconnect(socket)
+        chat_service.disconnect(socket)

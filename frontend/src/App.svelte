@@ -311,7 +311,7 @@
     </div>
 
     <div class="chat-section" class:chat-hidden={!isChatVisible}>
-      <ChatRoom onNewMessage={handleNewMessage} {isChatVisible} />
+      <ChatRoom onNewMessage={handleNewMessage} {isChatVisible} onSignInClick={() => { authView = 'login'; }} />
     </div>
 
     <div class="side-buttons">
@@ -333,7 +333,7 @@
     view={authView}
     {resetToken}
     {verifyToken}
-    on:authenticated={() => { authView = null; }}
+    on:authenticated={() => { authView = null; window.location.reload(); }}
     on:close={() => { authView = null; }}
   />
 {/if}
@@ -354,8 +354,8 @@
     width: 36px;
     height: 36px;
     border-radius: 50%;
-    border: 2px solid rgba(255,255,255,0.2);
-    background: rgba(255,255,255,0.08);
+    border: 2px solid rgba(142, 142, 142, 0.2);
+    background: #a9a9a9;
     cursor: pointer;
     padding: 0;
     display: flex;
@@ -364,7 +364,9 @@
     overflow: hidden;
     transition: border-color 0.15s;
   }
-  .avatar-btn:hover { border-color: rgba(255,255,255,0.5); }
+  .avatar-btn:hover {
+    background: #c2c2c2;
+  }
 
   .avatar-img {
     width: 100%;

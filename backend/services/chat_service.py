@@ -91,12 +91,35 @@ class ChatService:
             ]
             await websocket.send_json({"type": "history", "messages": history})
 
-    async def disconnect(self, websocket: WebSocket) -> None:
+    def disconnect(self, websocket: WebSocket) -> None:
         self.active_connections.pop(websocket, None)
         self.account_sockets.discard(websocket)
         self.user_id_map.pop(websocket, None)
         self.rate_limiters.pop(websocket, None)
         logger.info(f"Chat connection removed. Total users: {len(self.active_connections)}")
+
+    async def broadcast_participants(self) -> None:
+        accounts = sorted(
+            self.active_connections[ws]
+            for ws in self.account_sockets
+            if ws in self.active_connections
+        )
+        guests = sorted(
+            username
+            for ws, username in self.active_connections.items()
+            if ws not in self.account_sockets
+        )
+        msg = {
+            "type": "participants",
+            "count": len(self.active_connections),
+            "accounts": accounts,
+            "guests": guests,
+        }
+        for ws in list(self.active_connections):
+            try:
+                await ws.send_json(msg)
+            except Exception:
+                pass
 
     async def broadcast_message(self, message: dict[str, Any], db_factory=None) -> None:
         message["timestamp"] = int(datetime.now().timestamp() * 1000)
@@ -128,4 +151,4 @@ class ChatService:
                 connections_to_remove.append(connection)
 
         for connection in connections_to_remove:
-            await self.disconnect(connection)
+            self.disconnect(connection)

@@ -134,8 +134,11 @@
 
 <div class="settings-overlay" role="dialog" aria-modal="true">
   <div class="settings-card">
-    <button class="close-btn" on:click={() => dispatch('close')} aria-label="Close">✕</button>
-    <h2>Account Settings</h2>
+    <div class="settings-header">
+      <h2>Account Settings</h2>
+      <button class="close-btn" on:click={() => dispatch('close')} aria-label="Close">✕</button>
+    </div>
+    <div class="settings-body">
 
     <!-- Avatar -->
     <div class="avatar-section">
@@ -195,5 +198,7 @@
         {passwordLoading ? 'Saving…' : 'Change Password'}
       </button>
     </form>
+
+    </div>
   </div>
 </div>

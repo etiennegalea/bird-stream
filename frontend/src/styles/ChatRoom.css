@@ -153,61 +153,226 @@
   position: fixed;
   z-index: 500;
   background: #1c1c1c;
-  border: 1px solid #333;
   border-radius: 10px;
-  padding: 0.75rem;
-  width: 175px;
+  width: max-content;
+  min-width: 200px;
+  min-height: 80px;
+  max-width: min(320px, calc(var(--chat-width, 360px) - 24px));
+  max-height: 180px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.5);
   pointer-events: auto;
   color: #eee;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.popup-img-col {
+  flex-shrink: 0;
+  width: 40%;
+  overflow: hidden;
+  /* Elliptical right edge — clips the avatar into a D-shape */
+  border-radius: 0 25% 25% 0 / 0 50% 50% 0;
 }
 
 .popup-avatar-img {
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
   display: block;
-  margin: 0 auto 0.5rem;
 }
 
 .popup-avatar-initial {
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
+  width: 100%;
+  height: 100%;
   background: #8C3523;
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.5rem;
+  font-size: 1.6rem;
   font-weight: 700;
-  margin: 0 auto 0.5rem;
+}
+
+.popup-text-col {
+  flex: 1;
+  min-width: 0;
+  padding: 0.65rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.3rem;
 }
 
 .popup-username {
-  text-align: center;
   font-weight: 600;
   color: #eee;
   font-size: 0.82rem;
-  margin: 0 0 0.3rem;
+  height: 2rem;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .popup-bio {
   font-size: 0.7rem;
   color: #aaa;
-  text-align: center;
   margin: 0;
   line-height: 1.4;
+  overflow-y: auto;
 }
 
 .popup-loading {
   font-size: 0.7rem;
   color: #888;
   text-align: center;
-  margin: 0;
+  margin: auto;
+  padding: 1rem;
 }
 
+
+/* Chat bar (participant count) */
+.chat-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 4px 8px;
+  background: #fff;
+  border-bottom: 1px solid #eee;
+  min-height: 28px;
+}
+
+.participant-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #888;
+  cursor: default;
+  padding: 2px 6px;
+  border-radius: 12px;
+  transition: background 0.15s, color 0.15s;
+  user-select: none;
+}
+
+.participant-pill:hover {
+  background: #f0f0f0;
+  color: #444;
+}
+
+.participant-pill svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+/* Participant hover popup */
+.participant-popup {
+  position: fixed;
+  z-index: 500;
+  background: #1c1c1c;
+  border: 1px solid #333;
+  border-radius: 10px;
+  padding: 0.6rem 0.75rem;
+  min-width: 150px;
+  max-width: 220px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  color: #eee;
+  pointer-events: auto;
+}
+
+.pp-section {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 0 0.25rem;
+  margin: 0.55rem 0 0.3rem;
+  border-bottom: 1px solid #2e2e2e;
+}
+
+.pp-section:first-child {
+  margin-top: 0;
+}
+
+.pp-section.pp-section-members {
+  color: #4c7b92;
+}
+
+.pp-section.pp-section-guests {
+  color: #666;
+}
+
+.pp-section-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.pp-section-members .pp-section-dot {
+  background: #4c7b92;
+}
+
+.pp-section-guests .pp-section-dot {
+  background: #555;
+}
+
+.pp-entry {
+  font-size: 0.75rem;
+  color: #ccc;
+  padding: 2px 0 2px 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pp-entry.pp-account {
+  color: #7ab3cc;
+  font-weight: 600;
+}
+
+/* Read-only notice for guests */
+.read-only-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  height: 44px;
+  background: #f8f8f8;
+  border-top: 1px solid #eee;
+  font-size: 0.72rem;
+  color: #666;
+  flex-shrink: 0;
+}
+
+.read-only-hint {
+  font-size: 0.68rem;
+  color: #aaa;
+  font-style: italic;
+}
+
+.sign-in-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+  font-style: inherit;
+  color: #8c3523;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.sign-in-link:hover {
+  color: #6f2b1a;
+}
 
 /* Join prompt */
 .join-prompt {
