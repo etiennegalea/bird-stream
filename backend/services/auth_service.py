@@ -132,7 +132,14 @@ async def login_user(
             return None, None, "Please verify your email before logging in"
 
         token = create_jwt(user)
-        user_dict = {"id": user.id, "email": user.email, "username": user.username, "is_verified": user.is_verified}
+        user_dict = {
+            "id": user.id,
+            "email": user.email,
+            "username": user.username,
+            "is_verified": user.is_verified,
+            "avatar": user.avatar,
+            "bio": user.bio,
+        }
         return token, user_dict, ""
 
 
@@ -188,6 +195,99 @@ def create_password_reset_token(
         return {"email": email, "username": user.username}, reset_token
 
 
+def _profile_dict(user: User) -> dict:
+    return {
+        "id": user.id,
+        "email": user.email,
+        "username": user.username,
+        "bio": user.bio,
+        "avatar": user.avatar,
+    }
+
+
+def _set_username(user: User, username: str) -> str:
+    """Validates and applies a new username. Returns an error message, or '' on success."""
+    username = username.strip()[:50]
+    if len(username) < 2:
+        return "Username must be at least 2 characters"
+    user.username = username
+    return ""
+
+
+def _set_avatar(user: User, avatar: str) -> str:
+    """Validates and applies a new avatar. Returns an error message, or '' on success."""
+    if avatar and not avatar.startswith("data:image/"):
+        return "Invalid image format"
+    if len(avatar) > 200_000:
+        return "Image too large (max ~150 KB)"
+    user.avatar = avatar or None
+    return ""
+
+
+def get_user_profile(db_factory: sessionmaker, user_id: int) -> dict | None:
+    with db_factory() as session:
+        user = session.get(User, user_id)
+        if not user:
+            return None
+        return _profile_dict(user)
+
+
+def update_user_profile(
+    db_factory: sessionmaker,
+    user_id: int,
+    username: str | None,
+    bio: str | None,
+    avatar: str | None,
+) -> tuple[dict | None, str]:
+    """Returns (updated_profile, error). Passes None fields through unchanged."""
+    with db_factory() as session:
+        user = session.get(User, user_id)
+        if not user:
+            return None, "User not found"
+
+        if username is not None and (error := _set_username(user, username)):
+            return None, error
+
+        if bio is not None:
+            user.bio = bio.strip()[:500] or None
+
+        if avatar is not None and (error := _set_avatar(user, avatar)):
+            return None, error
+
+        session.commit()
+        return _profile_dict(user), ""
+
+
+def update_last_ip(db_factory: sessionmaker, user_id: int, ip: str | None) -> None:
+    if not ip:
+        return
+    with db_factory() as session:
+        user = session.get(User, user_id)
+        if user:
+            user.last_ip = ip[:45]
+            session.commit()
+
+
+async def change_user_password(
+    db_factory: sessionmaker,
+    user_id: int,
+    current_password: str,
+    new_password: str,
+) -> tuple[bool, str]:
+    """Returns (success, error)."""
+    with db_factory() as session:
+        user = session.get(User, user_id)
+        if not user:
+            return False, "User not found"
+        if not await verify_password(current_password, user.hashed_password):
+            return False, "Current password is incorrect"
+        if len(new_password) < 8:
+            return False, "New password must be at least 8 characters"
+        user.hashed_password = await hash_password(new_password)
+        session.commit()
+        return True, ""
+
+
 async def reset_password(
     db_factory: sessionmaker,
     token: str,
@@ -215,3 +315,21 @@ async def reset_password(
         auth_token.user.hashed_password = hashed
         session.commit()
         return True, ""
+
+
+def get_public_profile_by_username(db_factory: sessionmaker, username: str) -> dict | None:
+    with db_factory() as session:
+        user = session.execute(
+            select(User).where(User.username == username)
+        ).scalar_one_or_none()
+        if not user:
+            return None
+        return {"user_id": user.id, "username": user.username, "avatar": user.avatar, "bio": user.bio}
+
+
+def get_public_profile_by_id(db_factory: sessionmaker, user_id: int) -> dict | None:
+    with db_factory() as session:
+        user = session.get(User, user_id)
+        if not user:
+            return None
+        return {"user_id": user.id, "username": user.username, "avatar": user.avatar, "bio": user.bio}

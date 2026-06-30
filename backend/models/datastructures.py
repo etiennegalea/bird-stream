@@ -41,6 +41,17 @@ class ResetPasswordRequest(BaseStruct):
     password: str
 
 
+class UpdateProfileRequest(BaseStruct):
+    username: str | None = None
+    bio: str | None = None
+    avatar: str | None = None  # full base64 data URL, e.g. "data:image/jpeg;base64,..."
+
+
+class ChangePasswordRequest(BaseStruct):
+    current_password: str
+    new_password: str
+
+
 # Chat WebSocket messages
 class ChatMessageData(BaseStruct):
     type: str  # "message" | "system" | "history"

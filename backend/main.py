@@ -13,7 +13,7 @@ load_dotenv(_backend_dir / ".env")                  # local overrides (DB URLs, 
 load_dotenv(_backend_dir.parent / ".env")           # root .env (shared secrets)
 
 from controllers.auth_controller import AuthController
-from controllers.chat_controller import chat_endpoint
+from controllers.chat_controller import chat_endpoint, chat_usernames
 from controllers.health_controller import health_check
 from controllers.peer_count_controller import peer_count_endpoint
 from controllers.weather_controller import weather_endpoint
@@ -66,6 +66,7 @@ app = Litestar(
         WebRTCController,
         AuthController,
         chat_endpoint,
+        chat_usernames,
         peer_count_endpoint,
     ],
     lifespan=[lifespan],

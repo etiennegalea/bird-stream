@@ -1,16 +1,19 @@
 import logging
 import re
 
-from litestar import Controller, post
+from litestar import Controller, get, patch, post
+from litestar.connection import Request
 from litestar.datastructures import State
 from litestar.exceptions import HTTPException
 
 import services.auth_service as auth_svc
 from models.datastructures import (
+    ChangePasswordRequest,
     ForgotPasswordRequest,
     LoginRequest,
     RegisterRequest,
     ResetPasswordRequest,
+    UpdateProfileRequest,
     VerifyEmailRequest,
 )
 from services.email_service import send_password_reset_email, send_verification_email
@@ -18,6 +21,17 @@ from services.email_service import send_password_reset_email, send_verification_
 logger = logging.getLogger("auth_controller")
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _require_auth(request: Request) -> int:
+    """Extract user_id from Bearer token or raise 401."""
+    header = request.headers.get("authorization", "")
+    if not header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    payload = auth_svc.decode_jwt(header[7:])
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    return int(payload["sub"])
 
 
 class AuthController(Controller):
@@ -71,4 +85,46 @@ class AuthController(Controller):
         if not success:
             raise HTTPException(status_code=400, detail=error)
         return {"message": "Password reset successfully. You can now log in."}
+
+    @get("/profile")
+    async def get_profile(self, request: Request, state: State) -> dict:
+        user_id = _require_auth(request)
+        profile = auth_svc.get_user_profile(state.db, user_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail="User not found")
+        return profile
+
+    @patch("/profile")
+    async def update_profile(self, request: Request, data: UpdateProfileRequest, state: State) -> dict:
+        user_id = _require_auth(request)
+        profile, error = auth_svc.update_user_profile(
+            state.db, user_id, data.username, data.bio, data.avatar
+        )
+        if error:
+            raise HTTPException(status_code=400, detail=error)
+        return profile
+
+    @post("/change-password")
+    async def change_password(self, request: Request, data: ChangePasswordRequest, state: State) -> dict:
+        user_id = _require_auth(request)
+        success, error = await auth_svc.change_user_password(
+            state.db, user_id, data.current_password, data.new_password
+        )
+        if not success:
+            raise HTTPException(status_code=400, detail=error)
+        return {"message": "Password changed successfully."}
+
+    @get("/profile/public/{username:str}")
+    async def get_public_profile(self, username: str, state: State) -> dict:
+        profile = auth_svc.get_public_profile_by_username(state.db, username)
+        if not profile:
+            raise HTTPException(status_code=404, detail="User not found")
+        return profile
+
+    @get("/profile/public/id/{user_id:int}")
+    async def get_public_profile_by_id(self, user_id: int, state: State) -> dict:
+        profile = auth_svc.get_public_profile_by_id(state.db, user_id)
+        if not profile:
+            raise HTTPException(status_code=404, detail="User not found")
+        return profile
 

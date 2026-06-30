@@ -1,7 +1,9 @@
 <script>
   import { onMount } from 'svelte';
+  import { get } from 'svelte/store';
   import Auth from './components/Auth.svelte';
   import ChatRoom from './components/ChatRoom.svelte';
+  import UserSettings from './components/UserSettings.svelte';
   import Weather from './components/Weather.svelte';
   import LoadingCircleDots from './components/LoadingCircleDots.svelte';
   import { auth } from './stores/auth.js';
@@ -21,10 +23,18 @@
   let statsInterval = null;
   let statsState = null;
 
-  // Auth overlay state
   let authView = null;       // null = hidden, else 'login' | 'signup' | 'forgot' | 'reset' | 'verify'
   let resetToken = '';
   let verifyToken = '';
+  let isSettingsOpen = false;
+  let isMenuOpen = false;
+  let menuWrapEl;
+
+  function handleWindowClick(e) {
+    if (isMenuOpen && menuWrapEl && !menuWrapEl.contains(e.target)) {
+      isMenuOpen = false;
+    }
+  }
 
   function startFpsTracking() {
     if (statsInterval) clearInterval(statsInterval);
@@ -65,8 +75,14 @@
     peerCountWs = ws;
   }
 
-  function getRandomName(prefix = 'client_') {
-    return prefix + Math.random().toString(36).substring(2, 15);
+  function getPeerId() {
+    const key = 'birb_peer_id';
+    let id = localStorage.getItem(key);
+    if (!id) {
+      id = 'client_' + Math.random().toString(36).substring(2, 15);
+      localStorage.setItem(key, id);
+    }
+    return id;
   }
 
   function cleanup() {
@@ -129,11 +145,17 @@
       });
       await pc.setLocalDescription(offer);
 
+      const authState = get(auth);
+      const headers = { 'Content-Type': 'application/json' };
+      if (authState?.token) {
+        headers['Authorization'] = `Bearer ${authState.token}`;
+      }
+
       const response = await fetch(`${getApiBaseUrl()}/webrtc/offer`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
-          id: getRandomName(),
+          id: getPeerId(),
           offer: { type: offer.type, sdp: offer.sdp }
         })
       });
@@ -168,12 +190,7 @@
     }
   }
 
-  function handleLogout() {
-    auth.logout();
-  }
-
-  onMount(() => {
-    // Handle special URL tokens for email verification and password reset.
+  onMount(async () => {
     const params = new URLSearchParams(window.location.search);
     const vt = params.get('verify-token');
     const rt = params.get('reset-token');
@@ -181,12 +198,25 @@
     if (vt) {
       verifyToken = vt;
       authView = 'verify';
-      // Clean the token from the URL bar without a page reload.
       history.replaceState(null, '', window.location.pathname);
     } else if (rt) {
       resetToken = rt;
       authView = 'reset';
       history.replaceState(null, '', window.location.pathname);
+    }
+
+    // Refresh profile so avatar/bio are up to date on page load.
+    const authState = get(auth);
+    if (authState?.token) {
+      try {
+        const resp = await fetch(`${getApiBaseUrl()}/auth/profile`, {
+          headers: { 'Authorization': `Bearer ${authState.token}` }
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          auth.updateUser({ username: data.username, avatar: data.avatar, bio: data.bio });
+        }
+      } catch (_) { /* non-critical */ }
     }
 
     setupPeerCountWs();
@@ -199,18 +229,44 @@
   });
 </script>
 
+<svelte:window on:click={handleWindowClick} />
+
 <div class="app-container">
   <div class="header">
     <h1>BIRB STREAM</h1>
     <p>Bringing you beautiful <b>{city}</b> birbs live!</p>
 
-    <div class="auth-header">
-      {#if $auth}
-        <span class="auth-username">👤 {$auth.user.username}</span>
-        <button class="auth-btn secondary" on:click={handleLogout}>Log out</button>
-      {:else}
-        <button class="auth-btn" on:click={() => authView = 'login'}>Log in</button>
-        <button class="auth-btn secondary" on:click={() => authView = 'signup'}>Sign up</button>
+    <!-- User avatar menu (top-right) -->
+    <div class="user-menu-wrap" bind:this={menuWrapEl}>
+      <button
+        class="avatar-btn"
+        on:click={() => isMenuOpen = !isMenuOpen}
+        aria-label="User menu"
+        aria-expanded={isMenuOpen}
+      >
+        {#if $auth?.user?.avatar}
+          <img src={$auth.user.avatar} alt="Profile" class="avatar-img" />
+        {:else if $auth?.user?.username}
+          <span class="avatar-initials">{$auth.user.username.charAt(0).toUpperCase()}</span>
+        {:else}
+          <svg class="avatar-anon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5zm0 2c-3.332 0-10 1.667-10 5v1h20v-1c0-3.333-6.668-5-10-5z"/>
+          </svg>
+        {/if}
+      </button>
+
+      {#if isMenuOpen}
+        <div class="user-menu" role="menu">
+          {#if $auth}
+            <p class="menu-username">{$auth.user.username}</p>
+            <hr class="menu-divider" />
+            <button class="menu-item" role="menuitem" on:click={() => { isMenuOpen = false; isSettingsOpen = true; }}>Settings</button>
+            <button class="menu-item" role="menuitem" on:click={() => { auth.logout(); window.location.reload(); }}>Log out</button>
+          {:else}
+            <button class="menu-item" role="menuitem" on:click={() => { isMenuOpen = false; authView = 'login'; }}>Log in</button>
+            <button class="menu-item" role="menuitem" on:click={() => { isMenuOpen = false; authView = 'signup'; }}>Sign up</button>
+          {/if}
+        </div>
       {/if}
     </div>
   </div>
@@ -254,15 +310,17 @@
       </div>
     </div>
 
-    <button
-      class="chat-toggle-btn"
-      class:chat-hidden={!isChatVisible}
-      on:click={toggleChat}
-      aria-label={isChatVisible ? 'Hide chat' : 'Show chat'}
-    >
-      <img src="/chat_icon.svg" alt="Chat Icon" />
-      <span class="notification-marker" class:seen={!hasUnreadMessages}></span>
-    </button>
+    <div class="side-buttons">
+      <button
+        class="chat-toggle-btn"
+        class:chat-hidden={!isChatVisible}
+        on:click={toggleChat}
+        aria-label={isChatVisible ? 'Hide chat' : 'Show chat'}
+      >
+        <img src="/chat_icon.svg" alt="Chat Icon" />
+        <span class="notification-marker" class:seen={!hasUnreadMessages}></span>
+      </button>
+    </div>
 
     <div class="chat-section" class:chat-hidden={!isChatVisible}>
       <ChatRoom onNewMessage={handleNewMessage} {isChatVisible} />
@@ -280,37 +338,99 @@
   />
 {/if}
 
+{#if isSettingsOpen && $auth}
+  <UserSettings on:close={() => isSettingsOpen = false} />
+{/if}
+
 <style>
-  .auth-header {
+  /* User avatar menu */
+  .user-menu-wrap {
     position: absolute;
     top: 1rem;
     right: 1.25rem;
+  }
+
+  .avatar-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.08);
+    cursor: pointer;
+    padding: 0;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    justify-content: center;
+    overflow: hidden;
+    transition: border-color 0.15s;
+  }
+  .avatar-btn:hover { border-color: rgba(255,255,255,0.5); }
+
+  .avatar-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
 
-  .auth-username {
-    font-size: 0.85rem;
-    color: #ccc;
-  }
-
-  .auth-btn {
-    padding: 0.35rem 0.85rem;
-    border-radius: 6px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    border: none;
-    background: #7c6fe0;
+  .avatar-initials {
+    font-size: 0.9rem;
+    font-weight: 700;
     color: #fff;
-    transition: background 0.15s;
+    line-height: 1;
   }
-  .auth-btn:hover { background: #6a5ecb; }
-  .auth-btn.secondary {
-    background: transparent;
-    border: 1px solid #555;
-    color: #ccc;
+
+  .avatar-anon {
+    width: 20px;
+    height: 20px;
+    color: #aaa;
   }
-  .auth-btn.secondary:hover { border-color: #888; color: #fff; }
+
+  .user-menu {
+    position: absolute;
+    top: calc(36px + 0.5rem);
+    right: 0;
+    min-width: 160px;
+    background: #1c1c1c;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 0.4rem 0;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    z-index: 200;
+  }
+
+  .menu-username {
+    padding: 0.4rem 0.85rem 0.3rem;
+    font-size: 0.8rem;
+    color: #888;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .menu-divider {
+    border: none;
+    border-top: 1px solid #2e2e2e;
+    margin: 0.25rem 0;
+  }
+
+  .menu-item {
+    display: block;
+    width: 100%;
+    padding: 0.45rem 0.85rem;
+    background: none;
+    border: none;
+    color: #ddd;
+    font-size: 0.85rem;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+  }
+  .menu-item:hover { background: #8C3523; color: #fff; }
+
+  .side-buttons {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
 </style>

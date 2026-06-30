@@ -42,9 +42,9 @@
     loading = false;
   }
 
-  function switchTo(newView) {
+  function switchTo(newView, keepEmail = false) {
     reset();
-    email = '';
+    if (!keepEmail) email = '';
     username = '';
     password = '';
     confirmPassword = '';
@@ -142,7 +142,7 @@
         <button type="submit" class="primary-btn" disabled={loading}>{loading ? 'Logging in…' : 'Log in'}</button>
       </form>
       <div class="auth-links">
-        <button class="link-btn" on:click={() => switchTo('forgot')}>Forgot password?</button>
+        <button class="link-btn" on:click={() => switchTo('forgot', true)}>Forgot password?</button>
         <span class="sep">·</span>
         <button class="link-btn" on:click={() => switchTo('signup')}>Create account</button>
       </div>
@@ -205,7 +205,7 @@
   }
 
   .auth-card {
-    background: #1a1a2e;
+    background: #1c1c1c;
     border: 1px solid #333;
     border-radius: 12px;
     padding: 2rem;
@@ -247,19 +247,19 @@
 
   input {
     padding: 0.55rem 0.75rem;
-    background: #0f0f23;
+    background: #141414;
     border: 1px solid #444;
     border-radius: 6px;
     color: #e0e0e0;
     font-size: 0.95rem;
     outline: none;
   }
-  input:focus { border-color: #7c6fe0; }
+  input:focus { border-color: #8C3523; }
 
   .primary-btn {
     margin-top: 0.25rem;
     padding: 0.65rem;
-    background: #7c6fe0;
+    background: #8C3523;
     color: #fff;
     border: none;
     border-radius: 6px;
@@ -268,7 +268,7 @@
     cursor: pointer;
     transition: background 0.15s;
   }
-  .primary-btn:hover:not(:disabled) { background: #6a5ecb; }
+  .primary-btn:hover:not(:disabled) { background: #6F2B1A; }
   .primary-btn:disabled { opacity: 0.6; cursor: default; }
 
   .auth-links {
@@ -283,13 +283,13 @@
   .link-btn {
     background: none;
     border: none;
-    color: #9d8fff;
+    color: #d46050;
     cursor: pointer;
     font-size: inherit;
     padding: 0;
     text-decoration: underline;
   }
-  .link-btn:hover { color: #c4b8ff; }
+  .link-btn:hover { color: #e07868; }
 
   .sep { color: #555; }
 

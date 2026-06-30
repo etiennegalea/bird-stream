@@ -10,7 +10,23 @@ logger = logging.getLogger("connection_manager")
 class ConnectionManager:
     def __init__(self):
         self.pcs: dict[str, RTCPeerConnection] = {}
+        self.user_peers: dict[int, str] = {}
         self._change_listeners: list[Callable[[], None]] = []
+
+    async def bind_user(self, user_id: int, peer_id: str) -> None:
+        """Ensures a logged-in user only has one active connection at a time.
+
+        If the user already has a connection on a different peer_id (e.g. another
+        device/browser), that older connection is closed before binding the new one.
+        """
+        old_peer_id = self.user_peers.get(user_id)
+        if old_peer_id and old_peer_id != peer_id:
+            old_pc = self.pcs.pop(old_peer_id, None)
+            if old_pc and old_pc.connectionState != "closed":
+                logger.info(f"Closing previous connection for user {user_id} (peer {old_peer_id})")
+                await old_pc.close()
+                self._notify_change()
+        self.user_peers[user_id] = peer_id
 
     def on_change(self, callback: Callable[[], None]) -> None:
         self._change_listeners.append(callback)
@@ -68,6 +84,11 @@ class ConnectionManager:
                 transceiver.receiver.track.stop()
         await pc.close()
         self.pcs.pop(peer_id, None)
+        self.user_peers = {
+            user_id: bound_peer_id
+            for user_id, bound_peer_id in self.user_peers.items()
+            if bound_peer_id != peer_id
+        }
         logger.info(f"Removed peer {peer_id} ({pc.connectionState})")
         self._notify_change()
 
@@ -81,6 +102,7 @@ class ConnectionManager:
             if close_coros:
                 await asyncio.gather(*close_coros, return_exceptions=True)
             self.pcs.clear()
+            self.user_peers.clear()
             self._notify_change()
             logger.info("All peer connections cleaned up")
         except Exception:

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, String, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, String, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -26,6 +26,9 @@ class User(TimestampMixin, Base):
     username: Mapped[str] = mapped_column(String(50), nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    avatar: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    bio: Mapped[str | None] = mapped_column(String(500), nullable=True, default=None)
+    last_ip: Mapped[str | None] = mapped_column(String(45), nullable=True, default=None)
 
     tokens: Mapped[list["AuthToken"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
@@ -48,13 +51,17 @@ class ChatMessage(Base):
     __tablename__ = "chat_messages"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    username: Mapped[str] = mapped_column(String(20))
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, default=None)
+    username: Mapped[str] = mapped_column(String(50))  # guest display name; ignored for account senders
+    sender_type: Mapped[str] = mapped_column(String(10), default="guest")  # "guest" | "account" | "system"
     text: Mapped[str] = mapped_column(String(500))
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     message_type: Mapped[str] = mapped_column(String(20), default="message")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+    user: Mapped["User | None"] = relationship("User", foreign_keys=[user_id])
 
 
 class BirdDetection(Base):
