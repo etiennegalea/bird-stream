@@ -284,6 +284,7 @@
             bind:this={videoEl}
             controls
             autoplay
+            muted
             playsinline
             class="stream-viewport"
           >

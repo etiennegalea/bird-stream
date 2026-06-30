@@ -34,7 +34,7 @@ logger = logging.getLogger("main")
 async def lifespan(app: Litestar):
     logger.info("Application is starting up...")
     app.state.db = SessionLocal
-    audio, video = create_local_tracks(enable_audio=False)
+    audio, video = create_local_tracks(enable_audio=True)
     app.state.audio = audio
     app.state.video = video
 

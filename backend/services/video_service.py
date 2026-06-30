@@ -80,6 +80,7 @@ def create_local_tracks(play_from=False, decode=True, enable_audio=False):
         else:
             source = "0:"
         webcam = MediaPlayer(source, format="avfoundation", options=options)
+        audio = webcam.audio if enable_audio else None
     else:
         options = {
             "framerate": "30",
@@ -88,19 +89,16 @@ def create_local_tracks(play_from=False, decode=True, enable_audio=False):
             "video_bitrate": "1200k",
             "video_quality": "medium",
         }
-        if enable_audio:
-            options.update(
-                {
-                    "audio": "hw:0,0",
-                    "audio_format": "s16le",
-                    "audio_rate": "44100",
-                    "audio_channels": "2",
-                }
-            )
         webcam = MediaPlayer(video_source, format="v4l2", options=options)
+        if enable_audio:
+            audio_source = os.environ.get("AUDIO_SOURCE", "default")
+            audio_player = MediaPlayer(audio_source, format="alsa")
+            audio = audio_player.audio
+        else:
+            audio = None
 
     logger.info(f"VIDEO STREAM options: {options}")
-    return (webcam.audio if enable_audio else None), webcam.video
+    return audio, webcam.video
 
 
 def force_codec(pc, sender, forced_codec="video/H264"):
