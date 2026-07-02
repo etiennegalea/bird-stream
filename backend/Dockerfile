@@ -28,7 +28,6 @@ RUN uv sync --frozen --no-install-project --no-dev
 # Copy application source explicitly — keeps secrets (.env, .secrets.yaml)
 # and tests out of the image without relying solely on .dockerignore.
 COPY controllers/ controllers/
-COPY data/ data/
 COPY db/ db/
 COPY media/ media/
 COPY models/ models/
