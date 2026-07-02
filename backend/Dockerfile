@@ -34,7 +34,6 @@ COPY media/ media/
 COPY models/ models/
 COPY services/ services/
 COPY src/ src/
-COPY types/ types/
 COPY alembic.ini entrypoint.sh main.py server.py ./
 
 ENV PATH="/venv/bin:$PATH"
