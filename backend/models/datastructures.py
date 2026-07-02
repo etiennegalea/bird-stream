@@ -24,7 +24,7 @@ class RegisterRequest(BaseStruct):
 
 
 class LoginRequest(BaseStruct):
-    email: str
+    identifier: str  # email address or username
     password: str
 
 

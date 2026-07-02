@@ -22,10 +22,16 @@ def _get_user_id(request: Request) -> int | None:
 
 
 def _get_client_ip(request: Request) -> str | None:
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else None
+    raw = request.headers.get("x-forwarded-for")
+    if raw:
+        ip = raw.split(",")[0].strip()
+    elif request.client:
+        ip = request.client.host
+    else:
+        return None
+    if ip.startswith(("::ffff:", "::FFFF:")):
+        return ip[7:]
+    return ip
 
 
 class WebRTCController(Controller):

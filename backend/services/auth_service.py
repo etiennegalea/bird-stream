@@ -90,6 +90,12 @@ async def register_user(
         if exists:
             return None, "Email already registered"
 
+        exists = session.execute(
+            select(User).where(User.username == username)
+        ).scalar_one_or_none()
+        if exists:
+            return None, "Username already taken"
+
         hashed = await hash_password(password)
         user = User(email=email, username=username, hashed_password=hashed)
         session.add(user)
@@ -109,24 +115,30 @@ async def register_user(
 
 async def login_user(
     db_factory: sessionmaker,
-    email: str,
+    identifier: str,
     password: str,
 ) -> tuple[str | None, dict | None, str]:
     """
     Returns (jwt_token, user_dict, error). On success error is ''.
+    identifier may be an email address or a username.
     """
-    email = email.lower().strip()
+    identifier = identifier.strip()
 
     with db_factory() as session:
+        if "@" in identifier:
+            lookup = User.email == identifier.lower()
+        else:
+            lookup = User.username == identifier
+
         user = session.execute(
-            select(User).where(User.email == email)
+            select(User).where(lookup)
         ).scalar_one_or_none()
 
         if not user:
-            return None, None, "Invalid email or password"
+            return None, None, "Invalid credentials"
 
         if not await verify_password(password, user.hashed_password):
-            return None, None, "Invalid email or password"
+            return None, None, "Invalid credentials"
 
         if not user.is_verified:
             return None, None, "Please verify your email before logging in"
@@ -139,6 +151,7 @@ async def login_user(
             "is_verified": user.is_verified,
             "avatar": user.avatar,
             "bio": user.bio,
+            "is_admin": user.is_admin,
         }
         return token, user_dict, ""
 
@@ -202,6 +215,7 @@ def _profile_dict(user: User) -> dict:
         "username": user.username,
         "bio": user.bio,
         "avatar": user.avatar,
+        "is_admin": user.is_admin,
     }
 
 
@@ -245,8 +259,16 @@ def update_user_profile(
         if not user:
             return None, "User not found"
 
-        if username is not None and (error := _set_username(user, username)):
-            return None, error
+        if username is not None:
+            username = username.strip()[:50]
+            if len(username) < 2:
+                return None, "Username must be at least 2 characters"
+            conflict = session.execute(
+                select(User).where(User.username == username, User.id != user_id)
+            ).scalar_one_or_none()
+            if conflict:
+                return None, "Username already taken"
+            user.username = username
 
         if bio is not None:
             user.bio = bio.strip()[:500] or None
@@ -258,7 +280,14 @@ def update_user_profile(
         return _profile_dict(user), ""
 
 
+def _to_ipv4(ip: str | None) -> str | None:
+    if ip and ip.startswith(("::ffff:", "::FFFF:")):
+        return ip[7:]
+    return ip
+
+
 def update_last_ip(db_factory: sessionmaker, user_id: int, ip: str | None) -> None:
+    ip = _to_ipv4(ip)
     if not ip:
         return
     with db_factory() as session:
@@ -333,3 +362,30 @@ def get_public_profile_by_id(db_factory: sessionmaker, user_id: int) -> dict | N
         if not user:
             return None
         return {"user_id": user.id, "username": user.username, "avatar": user.avatar, "bio": user.bio}
+
+
+async def seed_admin_user(
+    db_factory: sessionmaker,
+    email: str,
+    username: str,
+    password: str,
+) -> None:
+    """Create the default admin user if one does not already exist."""
+    with db_factory() as session:
+        exists = session.execute(
+            select(User).where(User.is_admin == True)  # noqa: E712
+        ).scalar_one_or_none()
+        if exists:
+            return
+
+        hashed = await hash_password(password)
+        user = User(
+            email=email.lower().strip(),
+            username=username.strip()[:50],
+            hashed_password=hashed,
+            is_verified=True,
+            is_admin=True,
+        )
+        session.add(user)
+        session.commit()
+        logger.info("Default admin user created: %s (%s)", username, email)

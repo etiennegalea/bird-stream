@@ -23,9 +23,10 @@ class User(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    username: Mapped[str] = mapped_column(String(50), nullable=False)
+    username: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     avatar: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     bio: Mapped[str | None] = mapped_column(String(500), nullable=True, default=None)
     last_ip: Mapped[str | None] = mapped_column(String(45), nullable=True, default=None)

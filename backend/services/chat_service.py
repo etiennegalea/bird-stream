@@ -43,6 +43,8 @@ class ChatService:
         self.account_sockets: set[WebSocket] = set()
         self.user_id_map: dict[WebSocket, int | None] = {}
         self.rate_limiters: dict[WebSocket, LeakyBucket] = {}
+        self.ip_map: dict[WebSocket, str | None] = {}
+        self.blocked_ips: set[str] = set()
 
     def active_usernames(self) -> set[str]:
         return set(self.active_connections.values())
@@ -53,15 +55,56 @@ class ChatService:
     def get_user_id(self, websocket: WebSocket) -> int | None:
         return self.user_id_map.get(websocket)
 
+    def is_ip_blocked(self, ip: str | None) -> bool:
+        return bool(ip and ip in self.blocked_ips)
+
     def check_rate_limit(self, websocket: WebSocket) -> bool:
         """Return False if the sender has exceeded their send rate."""
         bucket = self.rate_limiters.get(websocket)
         return bucket.consume() if bucket else True
 
-    async def connect(self, websocket: WebSocket, username: str, is_account: bool, user_id: int | None, db_factory) -> None:
+    def get_connected_users(self) -> dict:
+        """Return structured participant info for the admin panel."""
+        accounts = []
+        guests = []
+        for ws, username in self.active_connections.items():
+            ip = self.ip_map.get(ws)
+            if ws in self.account_sockets:
+                accounts.append({
+                    "username": username,
+                    "user_id": self.user_id_map.get(ws),
+                    "ip": ip,
+                })
+            else:
+                guests.append({"username": username, "ip": ip})
+        accounts.sort(key=lambda x: x["username"])
+        guests.sort(key=lambda x: x["username"])
+        return {
+            "accounts": accounts,
+            "guests": guests,
+            "blocked_ips": sorted(self.blocked_ips),
+        }
+
+    async def block_ip(self, ip: str) -> int:
+        """Block an IP and close any matching active connections. Returns closed count."""
+        self.blocked_ips.add(ip)
+        to_close = [ws for ws, stored_ip in self.ip_map.items() if stored_ip == ip]
+        for ws in to_close:
+            try:
+                await ws.close()
+            except Exception:
+                pass
+            self.disconnect(ws)
+        return len(to_close)
+
+    def unblock_ip(self, ip: str) -> None:
+        self.blocked_ips.discard(ip)
+
+    async def connect(self, websocket: WebSocket, username: str, is_account: bool, user_id: int | None, db_factory, client_ip: str | None = None) -> None:
         await websocket.accept()
         self.active_connections[websocket] = username
         self.user_id_map[websocket] = user_id
+        self.ip_map[websocket] = client_ip
         self.rate_limiters[websocket] = LeakyBucket()
         if is_account:
             self.account_sockets.add(websocket)
@@ -96,6 +139,7 @@ class ChatService:
         self.account_sockets.discard(websocket)
         self.user_id_map.pop(websocket, None)
         self.rate_limiters.pop(websocket, None)
+        self.ip_map.pop(websocket, None)
         logger.info(f"Chat connection removed. Total users: {len(self.active_connections)}")
 
     async def broadcast_participants(self) -> None:

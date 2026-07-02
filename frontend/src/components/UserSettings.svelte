@@ -9,6 +9,7 @@
 
   const authState = get(auth);
   const token = authState?.token;
+  const isAdmin = authState?.user?.is_admin ?? false;
 
   // Profile fields
   let username = authState?.user?.username ?? '';
@@ -135,7 +136,10 @@
 <div class="settings-overlay" role="dialog" aria-modal="true">
   <div class="settings-card">
     <div class="settings-header">
-      <h2>Account Settings</h2>
+      <div class="settings-title-row">
+        <h2>Account Settings</h2>
+        {#if isAdmin}<span class="admin-tag">ADMIN</span>{/if}
+      </div>
       <button class="close-btn" on:click={() => dispatch('close')} aria-label="Close">✕</button>
     </div>
     <div class="settings-body">

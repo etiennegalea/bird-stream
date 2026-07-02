@@ -56,7 +56,7 @@ class AuthController(Controller):
 
     @post("/login")
     async def login(self, data: LoginRequest, state: State) -> dict:
-        token, user_dict, error = await auth_svc.login_user(state.db, data.email, data.password)
+        token, user_dict, error = await auth_svc.login_user(state.db, data.identifier, data.password)
         if error:
             code = 403 if "verify" in error else 401
             raise HTTPException(status_code=code, detail=error)

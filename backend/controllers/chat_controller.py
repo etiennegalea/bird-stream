@@ -71,13 +71,37 @@ def chat_usernames() -> list[str]:
     return sorted(chat_service.active_usernames())
 
 
+def _normalise_ip(ip: str | None) -> str | None:
+    if not ip:
+        return ip
+    # ::ffff:1.2.3.4 is IPv4-mapped IPv6 — strip the prefix to get plain IPv4
+    if ip.startswith(("::ffff:", "::FFFF:")):
+        return ip[7:]
+    return ip
+
+
+def _get_client_ip(socket: WebSocket) -> str | None:
+    forwarded = socket.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return _normalise_ip(forwarded.split(",")[0].strip())
+    real_ip = socket.headers.get("x-real-ip", "")
+    if real_ip:
+        return _normalise_ip(real_ip.strip())
+    return _normalise_ip(socket.client[0] if socket.client else None)
+
+
 @websocket("/chat")
 async def chat_endpoint(socket: WebSocket, state: State) -> None:
     raw_username = socket.query_params.get("username")
     username = raw_username[:20] if raw_username else "anon"
     is_account, user_id = _validate_token(socket.query_params.get("token", ""), username)
 
-    await chat_service.connect(socket, username, is_account, user_id, state.db)
+    client_ip = _get_client_ip(socket)
+    if chat_service.is_ip_blocked(client_ip):
+        await socket.close(code=4403)
+        return
+
+    await chat_service.connect(socket, username, is_account, user_id, state.db, client_ip)
     logger.info(f"User {username} connected. Total users: {len(chat_service.active_connections)}")
 
     await socket.send_json({"type": "system", "text": "You joined the chat", "timestamp": int(_time() * 1000)})

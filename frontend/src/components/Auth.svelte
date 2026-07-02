@@ -14,6 +14,7 @@
   const dispatch = createEventDispatcher();
 
   let email = '';
+  let loginIdentifier = '';
   let username = '';
   let password = '';
   let confirmPassword = '';
@@ -45,6 +46,7 @@
   function switchTo(newView, keepEmail = false) {
     reset();
     if (!keepEmail) email = '';
+    loginIdentifier = '';
     username = '';
     password = '';
     confirmPassword = '';
@@ -69,7 +71,7 @@
   async function handleLogin() {
     error = '';
     loading = true;
-    const { ok, status, data } = await api('login', { email, password });
+    const { ok, status, data } = await api('login', { identifier: loginIdentifier, password });
     loading = false;
     if (ok) {
       auth.login(data.user, data.access_token);
@@ -137,7 +139,7 @@
       {#if info}<p class="success">{info}</p>{/if}
       {#if error}<p class="error">{error}</p>{/if}
       <form on:submit|preventDefault={handleLogin}>
-        <label>Email<input type="email" bind:value={email} required autocomplete="email" /></label>
+        <label>Email or username<input type="text" bind:value={loginIdentifier} required autocomplete="username" /></label>
         <label>Password<input type="password" bind:value={password} required autocomplete="current-password" /></label>
         <button type="submit" class="primary-btn" disabled={loading}>{loading ? 'Logging in…' : 'Log in'}</button>
       </form>
@@ -197,7 +199,7 @@
   .auth-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.7);
+    background: rgba(0, 0, 0, 0.35);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -205,20 +207,22 @@
   }
 
   .auth-card {
-    background: #1c1c1c;
-    border: 1px solid #333;
-    border-radius: 12px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 14px;
     padding: 2rem;
     width: 100%;
-    max-width: 400px;
+    max-width: 380px;
     position: relative;
-    color: #e0e0e0;
+    color: #333;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
   }
 
   h2 {
     margin: 0 0 1.25rem;
-    font-size: 1.4rem;
-    color: #fff;
+    font-size: 1.3rem;
+    color: #222;
+    font-weight: 700;
   }
 
   .close-btn {
@@ -227,73 +231,78 @@
     right: 0.75rem;
     background: none;
     border: none;
-    color: #888;
+    color: #aaa;
     font-size: 1rem;
     cursor: pointer;
     padding: 0.25rem 0.5rem;
-    border-radius: 4px;
+    border-radius: 6px;
+    line-height: 1;
   }
-  .close-btn:hover { color: #fff; background: rgba(255,255,255,0.08); }
+  .close-btn:hover { color: #555; background: #f0f0f0; }
 
-  form { display: flex; flex-direction: column; gap: 0.9rem; }
+  form { display: flex; flex-direction: column; gap: 0.85rem; }
 
   label {
     display: flex;
     flex-direction: column;
     gap: 0.3rem;
-    font-size: 0.85rem;
-    color: #aaa;
+    font-size: 0.82rem;
+    color: #777;
   }
 
   input {
     padding: 0.55rem 0.75rem;
-    background: #141414;
-    border: 1px solid #444;
-    border-radius: 6px;
-    color: #e0e0e0;
+    background: #fafafa;
+    border: 1px solid #d0d0d0;
+    border-radius: 8px;
+    color: #333;
     font-size: 0.95rem;
     outline: none;
+    font-family: inherit;
+    transition: border-color 0.15s;
   }
-  input:focus { border-color: #8C3523; }
+  input:focus { border-color: #E87530; background: #fff; }
 
   .primary-btn {
     margin-top: 0.25rem;
     padding: 0.65rem;
-    background: #8C3523;
+    background: #B35610;
     color: #fff;
     border: none;
-    border-radius: 6px;
+    border-radius: 8px;
     font-size: 0.95rem;
     font-weight: 600;
     cursor: pointer;
     transition: background 0.15s;
   }
-  .primary-btn:hover:not(:disabled) { background: #6F2B1A; }
-  .primary-btn:disabled { opacity: 0.6; cursor: default; }
+  .primary-btn:hover:not(:disabled) { background: #8A3C06; }
+  .primary-btn:disabled { opacity: 0.55; cursor: default; }
 
   .auth-links {
     margin-top: 1rem;
     display: flex;
     gap: 0.5rem;
     justify-content: center;
-    font-size: 0.85rem;
+    font-size: 0.83rem;
     flex-wrap: wrap;
+    color: #888;
   }
 
   .link-btn {
     background: none;
     border: none;
-    color: #d46050;
+    color: #B35610;
     cursor: pointer;
     font-size: inherit;
     padding: 0;
     text-decoration: underline;
+    text-underline-offset: 2px;
   }
-  .link-btn:hover { color: #e07868; }
+  .link-btn:hover { color: #C96120; }
 
-  .sep { color: #555; }
+  .sep { color: #ccc; }
 
-  .error { color: #f87171; font-size: 0.9rem; margin: 0.5rem 0; }
-  .success { color: #4ade80; font-size: 0.9rem; margin: 0.5rem 0; }
-  .muted { color: #888; font-size: 0.9rem; }
+  .error { color: #dc2626; font-size: 0.88rem; margin: 0.4rem 0; }
+  .success { color: #16a34a; font-size: 0.88rem; margin: 0.4rem 0; }
+  .muted { color: #999; font-size: 0.88rem; }
 </style>

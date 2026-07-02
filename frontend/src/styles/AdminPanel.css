@@ -1,0 +1,254 @@
+/* Admin panel — flex section inside .main-content, matching the chat section */
+
+.admin-drawer {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: #f8f8f8;
+  border-radius: 8px;
+  font-size: 0.72rem;
+}
+
+.admin-drawer-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1rem 0.7rem;
+  background: #fff;
+  border-bottom: 1px solid #eee;
+  border-radius: 8px 8px 0 0;
+}
+
+.admin-drawer-title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #333;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.admin-drawer-title svg {
+  color: #B35610;
+  flex-shrink: 0;
+}
+
+.admin-close-btn {
+  background: none;
+  border: none;
+  color: #aaa;
+  font-size: 0.95rem;
+  cursor: pointer;
+  padding: 0.2rem 0.45rem;
+  border-radius: 5px;
+  line-height: 1;
+}
+.admin-close-btn:hover { color: #555; background: #f0f0f0; }
+
+.admin-drawer-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.5rem 0;
+}
+
+/* Section headers */
+.admin-group {
+  margin-bottom: 0.15rem;
+}
+
+.admin-group-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1rem 0.3rem;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #999;
+  text-transform: uppercase;
+}
+
+.admin-count-badge {
+  background: #ebebeb;
+  color: #666;
+  font-size: 0.58rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 10px;
+  line-height: 1.5;
+}
+
+/* User rows */
+.admin-user-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.4rem 1rem;
+  transition: background 0.1s;
+}
+.admin-user-row:hover { background: #fff; }
+
+.admin-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  object-fit: cover;
+}
+
+.admin-avatar-placeholder {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #B35610;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.admin-avatar-guest {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #ebebeb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #666;
+}
+
+.admin-user-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-username {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.admin-stream-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #4ade80;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+.admin-ip {
+  font-size: 0.65rem;
+  color: #bbb;
+  font-family: monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+.admin-email {
+  font-size: 0.65rem;
+  color: #aaa;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-block-btn {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid #e0d0c8;
+  color: #B35610;
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+  white-space: nowrap;
+}
+.admin-block-btn:hover { background: #B35610; color: #fff; border-color: #B35610; }
+.admin-block-btn:disabled { opacity: 0.3; cursor: default; }
+
+/* Blocked IPs section */
+.admin-blocked-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.3rem 1rem;
+}
+
+.admin-blocked-ip {
+  flex: 1;
+  font-size: 0.72rem;
+  font-family: monospace;
+  color: #555;
+}
+
+.admin-unblock-btn {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid #ddd;
+  color: #888;
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: background 0.1s, color 0.1s;
+}
+.admin-unblock-btn:hover { background: #f0f0f0; color: #444; }
+
+.admin-empty {
+  padding: 0.3rem 1rem;
+  font-size: 0.72rem;
+  color: #bbb;
+  font-style: italic;
+}
+
+.admin-error {
+  padding: 0.75rem 1rem;
+  font-size: 0.78rem;
+  color: #dc2626;
+}
+
+.admin-divider {
+  height: 1px;
+  background: #eee;
+  margin: 0.4rem 0;
+}
+
+.admin-refresh-row {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0.45rem 1rem;
+  border-top: 1px solid #eee;
+  background: #fff;
+  border-radius: 0 0 8px 8px;
+}
+
+.admin-refresh-label {
+  font-size: 0.62rem;
+  color: #ccc;
+}

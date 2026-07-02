@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -12,6 +13,7 @@ _backend_dir = Path(__file__).resolve().parent
 load_dotenv(_backend_dir / ".env")                  # local overrides (DB URLs, etc.)
 load_dotenv(_backend_dir.parent / ".env")           # root .env (shared secrets)
 
+from controllers.admin_controller import AdminController
 from controllers.auth_controller import AuthController
 from controllers.chat_controller import chat_endpoint, chat_usernames
 from controllers.health_controller import health_check
@@ -20,6 +22,7 @@ from controllers.queue_controller import queue_endpoint
 from controllers.weather_controller import weather_endpoint
 from controllers.webrtc_controller import WebRTCController
 from db.session import SessionLocal
+from services.auth_service import seed_admin_user
 from services.queue_service import QueueService
 from services.video_service import create_local_tracks
 from services.weather_service import fetch_weather_periodically
@@ -45,6 +48,13 @@ async def lifespan(app: Litestar):
         fetch_weather_periodically(cache_expiration=3600)
     )
 
+    await seed_admin_user(
+        SessionLocal,
+        email=os.environ.get("ADMIN_EMAIL", "admin@birb.local"),
+        username=os.environ.get("ADMIN_USERNAME", "admin"),
+        password=os.environ.get("ADMIN_PASSWORD", "admin1234"),
+    )
+
     RTCRtpSender.TRANSPORT_POOL_SIZE = 1000
     RTCRtpSender.TRANSPORT_PORT_MIN = 49152
     RTCRtpSender.TRANSPORT_PORT_MAX = 65535
@@ -68,6 +78,7 @@ app = Litestar(
         weather_endpoint,
         WebRTCController,
         AuthController,
+        AdminController,
         chat_endpoint,
         chat_usernames,
         peer_count_endpoint,

@@ -186,7 +186,7 @@
 .popup-avatar-initial {
   width: 100%;
   height: 100%;
-  background: #8C3523;
+  background: #E87530;
   color: #fff;
   display: flex;
   align-items: center;
@@ -364,14 +364,14 @@
   padding: 0;
   font-size: inherit;
   font-style: inherit;
-  color: #8c3523;
+  color: #B35610;
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
 .sign-in-link:hover {
-  color: #6f2b1a;
+  color: #C96120;
 }
 
 /* Join prompt */
@@ -408,7 +408,7 @@
 .join-btn {
   margin-top: 0.5rem;
   padding: 0.5rem 1.4rem;
-  background: #8C3523;
+  background: #E87530;
   color: #fff;
   border: none;
   border-radius: 6px;
@@ -417,7 +417,7 @@
   cursor: pointer;
   transition: background 0.15s;
 }
-.join-btn:hover { background: #6F2B1A; }
+.join-btn:hover { background: #C96120; }
 
 .cycle-btn {
   background: none;
@@ -425,7 +425,7 @@
   border-radius: 50%;
   cursor: pointer;
   font-size: 0.85rem;
-  color: #8c3523;
+  color: #B35610;
   width: 20px;
   height: 20px;
   padding: 0;

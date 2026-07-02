@@ -253,7 +253,7 @@
         <circle cx="32" cy="20" r="12" fill="#e8e0d8"/>
         <circle cx="36" cy="17" r="3.5" fill="#222"/>
         <circle cx="37" cy="16.5" r="1" fill="#fff"/>
-        <polygon points="32,22 40,24 32,26" fill="#8C3523"/>
+        <polygon points="32,22 40,24 32,26" fill="#E87530"/>
         <path d="M14 36 Q4 30 8 44 Q14 48 20 42" fill="#e8e0d8"/>
         <path d="M50 36 Q60 30 56 44 Q50 48 44 42" fill="#e8e0d8"/>
       </svg>

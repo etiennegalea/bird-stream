@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
+  import AdminPanel from './components/AdminPanel.svelte';
   import Auth from './components/Auth.svelte';
   import ChatRoom from './components/ChatRoom.svelte';
   import UserSettings from './components/UserSettings.svelte';
@@ -30,6 +31,7 @@
   let resetToken = '';
   let verifyToken = '';
   let isSettingsOpen = false;
+  let isAdminPanelOpen = false;
   let isMenuOpen = false;
   let menuWrapEl;
 
@@ -215,9 +217,21 @@
   }
 
   function toggleChat() {
-    isChatVisible = !isChatVisible;
-    if (isChatVisible) {
+    if (!isChatVisible) {
+      isChatVisible = true;
+      isAdminPanelOpen = false;
       hasUnreadMessages = false;
+    } else {
+      isChatVisible = false;
+    }
+  }
+
+  function toggleAdmin() {
+    if (!isAdminPanelOpen) {
+      isAdminPanelOpen = true;
+      isChatVisible = false;
+    } else {
+      isAdminPanelOpen = false;
     }
   }
 
@@ -245,7 +259,7 @@
         });
         if (resp.ok) {
           const data = await resp.json();
-          auth.updateUser({ username: data.username, avatar: data.avatar, bio: data.bio });
+          auth.updateUser({ username: data.username, avatar: data.avatar, bio: data.bio, is_admin: data.is_admin });
         }
       } catch (_) { /* non-critical */ }
     }
@@ -269,12 +283,16 @@
 
     <!-- User avatar menu (top-right) -->
     <div class="user-menu-wrap" bind:this={menuWrapEl}>
-      <button
-        class="avatar-btn"
-        on:click={() => isMenuOpen = !isMenuOpen}
-        aria-label="User menu"
-        aria-expanded={isMenuOpen}
-      >
+      <div class="avatar-trigger">
+        {#if $auth?.user?.is_admin}
+          <span class="admin-tag">ADMIN</span>
+        {/if}
+        <button
+          class="avatar-btn"
+          on:click={() => isMenuOpen = !isMenuOpen}
+          aria-label="User menu"
+          aria-expanded={isMenuOpen}
+        >
         {#if $auth?.user?.avatar}
           <img src={$auth.user.avatar} alt="Profile" class="avatar-img" />
         {:else if $auth?.user?.username}
@@ -285,6 +303,7 @@
           </svg>
         {/if}
       </button>
+      </div>
 
       {#if isMenuOpen}
         <div class="user-menu" role="menu">
@@ -352,6 +371,14 @@
       <ChatRoom onNewMessage={handleNewMessage} {isChatVisible} onSignInClick={() => { authView = 'login'; }} />
     </div>
 
+    {#if $auth?.user?.is_admin}
+      <div class="admin-section" class:admin-hidden={!isAdminPanelOpen}>
+        {#if isAdminPanelOpen}
+          <AdminPanel on:close={() => isAdminPanelOpen = false} />
+        {/if}
+      </div>
+    {/if}
+
     <div class="side-buttons">
       <button
         class="chat-toggle-btn"
@@ -362,6 +389,19 @@
         <img src="/chat_icon.svg" alt="Chat Icon" />
         <span class="notification-marker" class:seen={!hasUnreadMessages}></span>
       </button>
+      {#if $auth?.user?.is_admin}
+        <button
+          class="admin-toggle-btn"
+          class:active={isAdminPanelOpen}
+          on:click={toggleAdmin}
+          aria-label={isAdminPanelOpen ? 'Close admin panel' : 'Open admin panel'}
+          title="Admin panel"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
+          </svg>
+        </button>
+      {/if}
     </div>
   </div>
 </div>
@@ -386,6 +426,24 @@
     position: absolute;
     top: 1rem;
     right: 1.25rem;
+  }
+
+  .avatar-trigger {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .admin-tag {
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: #fff;
+    background: #B35610;
+    padding: 2px 6px;
+    border-radius: 4px;
+    line-height: 1;
+    user-select: none;
   }
 
   .avatar-btn {
@@ -430,18 +488,18 @@
     top: calc(36px + 0.5rem);
     right: 0;
     min-width: 160px;
-    background: #1c1c1c;
-    border: 1px solid #333;
-    border-radius: 8px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 10px;
     padding: 0.4rem 0;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.10);
     z-index: 200;
   }
 
   .menu-username {
     padding: 0.4rem 0.85rem 0.3rem;
     font-size: 0.8rem;
-    color: #888;
+    color: #aaa;
     margin: 0;
     white-space: nowrap;
     overflow: hidden;
@@ -450,7 +508,7 @@
 
   .menu-divider {
     border: none;
-    border-top: 1px solid #2e2e2e;
+    border-top: 1px solid #eee;
     margin: 0.25rem 0;
   }
 
@@ -460,13 +518,13 @@
     padding: 0.45rem 0.85rem;
     background: none;
     border: none;
-    color: #ddd;
+    color: #444;
     font-size: 0.85rem;
     text-align: left;
     cursor: pointer;
     transition: background 0.1s, color 0.1s;
   }
-  .menu-item:hover { background: #8C3523; color: #fff; }
+  .menu-item:hover { background: #B35610; color: #fff; }
 
   .side-buttons {
     display: flex;
@@ -476,4 +534,21 @@
     padding: 8px 0;
     gap: 8px;
   }
+
+  .admin-toggle-btn {
+    position: relative;
+    width: 32px;
+    height: 32px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: #fafafa;
+    color: #aaa;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .admin-toggle-btn:hover { background: #fff; color: #B35610; border-color: #e0c8b8; }
+  .admin-toggle-btn.active { background: #B35610; color: #fff; border-color: #B35610; }
 </style>
