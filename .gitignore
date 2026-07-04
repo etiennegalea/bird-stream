@@ -141,3 +141,13 @@ dmypy.json
 
 # coturn keys
 coturn/certs/
+
+# Pi agent per-device config (copy from config.yaml.example)
+pi-agent/config.yaml
+
+# Mosquitto runtime
+mosquitto/data/
+mosquitto/log/
+
+# YOLO weights auto-downloaded by the detection worker
+backend/*.pt

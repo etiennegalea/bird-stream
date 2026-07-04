@@ -1,0 +1,49 @@
+# MediaMTX — media plane for Birdstream.
+# SRT in from the Pi → WHEP (WebRTC) + HLS out to browsers, no transcoding.
+
+logLevel: info
+
+# All publish/read requests are authorized by the backend.
+authMethod: http
+authHTTPAddress: http://backend:8051/mediamtx/auth
+
+# ── RTSP (INTERNAL ONLY — for the backend detection worker) ─────────────
+# Port 8554 is intentionally NOT published in docker-compose; the auth hook
+# allows rtsp reads unconditionally on that assumption. Do not expose it.
+rtsp: yes
+rtspAddress: :8554
+rtspTransports: [tcp]
+
+rtmp: no
+
+# ── SRT ingest (Pi publishes here) ────────────────────────────────────────
+# Pi streamid: publish:birdcam:<user>:<pass>
+srt: yes
+srtAddress: :8890
+
+# ── WebRTC / WHEP output (sub-second latency) ────────────────────────────
+# Player URL: http://<host>:8889/birdcam/whep
+webrtc: yes
+webrtcAddress: :8889
+webrtcLocalUDPAddress: :8189
+webrtcIPsFromInterfaces: yes
+# Add your public IP/domain so ICE candidates work across NAT:
+# webrtcAdditionalHosts: [stream.lifeofarobin.com]
+webrtcICEServers2:
+  - url: stun:stun.l.google.com:19302
+  # Your coturn (uncomment + fill from .env):
+  # - url: turn:turn.lifeofarobin.com:3478
+  #   username: <turn-user>
+  #   password: <turn-credential>
+
+# ── HLS output (scalable fallback, ~2-6s latency) ────────────────────────
+# Player URL: http://<host>:8888/birdcam/index.m3u8
+hls: yes
+hlsAddress: :8888
+hlsVariant: lowLatency
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+
+paths:
+  birdcam:
+    source: publisher   # only an authorized SRT publisher may feed this path

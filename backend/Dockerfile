@@ -22,8 +22,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && useradd --system --gid appgroup --no-create-home appuser
 
 # Install dependencies (separate layer for cache efficiency).
+# INSTALL_DETECTION=true also installs the optional bird-detection group
+# (ultralytics + torch CPU, big layer) used when DETECTION_ENABLED=true.
+ARG INSTALL_DETECTION=false
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-install-project --no-dev
+RUN if [ "$INSTALL_DETECTION" = "true" ]; then \
+        uv sync --frozen --no-install-project --no-dev --group detection; \
+    else \
+        uv sync --frozen --no-install-project --no-dev; \
+    fi
 
 # Copy application source explicitly — keeps secrets (.env, .secrets.yaml)
 # and tests out of the image without relying solely on .dockerignore.

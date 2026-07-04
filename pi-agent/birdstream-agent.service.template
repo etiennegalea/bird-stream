@@ -1,0 +1,17 @@
+[Unit]
+Description=Birdstream Pi Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@USER@
+WorkingDirectory=@WORKDIR@
+ExecStart=@WORKDIR@/.venv/bin/python @WORKDIR@/agent.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

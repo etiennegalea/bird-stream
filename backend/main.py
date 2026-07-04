@@ -16,13 +16,16 @@ load_dotenv(_backend_dir.parent / ".env")           # root .env (shared secrets)
 from controllers.admin_controller import AdminController
 from controllers.auth_controller import AuthController
 from controllers.chat_controller import chat_endpoint, chat_usernames
+from controllers.detection_controller import DetectionController
 from controllers.health_controller import health_check
+from controllers.mediamtx_controller import MediaMTXController
 from controllers.peer_count_controller import peer_count_endpoint
 from controllers.queue_controller import queue_endpoint
 from controllers.weather_controller import weather_endpoint
 from controllers.webrtc_controller import WebRTCController
 from db.session import SessionLocal
 from services.auth_service import seed_admin_user
+from services.detection_service import DetectionService, detection_enabled
 from services.queue_service import QueueService
 from services.video_service import create_local_tracks
 from services.weather_service import fetch_weather_periodically
@@ -48,6 +51,13 @@ async def lifespan(app: Litestar):
         fetch_weather_periodically(cache_expiration=3600)
     )
 
+    if detection_enabled():
+        app.state.detection_service = DetectionService()
+        app.state.detection_service.start()
+    else:
+        app.state.detection_service = None
+        logger.info("Bird detection disabled (set DETECTION_ENABLED=true to enable)")
+
     await seed_admin_user(
         SessionLocal,
         email=os.environ.get("ADMIN_EMAIL", "admin@birb.local"),
@@ -62,6 +72,8 @@ async def lifespan(app: Litestar):
     try:
         yield
     finally:
+        if getattr(app.state, "detection_service", None):
+            app.state.detection_service.stop()
         await pcs_manager.clean_up()
         logger.info("Application is shutting down...")
 
@@ -79,6 +91,8 @@ app = Litestar(
         WebRTCController,
         AuthController,
         AdminController,
+        MediaMTXController,
+        DetectionController,
         chat_endpoint,
         chat_usernames,
         peer_count_endpoint,

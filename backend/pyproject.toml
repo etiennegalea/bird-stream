@@ -25,6 +25,12 @@ dependencies = [
 ]
 
 [dependency-groups]
+# Bird object detection (DETECTION_ENABLED=true). Optional: pulls in torch CPU.
+# Install with: uv sync --group detection
+# In Docker: build with --build-arg INSTALL_DETECTION=true
+detection = [
+    "ultralytics>=8.3",
+]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",

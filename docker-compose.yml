@@ -22,6 +22,9 @@ services:
   backend:
     build:
       context: ./backend
+      args:
+        # true = bake ultralytics/torch into the image for bird detection
+        - INSTALL_DETECTION=${INSTALL_DETECTION:-false}
     container_name: stream-backend
     depends_on:
       db:
@@ -31,6 +34,14 @@ services:
       - "8051:8051/udp"
     env_file:
       - .env
+    environment:
+      # Bird object detection (worker runs inside the backend container)
+      - DETECTION_ENABLED=${DETECTION_ENABLED:-false}
+      - DETECTION_STREAM_URL=${DETECTION_STREAM_URL:-rtsp://mediamtx:8554/birdcam}
+      - DETECTION_MODEL=${DETECTION_MODEL:-yolo11n.pt}
+      - DETECTION_FPS=${DETECTION_FPS:-2}
+      - DETECTION_CONF=${DETECTION_CONF:-0.4}
+      - DETECTION_CLASSES=${DETECTION_CLASSES:-bird}
     volumes:
       - ./backend:/app
     restart: unless-stopped
@@ -53,6 +64,36 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - app-network
+
+  mediamtx:
+    image: bluenviron/mediamtx:1.13.0
+    container_name: mediamtx
+    ports:
+      - "8890:8890/udp" # SRT ingest (Pi publishes here)
+      - "8889:8889/tcp" # WebRTC / WHEP
+      - "8189:8189/udp" # WebRTC ICE (UDP mux)
+      - "8888:8888/tcp" # HLS
+    volumes:
+      - ./mediamtx/mediamtx.yml:/mediamtx.yml:ro
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    ports:
+      - "1883:1883/tcp"
+      # - "8883:8883/tcp" # TLS listener (enable in mosquitto.conf first)
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    restart: unless-stopped
     networks:
       - app-network
 

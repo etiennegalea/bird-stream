@@ -1,0 +1,38 @@
+# Birdstream Pi agent configuration.
+# Copy to config.yaml and edit — config.yaml is gitignored (holds per-device creds).
+
+device:
+  id: "pi-01"                 # unique per Pi; topics become camera/<id>/...
+
+mqtt:
+  host: "192.168.1.100"       # Proxmox box running mosquitto
+  port: 1883                  # 8883 when TLS is enabled
+  keepalive: 60
+  username: "pi-01"
+  password: "change-me"
+  tls:
+    enabled: false
+    ca_cert: null             # e.g. /etc/birdstream/ca.crt
+
+camera:
+  device: "/dev/video0"
+  width: 1280
+  height: 720
+  fps: 30
+  bitrate: "1500k"
+  use_hw_acceleration: true   # h264_v4l2m2m; set false for libx264
+
+overlay:                      # timestamp burned in on the Pi (FFmpeg drawtext)
+  enabled: true
+  time_format: "%Y-%m-%d %H:%M:%S"
+  fontfile: "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+  fontsize: 24
+
+stream:
+  auto_start: true            # start streaming on boot if srt.host is set
+  srt:                        # MediaMTX SRT ingest on the Proxmox box
+    host: "192.168.1.100"
+    port: 8890
+    path: "birdcam"           # MediaMTX path name
+    username: "picam"         # must match MEDIAMTX_PUBLISH_USER on the backend
+    password: "change-me"     # must match MEDIAMTX_PUBLISH_PASSWORD
