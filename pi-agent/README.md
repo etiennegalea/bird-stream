@@ -48,6 +48,6 @@ Publish JSON to `camera/<id>/control`. Optional `request_id` is echoed in replie
 
 - `agent.py` — the agent
 - `config.yaml.example` — template; real `config.yaml` is gitignored
-- `install.sh` — idempotent installer (apt deps, venv, config, systemd)
+- `install.sh` — idempotent installer (apt deps, uv-managed venv, config, systemd)
 - `birdstream-agent.service.template` — unit templated with actual user/path
 - `requirements.txt` — pinned deps

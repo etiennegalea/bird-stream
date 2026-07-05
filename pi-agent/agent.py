@@ -365,11 +365,14 @@ class CameraAgent:
                                {"ok": False, "error": r.stderr.strip()},
                                payload.get("request_id"))
             return
-        pip = os.path.join(AGENT_DIR, ".venv", "bin", "pip")
-        if os.path.exists(pip):
-            subprocess.run([pip, "install", "-q", "-r",
+        uv = shutil.which("uv") or os.path.expanduser("~/.local/bin/uv")
+        py = os.path.join(AGENT_DIR, ".venv", "bin", "python")
+        if os.path.exists(uv) and os.path.exists(py):
+            subprocess.run([uv, "pip", "install", "-q", "--python", py, "-r",
                             os.path.join(AGENT_DIR, "requirements.txt")],
                            capture_output=True)
+        else:
+            logger.warning("uv or venv not found, skipping dependency sync")
         self.publish_reply("update",
                            {"ok": True, "output": r.stdout.strip(),
                             "restarting": True},

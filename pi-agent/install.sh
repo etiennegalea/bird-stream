@@ -16,18 +16,29 @@ ALLOW_REBOOT=false
 log() { echo -e "\033[1;32m[install]\033[0m $*"; }
 
 # ── system packages ──────────────────────────────────────────────────────
-log "Installing system packages (ffmpeg, python3-venv, v4l-utils, fonts, git)..."
+log "Installing system packages (ffmpeg, v4l-utils, fonts, git, curl)..."
 sudo apt-get update -qq
-sudo apt-get install -y -qq ffmpeg python3-venv v4l-utils fonts-dejavu-core git
+sudo apt-get install -y -qq ffmpeg v4l-utils fonts-dejavu-core git curl
 
-# ── python venv ──────────────────────────────────────────────────────────
-if [[ ! -d "$AGENT_DIR/.venv" ]]; then
-  log "Creating virtualenv..."
-  python3 -m venv "$AGENT_DIR/.venv"
+# ── uv ───────────────────────────────────────────────────────────────────
+if ! command -v uv >/dev/null 2>&1; then
+  if [[ -x "$HOME/.local/bin/uv" ]]; then
+    export PATH="$HOME/.local/bin:$PATH"
+  else
+    log "Installing uv..."
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    export PATH="$HOME/.local/bin:$PATH"
+  fi
 fi
-log "Installing pinned Python dependencies..."
-"$AGENT_DIR/.venv/bin/pip" install -q --upgrade pip
-"$AGENT_DIR/.venv/bin/pip" install -q -r "$AGENT_DIR/requirements.txt"
+log "Using uv $(uv --version | awk '{print $2}')"
+
+# ── python venv (managed by uv) ──────────────────────────────────────────
+if [[ ! -d "$AGENT_DIR/.venv" ]]; then
+  log "Creating virtualenv with uv..."
+  uv venv "$AGENT_DIR/.venv"
+fi
+log "Installing pinned Python dependencies with uv..."
+uv pip install -q --python "$AGENT_DIR/.venv/bin/python" -r "$AGENT_DIR/requirements.txt"
 
 # ── config ───────────────────────────────────────────────────────────────
 if [[ ! -f "$AGENT_DIR/config.yaml" ]]; then
