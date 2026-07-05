@@ -1,6 +1,8 @@
 services:
   traefik:
-    image: traefik:v3.3
+    # v3.6+ required with Docker Engine 29 (auto-negotiates the Docker API
+    # version; older traefik pins API 1.24 which Docker 29 rejects).
+    image: traefik:v3.6
     container_name: traefik
     command:
       - --providers.docker=true
