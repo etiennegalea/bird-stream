@@ -45,7 +45,12 @@ export const getApiBaseUrl = (ws = false) => {
     ? (window.location.protocol === 'https:' ? 'wss' : 'ws')
     : (window.location.protocol === 'https:' ? 'https' : 'http');
 
-  return `${protocol}://${import.meta.env.VITE_API_URL}`;
+  // Default: same-origin /api, proxied by nginx to the backend. The API then
+  // inherits the page's TLS automatically. VITE_API_URL remains as an
+  // explicit override (e.g. "localhost:8051" for vite dev against a bare
+  // backend, or a dedicated api.<domain>).
+  const host = import.meta.env.VITE_API_URL || `${window.location.host}/api`;
+  return `${protocol}://${host}`;
 };
 
 export const getTurnServers = () => {

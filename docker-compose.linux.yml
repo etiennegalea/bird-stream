@@ -1,4 +1,12 @@
 services:
+  traefik:
+    # Backend runs with host networking here — route /api to the host via the
+    # file provider instead of docker-label discovery.
+    volumes:
+      - ./traefik/hostnet-api.yml:/etc/traefik/dynamic/hostnet-api.yml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
   backend:
     ports: !reset []
     environment:
@@ -7,6 +15,10 @@ services:
       - "/dev/video0:/dev/video0"
     network_mode: host
     networks: !reset null
+    labels:
+      # No bridge IP under host networking; /api is routed by the file
+      # provider (traefik/hostnet-api.yml) instead of these labels.
+      traefik.enable: "false"
 
   coturn:
     network_mode: host

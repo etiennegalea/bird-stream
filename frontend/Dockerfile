@@ -22,6 +22,8 @@ RUN npm run build
 FROM nginx:alpine
 
 COPY --from=build /app/dist /usr/share/nginx/html
+# Static SPA config; traefik in front handles TLS and /api routing.
+COPY nginx.default.conf.template /etc/nginx/conf.d/default.conf
 
 # Expose port 80
 EXPOSE 80

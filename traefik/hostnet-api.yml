@@ -1,0 +1,35 @@
+# Traefik file-provider route for Linux deployments (docker-compose.linux.yml)
+# where the backend runs with network_mode: host and therefore has no bridge
+# IP for the docker provider to discover. Mounted into /etc/traefik/dynamic/
+# by the linux override only — not loaded on the default bridge setup.
+
+http:
+  routers:
+    api-hostnet:
+      rule: PathPrefix(`/api`)
+      entryPoints: [websecure]
+      middlewares: [api-strip-hostnet]
+      service: api-hostnet
+    api-mediamtx-hostnet:
+      rule: PathPrefix(`/api/mediamtx`)
+      entryPoints: [websecure]
+      middlewares: [internal-only-hostnet, api-strip-hostnet]
+      service: api-hostnet
+
+  middlewares:
+    api-strip-hostnet:
+      stripPrefix:
+        prefixes: [/api]
+    internal-only-hostnet:
+      ipAllowList:
+        sourceRange:
+          - 127.0.0.1/32
+          - 10.0.0.0/8
+          - 172.16.0.0/12
+          - 192.168.0.0/16
+
+  services:
+    api-hostnet:
+      loadBalancer:
+        servers:
+          - url: http://host.docker.internal:8051

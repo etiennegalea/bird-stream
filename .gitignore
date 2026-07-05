@@ -151,3 +151,6 @@ mosquitto/log/
 
 # YOLO weights auto-downloaded by the detection worker
 backend/*.pt
+
+# Traefik ACME storage
+traefik/letsencrypt/

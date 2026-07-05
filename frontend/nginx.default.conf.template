@@ -1,0 +1,14 @@
+# Static SPA server. Reverse proxying (TLS, /api, /birdcam) is handled by
+# traefik in front of this container — see docker-compose.yml labels.
+server {
+    listen 80;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # SPA routing
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
