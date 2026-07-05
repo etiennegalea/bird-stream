@@ -4,31 +4,38 @@ services:
     # version; older traefik pins API 1.24 which Docker 29 rejects).
     image: traefik:v3.6
     container_name: traefik
+    # TLS terminates at Cloudflare's edge (Zero Trust tunnel). Traefik is a
+    # plain-HTTP router behind cloudflared — no ACME, no 443, no redirect.
+    # Point the tunnel's ingress at http://traefik:80 (or host port 80).
     command:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
       - --providers.file.directory=/etc/traefik/dynamic
       - --providers.file.watch=true
       - --entrypoints.web.address=:80
-      - --entrypoints.web.http.redirections.entrypoint.to=websecure
-      - --entrypoints.web.http.redirections.entrypoint.scheme=https
-      - --entrypoints.websecure.address=:443
-      - --entrypoints.websecure.http.tls=true
-      - --entrypoints.websecure.http.tls.certresolver=le
-      - --entrypoints.websecure.http.tls.domains[0].main=${DOMAIN:-stream.lifeofarobin.com}
-      - --certificatesresolvers.le.acme.email=${ACME_EMAIL:?set ACME_EMAIL in .env}
-      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
-      - --certificatesresolvers.le.acme.tlschallenge=true
     ports:
-      - "80:80"
-      - "443:443"
+      - "80:80" # LAN/tunnel access; public TLS is Cloudflare's job
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./traefik/letsencrypt:/letsencrypt
       - ./traefik/dynamic:/etc/traefik/dynamic:ro
     restart: unless-stopped
     networks:
       - app-network
+
+  # Cloudflare Zero Trust tunnel — uncomment to run it in this stack instead
+  # of on the host. Create the tunnel in the Zero Trust dashboard, set its
+  # public hostname ingress to http://traefik:80, and put the token in .env.
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   container_name: cloudflared
+  #   command: tunnel --no-autoupdate run
+  #   environment:
+  #     - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+  #   depends_on:
+  #     - traefik
+  #   restart: unless-stopped
+  #   networks:
+  #     - app-network
 
   frontend:
     build:
@@ -46,7 +53,7 @@ services:
     labels:
       traefik.enable: "true"
       traefik.http.routers.frontend.rule: PathPrefix(`/`)
-      traefik.http.routers.frontend.entrypoints: websecure
+      traefik.http.routers.frontend.entrypoints: web
       traefik.http.services.frontend.loadbalancer.server.port: "80"
     volumes:
       - ./frontend:/app
@@ -85,17 +92,19 @@ services:
       # /api/* -> backend (prefix stripped). Longer rules win in traefik, so
       # /api/mediamtx below shadows this one without explicit priorities.
       traefik.http.routers.api.rule: PathPrefix(`/api`)
-      traefik.http.routers.api.entrypoints: websecure
+      traefik.http.routers.api.entrypoints: web
       traefik.http.routers.api.middlewares: api-strip
       traefik.http.middlewares.api-strip.stripprefix.prefixes: /api
       traefik.http.services.api.loadbalancer.server.port: "8051"
-      # Shield the MediaMTX auth hook from the public internet — MediaMTX
-      # calls the backend directly on the docker network, never via traefik.
+      # Block the MediaMTX auth hook at the edge entirely — MediaMTX calls
+      # the backend directly on the docker network, never via traefik. Behind
+      # the Cloudflare tunnel every request has a private source IP, so an
+      # IP allowlist can't distinguish public traffic; deny all instead.
       traefik.http.routers.api-mediamtx.rule: PathPrefix(`/api/mediamtx`)
-      traefik.http.routers.api-mediamtx.entrypoints: websecure
-      traefik.http.routers.api-mediamtx.middlewares: internal-only,api-strip
+      traefik.http.routers.api-mediamtx.entrypoints: web
+      traefik.http.routers.api-mediamtx.middlewares: deny-all
       traefik.http.routers.api-mediamtx.service: api
-      traefik.http.middlewares.internal-only.ipallowlist.sourcerange: 127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+      traefik.http.middlewares.deny-all.ipallowlist.sourcerange: 255.255.255.255/32
     restart: unless-stopped
     networks:
       - app-network
@@ -136,7 +145,7 @@ services:
       # WHEP signaling + built-in player at https://<domain>/birdcam
       # (WebRTC media itself still flows over UDP 8189 / coturn.)
       traefik.http.routers.whep.rule: PathPrefix(`/birdcam`)
-      traefik.http.routers.whep.entrypoints: websecure
+      traefik.http.routers.whep.entrypoints: web
       traefik.http.services.whep.loadbalancer.server.port: "8889"
     restart: unless-stopped
     networks:
