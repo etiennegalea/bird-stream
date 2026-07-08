@@ -10,6 +10,7 @@ from sqlalchemy import select
 import services.auth_service as auth_svc
 from controllers.chat_controller import chat_service
 from models.orm import User
+from services.stream_settings_service import stream_settings
 from services.webrtc_service import pcs_manager
 
 logger = logging.getLogger("admin_controller")
@@ -33,6 +34,11 @@ def _require_admin(request: Request, db_factory) -> int:
 
 class BlockIpRequest(msgspec.Struct):
     ip: str
+
+
+class StreamSettingsRequest(msgspec.Struct):
+    video_enabled: bool | None = None
+    audio_enabled: bool | None = None
 
 
 class AdminController(Controller):
@@ -94,3 +100,22 @@ class AdminController(Controller):
         chat_service.unblock_ip(ip)
         logger.info("Admin unblocked IP %s", ip)
         return {"unblocked": ip}
+
+    @get("/stream-settings")
+    async def get_stream_settings(self, request: Request, state: State) -> dict:
+        _require_admin(request, state.db)
+        return stream_settings.snapshot()
+
+    @post("/stream-settings")
+    async def update_stream_settings(
+        self, request: Request, data: StreamSettingsRequest, state: State
+    ) -> dict:
+        user_id = _require_admin(request, state.db)
+        if data.video_enabled is None and data.audio_enabled is None:
+            raise HTTPException(status_code=400, detail="No settings provided")
+        settings = stream_settings.update(
+            video_enabled=data.video_enabled,
+            audio_enabled=data.audio_enabled,
+        )
+        logger.info("Admin (user_id=%s) set stream settings: %s", user_id, settings)
+        return settings

@@ -21,6 +21,10 @@ from controllers.health_controller import health_check
 from controllers.mediamtx_controller import MediaMTXController
 from controllers.peer_count_controller import peer_count_endpoint
 from controllers.queue_controller import queue_endpoint
+from controllers.stream_settings_controller import (
+    get_stream_settings,
+    stream_settings_endpoint,
+)
 from controllers.weather_controller import weather_endpoint
 from controllers.webrtc_controller import WebRTCController
 from db.session import SessionLocal
@@ -105,6 +109,8 @@ app = Litestar(
         chat_usernames,
         peer_count_endpoint,
         queue_endpoint,
+        get_stream_settings,
+        stream_settings_endpoint,
     ],
     lifespan=[lifespan],
     cors_config=cors_config,

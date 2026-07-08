@@ -21,6 +21,7 @@ from litestar import Controller, post
 from litestar.exceptions import HTTPException
 
 import services.auth_service as auth_svc
+from services.stream_settings_service import stream_settings
 
 logger = logging.getLogger("mediamtx_controller")
 
@@ -74,6 +75,12 @@ class MediaMTXController(Controller):
             if protocol == "rtsp":
                 logger.debug(f"Allow internal rtsp read path={path} ip={ip}")
                 return
+            # Admin kill-switch: while both video and audio are disabled, no
+            # new viewer sessions may start. (Per-track blocking of a live
+            # session is enforced client-side via /stream-settings.)
+            if stream_settings.fully_blocked():
+                logger.warning(f"Deny read (stream disabled by admin) path={path} proto={protocol} ip={ip}")
+                raise HTTPException(status_code=401, detail="Stream disabled by admin")
             if _check_read(data.get("query") or ""):
                 logger.debug(f"Allow read path={path} proto={protocol} ip={ip}")
                 return

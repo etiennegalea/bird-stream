@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
   import AdminPanel from './components/AdminPanel.svelte';
+  import StreamControls from './components/StreamControls.svelte';
   import Auth from './components/Auth.svelte';
   import ChatRoom from './components/ChatRoom.svelte';
   import UserSettings from './components/UserSettings.svelte';
@@ -43,10 +44,43 @@
   let isMenuOpen = false;
   let menuWrapEl;
 
+  // Global stream toggles (admin-controlled, enforced for every viewer).
+  let videoAllowed = true;
+  let audioAllowed = true;
+  let isStreamControlsOpen = false;
+  let streamControlsWrapEl;
+  let streamSettingsWs = null;
+
   function handleWindowClick(e) {
     if (isMenuOpen && menuWrapEl && !menuWrapEl.contains(e.target)) {
       isMenuOpen = false;
     }
+    if (isStreamControlsOpen && streamControlsWrapEl && !streamControlsWrapEl.contains(e.target)) {
+      isStreamControlsOpen = false;
+    }
+  }
+
+  function setupStreamSettingsWs() {
+    const ws = new WebSocket(`${getApiBaseUrl(true)}/stream-settings`);
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      videoAllowed = data.video_enabled;
+      audioAllowed = data.audio_enabled;
+      enforceAudioBlock();
+    };
+    ws.onclose = () => setTimeout(setupStreamSettingsWs, 5000);
+    streamSettingsWs = ws;
+  }
+
+  // Audio block: force-mute the player and keep it muted.
+  function enforceAudioBlock() {
+    if (!audioAllowed && videoEl && !videoEl.muted) {
+      videoEl.muted = true;
+    }
+  }
+
+  function handleVolumeChange() {
+    enforceAudioBlock();
   }
 
   function startFpsTracking() {
@@ -300,11 +334,16 @@
     }
 
     setupPeerCountWs();
+    setupStreamSettingsWs();
     enterQueue();
 
     return () => {
       cleanup();
       if (peerCountWs) peerCountWs.close();
+      if (streamSettingsWs) {
+        streamSettingsWs.onclose = null; // prevent reconnect
+        streamSettingsWs.close();
+      }
     };
   });
 </script>
@@ -378,9 +417,18 @@
             muted
             playsinline
             class="stream-viewport"
+            class:audio-blocked={!audioAllowed}
+            on:volumechange={handleVolumeChange}
           >
             <track kind="captions" label="Captions" />
           </video>
+          {#if !videoAllowed}
+            <div class="video-disabled-overlay">
+              <img src="/birb-no-bg.png" alt="Birb" class="video-disabled-img" />
+              <p class="video-disabled-title">Video is currently disabled</p>
+              <p class="video-disabled-sub">The camera stream has been turned off by an admin.</p>
+            </div>
+          {/if}
         {/if}
       </div>
 
@@ -436,6 +484,24 @@
             <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
           </svg>
         </button>
+        <div class="stream-controls-wrap" bind:this={streamControlsWrapEl}>
+          <button
+            class="stream-toggle-btn"
+            class:active={isStreamControlsOpen}
+            class:blocking={!videoAllowed || !audioAllowed}
+            on:click={() => isStreamControlsOpen = !isStreamControlsOpen}
+            aria-label={isStreamControlsOpen ? 'Close stream controls' : 'Open stream controls'}
+            aria-expanded={isStreamControlsOpen}
+            title="Stream controls"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+            </svg>
+          </button>
+          {#if isStreamControlsOpen}
+            <StreamControls />
+          {/if}
+        </div>
       {/if}
     </div>
   </div>
@@ -586,4 +652,76 @@
   }
   .admin-toggle-btn:hover { background: #fff; color: #B35610; border-color: #e0c8b8; }
   .admin-toggle-btn.active { background: #B35610; color: #fff; border-color: #B35610; }
+
+  .stream-controls-wrap {
+    position: relative;
+  }
+
+  .stream-toggle-btn {
+    position: relative;
+    width: 32px;
+    height: 32px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: #fafafa;
+    color: #aaa;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .stream-toggle-btn:hover { background: #fff; color: #B35610; border-color: #e0c8b8; }
+  .stream-toggle-btn.active { background: #B35610; color: #fff; border-color: #B35610; }
+  .stream-toggle-btn.blocking::after {
+    content: '';
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #d63a1f;
+  }
+
+  /* Video block: opaque overlay on the stream viewport (audio keeps playing). */
+  .video-disabled-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #111;
+    border-radius: 8px;
+    color: #fff;
+    gap: 0.25rem;
+    z-index: 3;
+  }
+
+  .video-disabled-img {
+    width: 90px;
+    opacity: 0.85;
+    margin-bottom: 0.5rem;
+  }
+
+  .video-disabled-title {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #E87530;
+  }
+
+  .video-disabled-sub {
+    margin: 0;
+    font-size: 0.8rem;
+    color: #888;
+  }
+
+  /* Audio block: hide the volume controls (WebKit/Blink); forced mute covers the rest. */
+  video.audio-blocked::-webkit-media-controls-volume-slider,
+  video.audio-blocked::-webkit-media-controls-mute-button,
+  video.audio-blocked::-webkit-media-controls-volume-control-container {
+    display: none !important;
+  }
 </style>
