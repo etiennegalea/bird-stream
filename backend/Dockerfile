@@ -40,6 +40,7 @@ COPY controllers/ controllers/
 COPY db/ db/
 COPY media/ media/
 COPY models/ models/
+COPY scripts/ scripts/
 COPY services/ services/
 COPY src/ src/
 COPY alembic.ini entrypoint.sh main.py server.py ./
