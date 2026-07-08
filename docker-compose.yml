@@ -150,6 +150,7 @@ services:
       # (WebRTC media itself still flows over UDP 8189 / coturn.)
       traefik.http.routers.whep.rule: PathPrefix(`/birdcam`)
       traefik.http.routers.whep.entrypoints: web
+      traefik.http.routers.whep.service: whep
       traefik.http.services.whep.loadbalancer.server.port: "8889"
       # HLS (plain HTTP -> works through the Cloudflare tunnel, ~2-6s latency)
       # Player URL: https://<domain>/hls/birdcam/index.m3u8

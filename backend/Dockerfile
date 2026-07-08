@@ -26,7 +26,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # (ultralytics + torch CPU, big layer) used when DETECTION_ENABLED=true.
 ARG INSTALL_DETECTION=false
 COPY pyproject.toml uv.lock ./
-RUN if [ "$INSTALL_DETECTION" = "true" ]; then \
+# Cache mount: package downloads survive across builds (BuildKit).
+RUN --mount=type=cache,target=/root/.cache/uv \
+    if [ "$INSTALL_DETECTION" = "true" ]; then \
         uv sync --frozen --no-install-project --no-dev --group detection; \
     else \
         uv sync --frozen --no-install-project --no-dev; \
