@@ -17,6 +17,9 @@
   const streamBase = import.meta.env.VITE_STREAM_URL || window.location.origin;
   const WHEP_URL = `${streamBase}/birdcam/whep`;
   const HLS_URL = `${streamBase}/hls/birdcam/index.m3u8`;
+  // Temporarily off while debugging WHEP — failures should be visible, not
+  // silently absorbed by the fallback. Re-enable once WHEP is confirmed.
+  const ENABLE_HLS_FALLBACK = false;
 
   let isConnected = false;
   let error = null;
@@ -182,8 +185,12 @@
     try {
       await startWhep();
     } catch (err) {
-      console.warn('WHEP failed, falling back to HLS:', err);
-      startHls();
+      console.warn('WHEP failed:', err);
+      if (ENABLE_HLS_FALLBACK) {
+        startHls();
+      } else {
+        error = `WHEP failed: ${err?.message || err}`;
+      }
     }
   }
 
@@ -229,10 +236,12 @@
           if (isConnected) {
             isConnected = false;
             error = 'Connection lost. Please refresh to try again.';
-          } else {
+          } else if (ENABLE_HLS_FALLBACK) {
             // Never got media over WebRTC (UDP likely blocked) -> try HLS.
             cleanup();
             startHls();
+          } else {
+            error = 'WHEP: WebRTC connection failed (ICE) — media path unreachable.';
           }
           break;
       }
