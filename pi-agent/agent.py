@@ -19,6 +19,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections import deque
 
 import yaml
 import paho.mqtt.client as mqtt
@@ -272,19 +273,24 @@ class CameraAgent:
                 self.stream_details = {}
 
     def _read_stderr(self, process):
+        tail = deque(maxlen=15)  # keep the last lines for crash reporting
         while process.poll() is None:
             line = process.stderr.readline()
             if not line:
                 break
+            tail.append(line.strip())
             logger.debug(f"FFmpeg: {line.strip()}")
         exit_code = process.poll()
         if exit_code:
+            stderr_tail = " | ".join(tail)[-400:]
+            logger.error(f"FFmpeg crashed (exit {exit_code}): {stderr_tail}")
             with self.lock:
                 if self.stream_process == process:
                     self.stream_process = None
                     self.stream_details = {}
-                    self.publish_status("error",
-                                        f"Stream crashed (exit {exit_code})")
+                    self.publish_status(
+                        "error",
+                        f"Stream crashed (exit {exit_code}): {stderr_tail}")
 
     def _is_streaming(self) -> bool:
         return self.stream_process is not None and self.stream_process.poll() is None
