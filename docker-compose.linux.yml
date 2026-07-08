@@ -1,28 +1,12 @@
-services:
-  traefik:
-    # Backend runs with host networking here — route /api to the host via the
-    # file provider instead of docker-label discovery.
-    volumes:
-      - ./traefik/hostnet-api.yml:/etc/traefik/dynamic/hostnet-api.yml:ro
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-  backend:
-    ports: !reset []
-    environment:
-      # Camera lives on the Pi now; consume MediaMTX's internal RTSP feed.
-      # Host networking -> loopback-published port instead of service name.
-      VIDEO_SOURCE: rtsp://127.0.0.1:8554/birdcam
-    network_mode: host
-    networks: !reset null
-    labels:
-      # No bridge IP under host networking; /api is routed by the file
-      # provider (traefik/hostnet-api.yml) instead of these labels.
-      traefik.enable: "false"
-
-  coturn:
-    network_mode: host
-    networks: !reset null
+# Linux production overrides.
+#
+# Since the switch to WHEP/HLS (served by MediaMTX), the backend no longer
+# terminates WebRTC media, so host networking and coturn are gone — the base
+# compose file works as-is on Linux. This override only tunes networking.
+#
+# If you ever revive the legacy aiortc path (AIORTC_ENABLED=true), restore
+# the host-networking overrides for backend/coturn from git history and
+# re-mount traefik/hostnet-api.yml into traefik's dynamic config dir.
 
 networks:
   app-network:

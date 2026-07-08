@@ -13,6 +13,7 @@ services:
       - --providers.file.directory=/etc/traefik/dynamic
       - --providers.file.watch=true
       - --entrypoints.web.address=:80
+      - --accesslog=true
     ports:
       - "80:80" # LAN/tunnel access; public TLS is Cloudflare's job
     volumes:
@@ -150,6 +151,14 @@ services:
       traefik.http.routers.whep.rule: PathPrefix(`/birdcam`)
       traefik.http.routers.whep.entrypoints: web
       traefik.http.services.whep.loadbalancer.server.port: "8889"
+      # HLS (plain HTTP -> works through the Cloudflare tunnel, ~2-6s latency)
+      # Player URL: https://<domain>/hls/birdcam/index.m3u8
+      traefik.http.routers.hls.rule: PathPrefix(`/hls`)
+      traefik.http.routers.hls.entrypoints: web
+      traefik.http.routers.hls.middlewares: hls-strip
+      traefik.http.middlewares.hls-strip.stripprefix.prefixes: /hls
+      traefik.http.routers.hls.service: hls
+      traefik.http.services.hls.loadbalancer.server.port: "8888"
     restart: unless-stopped
     networks:
       - app-network
@@ -168,23 +177,9 @@ services:
     networks:
       - app-network
 
-  coturn:
-    build: ./coturn
-    container_name: coturn
-    volumes:
-      - ./coturn/turnserver.conf:/etc/turnserver.conf
-      - ./coturn/certs:/etc/coturn/certs
-    environment:
-      - DETECT_EXTERNAL_IP=yes
-      - DETECT_RELAY_IP=yes
-    restart: unless-stopped
-    healthcheck:
-      test: [ "CMD", "turnutils_stunclient", "localhost", "3478" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-      - app-network
+  # coturn removed: WHEP serves media directly from MediaMTX (one forwarded
+  # UDP port, 8189) — TURN is only needed when the server itself is
+  # unreachable. Restore from git history if the aiortc path is revived.
 
 networks:
   app-network:

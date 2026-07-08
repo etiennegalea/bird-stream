@@ -50,7 +50,7 @@ DEFAULT_CONFIG = {
         "height": 720,
         "fps": 30,
         "bitrate": "1500k",
-        "use_hw_acceleration": True,
+        "use_hw_acceleration": False,
     },
     "overlay": {
         "enabled": True,
@@ -160,14 +160,20 @@ class CameraAgent:
         ov = self.config.get("overlay", {})
         if not ov.get("enabled", True):
             return None
-        # Colons inside the localtime format need three backslashes: one level
-        # is consumed by the filtergraph parser, one by drawtext's text
-        # expansion argument splitter (verified against ffmpeg 6.x).
-        fmt = ov.get("time_format", "%Y-%m-%d %H:%M:%S").replace(":", r"\\\:")
         font = ov.get("fontfile", DEFAULT_CONFIG["overlay"]["fontfile"])
         size = ov.get("fontsize", 24)
+        fmt = ov.get("time_format", "%Y-%m-%d %H:%M:%S")
+        if fmt == "%Y-%m-%d %H:%M:%S":
+            # No-arg %{localtime} defaults to exactly this format and avoids
+            # colon-escaping entirely (escaping rules vary across ffmpeg
+            # versions; the Pi ships 5.x).
+            text = "%{localtime}"
+        else:
+            # Custom format: colons need three backslashes — one level eaten
+            # by the filtergraph parser, one by drawtext's argument splitter.
+            text = f"%{{localtime\\:{fmt.replace(':', chr(92) * 3 + ':')}}}"
         return (
-            f"drawtext=fontfile={font}:text='%{{localtime\\:{fmt}}}'"
+            f"drawtext=fontfile={font}:text='{text}'"
             f":x=10:y=h-th-10:fontsize={size}:fontcolor=white"
             f":box=1:boxcolor=black@0.4"
         )
@@ -203,7 +209,10 @@ class CameraAgent:
 
         if vf:
             cmd += ["-vf", vf]
-        cmd += ["-b:v", bitrate, "-g", str(int(fps) * 2), "-f", "mpegts", url]
+        # Force 4:2:0: MJPEG cams deliver yuvj422p and browsers can't decode
+        # H264 4:2:2 profiles (also breaks the Pi's v4l2m2m HW encoder).
+        cmd += ["-pix_fmt", "yuv420p",
+                "-b:v", bitrate, "-g", str(int(fps) * 2), "-f", "mpegts", url]
         return cmd
 
     def start_stream(self, params: dict):

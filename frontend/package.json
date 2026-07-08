@@ -9,7 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "dompurify": "^3.2.4"
+    "dompurify": "^3.2.4",
+    "hls.js": "^1.5.20"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^3.0.0",

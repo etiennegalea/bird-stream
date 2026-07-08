@@ -80,6 +80,11 @@ class MediaMTXController(Controller):
             logger.warning(f"Deny read path={path} proto={protocol} ip={ip}")
             raise HTTPException(status_code=401, detail="Viewer not authorized")
 
-        # api / metrics / pprof / playback listing — deny by default
+        # Control API: port 9997 is never published, only reachable on the
+        # docker network (backend peer-count polling) — allow.
+        if action == "api":
+            return
+
+        # metrics / pprof / playback listing — deny by default
         logger.warning(f"Deny action={action} path={path} ip={ip}")
         raise HTTPException(status_code=401, detail="Not authorized")

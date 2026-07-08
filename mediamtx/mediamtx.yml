@@ -3,6 +3,11 @@
 
 logLevel: info
 
+# Control API — used by the backend to count viewers (peer-count).
+# Port 9997 is NOT published in docker-compose; docker-network only.
+api: yes
+apiAddress: :9997
+
 # All publish/read requests are authorized by the backend.
 authMethod: http
 authHTTPAddress: http://backend:8051/mediamtx/auth
@@ -27,8 +32,11 @@ webrtc: yes
 webrtcAddress: :8889
 webrtcLocalUDPAddress: :8189
 webrtcIPsFromInterfaces: yes
-# Add your public IP/domain so ICE candidates work across NAT:
-# webrtcAdditionalHosts: [stream.lifeofarobin.com]
+# Public IP advertised in ICE candidates (requires 8189/udp forwarded).
+# NOTE: do NOT use a Cloudflare-proxied (orange-cloud) domain here — it
+# resolves to Cloudflare edge IPs which can't carry WebRTC media. Use the
+# raw public IP, or a DNS-only (grey-cloud) subdomain pointing at it.
+webrtcAdditionalHosts: [77.174.190.102]
 webrtcICEServers2:
   - url: stun:stun.l.google.com:19302
   # Your coturn (uncomment + fill from .env):

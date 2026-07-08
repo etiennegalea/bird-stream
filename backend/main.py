@@ -43,9 +43,17 @@ async def lifespan(app: Litestar):
     logger.info("Application is starting up...")
     app.state.db = SessionLocal
     app.state.queue_service = QueueService(pcs_manager)
-    audio, video = create_local_tracks(enable_audio=True)
-    app.state.audio = audio
-    app.state.video = video
+
+    # Legacy aiortc delivery path. Viewers now use WHEP/HLS served by
+    # MediaMTX; keep this off unless reviving the old player.
+    if os.environ.get("AIORTC_ENABLED", "false").lower() == "true":
+        audio, video = create_local_tracks(enable_audio=True)
+        app.state.audio = audio
+        app.state.video = video
+    else:
+        app.state.audio = None
+        app.state.video = None
+        logger.info("aiortc media path disabled (AIORTC_ENABLED != true)")
 
     app.state.weather_task = asyncio.create_task(
         fetch_weather_periodically(cache_expiration=3600)

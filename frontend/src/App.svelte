@@ -7,8 +7,15 @@
   import UserSettings from './components/UserSettings.svelte';
   import Weather from './components/Weather.svelte';
   import LoadingCircleDots from './components/LoadingCircleDots.svelte';
+  import Hls from 'hls.js';
   import { auth } from './stores/auth.js';
   import { getApiBaseUrl } from './utils.js';
+
+  // Stream endpoints (MediaMTX via traefik, same-origin). Override for local
+  // dev against a bare MediaMTX with VITE_STREAM_URL=http://localhost:8889-style base.
+  const streamBase = import.meta.env.VITE_STREAM_URL || window.location.origin;
+  const WHEP_URL = `${streamBase}/birdcam/whep`;
+  const HLS_URL = `${streamBase}/hls/birdcam/index.m3u8`;
 
   let isConnected = false;
   let error = null;
@@ -20,6 +27,7 @@
 
   let videoEl;
   let peerConnection = null;
+  let hls = null;
   let peerCountWs = null;
   let statsInterval = null;
   let statsState = null;
@@ -96,8 +104,13 @@
       peerConnection.close();
       peerConnection = null;
     }
+    if (hls) {
+      hls.destroy();
+      hls = null;
+    }
     if (videoEl) {
       videoEl.srcObject = null;
+      videoEl.removeAttribute('src');
     }
     if (queueWs) {
       queueWs.close();
@@ -131,82 +144,104 @@
 
   async function startStream() {
     cleanup();
+    error = null;
     try {
-      const pc = new RTCPeerConnection({
-        iceServers: [
-          { urls: ['stun:stun.l.google.com:19302'] },
-          {
-            urls: [
-              'turn:turn.lifeofarobin.com:3478?transport=udp',
-              'turn:turn.lifeofarobin.com:5349?transport=udp'
-            ],
-            username: 'user',
-            credential: 'supersecretpassword'
-          }
-        ],
-        iceTransportPolicy: 'all',
-        bundlePolicy: 'max-bundle',
-        rtcpMuxPolicy: 'require'
-      });
-
-      pc.ontrack = (event) => {
-        if (videoEl && event.streams[0]) {
-          videoEl.srcObject = event.streams[0];
-        }
-      };
-
-      pc.onconnectionstatechange = () => {
-        switch (pc.connectionState) {
-          case 'connected':
-            isConnected = true;
-            startFpsTracking();
-            break;
-          case 'disconnected':
-          case 'failed':
-            isConnected = false;
-            stopFpsTracking();
-            error = 'Connection lost. Please refresh to try again.';
-            break;
-        }
-      };
-
-      peerConnection = pc;
-
-      const offer = await pc.createOffer({
-        offerToReceiveVideo: true,
-        offerToReceiveAudio: true
-      });
-      await pc.setLocalDescription(offer);
-
-      const authState = get(auth);
-      const headers = { 'Content-Type': 'application/json' };
-      if (authState?.token) {
-        headers['Authorization'] = `Bearer ${authState.token}`;
-      }
-
-      const response = await fetch(`${getApiBaseUrl()}/webrtc/offer`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          id: getPeerId(),
-          offer: { type: offer.type, sdp: offer.sdp }
-        })
-      });
-
-      if (!response.ok) throw new Error('Failed to connect to server');
-
-      const answerData = await response.json();
-      await pc.setRemoteDescription(new RTCSessionDescription(answerData));
-
-      const remoteStream = pc.getRemoteStreams()[0];
-      if (videoEl && remoteStream) {
-        videoEl.srcObject = remoteStream;
-      } else {
-        console.error('Failed to get remote stream');
-      }
+      await startWhep();
     } catch (err) {
-      console.error('Error setting up WebRTC:', err);
-      error = 'Failed to connect to camera stream. Please refresh to try again.';
+      console.warn('WHEP failed, falling back to HLS:', err);
+      startHls();
+    }
+  }
+
+  function waitForIceGathering(pc, timeoutMs = 2000) {
+    // Non-trickle WHEP: send the offer once candidates are gathered (or after
+    // a short timeout — STUN-only gathering is fast).
+    return new Promise((resolve) => {
+      if (pc.iceGatheringState === 'complete') return resolve();
+      const timer = setTimeout(resolve, timeoutMs);
+      pc.addEventListener('icegatheringstatechange', () => {
+        if (pc.iceGatheringState === 'complete') {
+          clearTimeout(timer);
+          resolve();
+        }
+      });
+    });
+  }
+
+  async function startWhep() {
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: ['stun:stun.l.google.com:19302'] }],
+      bundlePolicy: 'max-bundle'
+    });
+
+    pc.addTransceiver('video', { direction: 'recvonly' });
+    pc.addTransceiver('audio', { direction: 'recvonly' });
+
+    pc.ontrack = (event) => {
+      if (videoEl && event.streams[0]) {
+        videoEl.srcObject = event.streams[0];
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      switch (pc.connectionState) {
+        case 'connected':
+          isConnected = true;
+          startFpsTracking();
+          break;
+        case 'disconnected':
+        case 'failed':
+          stopFpsTracking();
+          if (isConnected) {
+            isConnected = false;
+            error = 'Connection lost. Please refresh to try again.';
+          } else {
+            // Never got media over WebRTC (UDP likely blocked) -> try HLS.
+            cleanup();
+            startHls();
+          }
+          break;
+      }
+    };
+
+    peerConnection = pc;
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await waitForIceGathering(pc);
+
+    const response = await fetch(WHEP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/sdp' },
+      body: pc.localDescription.sdp
+    });
+    if (!response.ok) throw new Error(`WHEP request failed (${response.status})`);
+
+    const answerSdp = await response.text();
+    await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+  }
+
+  function startHls() {
+    error = null;
+    const onPlaying = () => { isConnected = true; };
+    if (videoEl && videoEl.canPlayType('application/vnd.apple.mpegurl')) {
+      // Native HLS (Safari/iOS)
+      videoEl.src = HLS_URL;
+      videoEl.addEventListener('playing', onPlaying, { once: true });
+      videoEl.play?.().catch(() => {});
+    } else if (Hls.isSupported()) {
+      hls = new Hls({ lowLatencyMode: true });
+      hls.loadSource(HLS_URL);
+      hls.attachMedia(videoEl);
+      videoEl.addEventListener('playing', onPlaying, { once: true });
+      hls.on(Hls.Events.ERROR, (_e, data) => {
+        if (data.fatal) {
+          isConnected = false;
+          error = 'Failed to connect to camera stream. Please refresh to try again.';
+        }
+      });
+    } else {
+      error = 'Your browser cannot play this stream.';
     }
   }
 
