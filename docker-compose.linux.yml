@@ -10,9 +10,9 @@ services:
   backend:
     ports: !reset []
     environment:
-      VIDEO_SOURCE: /dev/video0
-    devices:
-      - "/dev/video0:/dev/video0"
+      # Camera lives on the Pi now; consume MediaMTX's internal RTSP feed.
+      # Host networking -> loopback-published port instead of service name.
+      VIDEO_SOURCE: rtsp://127.0.0.1:8554/birdcam
     network_mode: host
     networks: !reset null
     labels:

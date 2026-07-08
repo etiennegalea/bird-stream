@@ -136,6 +136,9 @@ services:
       - "8889:8889/tcp" # WebRTC / WHEP
       - "8189:8189/udp" # WebRTC ICE (UDP mux)
       - "8888:8888/tcp" # HLS
+      # RTSP for host-networked backend (aiortc VIDEO_SOURCE + detection).
+      # Loopback-only: NOT reachable from the LAN or internet.
+      - "127.0.0.1:8554:8554/tcp"
     volumes:
       - ./mediamtx/mediamtx.yml:/mediamtx.yml:ro
     depends_on:
