@@ -20,7 +20,7 @@ html, body {
 
 .header {
   flex-shrink: 0;
-  text-align: center;
+  text-align: left;
   margin-bottom: 20px;
 }
 
@@ -284,6 +284,20 @@ video.stream-viewport {
     padding: 10px;
   }
 
+  /* Compact header: smaller height and fonts on mobile */
+  .header {
+    margin-bottom: 10px;
+  }
+
+  .header h1 {
+    font-size: 1.4rem;
+    margin-bottom: 2px;
+  }
+
+  .header p {
+    font-size: 0.8rem;
+  }
+
   .main-content {
     display: grid;
     grid-template-columns: 1fr 36px;
@@ -309,7 +323,12 @@ video.stream-viewport {
     max-height: 42dvh;
   }
 
-  .chat-section {
+  /* Chat, admin, and stream panels all share the same cell and behave
+     identically: only one is open at a time, and it collapses via max-height
+     (never translateX, which would push it off-screen right on mobile). */
+  .chat-section,
+  .admin-section,
+  .stream-panel-section {
     grid-area: chat;
     min-height: 0;
     min-width: 0;
@@ -317,7 +336,9 @@ video.stream-viewport {
     transition: opacity 0.3s ease, max-height 0.35s ease;
   }
 
-  .chat-section.chat-hidden {
+  .chat-section.chat-hidden,
+  .admin-section.admin-hidden,
+  .stream-panel-section.stream-panel-hidden {
     flex-basis: auto;
     transform: none;
     max-height: 0;

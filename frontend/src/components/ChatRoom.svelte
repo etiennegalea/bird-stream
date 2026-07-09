@@ -247,7 +247,7 @@
 
 <div class="chat-messages">
   {#if !hasJoined}
-    <div class="join-prompt">ß
+    <div class="join-prompt">
       <img class="join-bird-icon" src="/singing-bird.svg" alt="Singing birb icon" />
       <p class="join-heading">Join the conversation</p>
 

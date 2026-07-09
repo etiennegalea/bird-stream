@@ -387,8 +387,8 @@
 }
 
 .join-bird-icon {
-  width: 72px;
-  height: 72px;
+  width: 100px;
+  height: auto;
   margin-bottom: 0.25rem;
 }
 
