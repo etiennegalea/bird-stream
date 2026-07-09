@@ -103,6 +103,7 @@ celerybeat.pid
 
 # Environments
 .env
+!.env.template
 .venv
 env/
 venv/
@@ -148,6 +149,7 @@ pi-agent/config.yaml
 # Mosquitto runtime
 mosquitto/data/
 mosquitto/log/
+mosquitto/config/passwd
 
 # YOLO weights auto-downloaded by the detection worker
 backend/*.pt
