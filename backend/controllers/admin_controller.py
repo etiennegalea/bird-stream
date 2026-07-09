@@ -1,4 +1,5 @@
 import logging
+import re
 
 import msgspec
 from litestar import Controller, get, post
@@ -15,6 +16,8 @@ from services.stream_settings_service import stream_settings
 from services.webrtc_service import pcs_manager
 
 logger = logging.getLogger("admin_controller")
+
+_HHMM_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")  # 00:00–23:59
 
 
 def _require_admin(request: Request, db_factory) -> int:
@@ -40,6 +43,12 @@ class BlockIpRequest(msgspec.Struct):
 class StreamSettingsRequest(msgspec.Struct):
     video_enabled: bool | None = None
     audio_enabled: bool | None = None
+
+
+class ScheduleRequest(msgspec.Struct):
+    enabled: bool
+    start: str | None = None  # "HH:MM" local Pi time
+    end: str | None = None
 
 
 class AdminController(Controller):
@@ -132,11 +141,45 @@ class AdminController(Controller):
             "devices": mqtt_devices.devices(),
         }
 
+    @post("/stream/devices/{pi_id:str}/schedule")
+    async def set_device_schedule(
+        self, request: Request, state: State, pi_id: str, data: ScheduleRequest
+    ) -> dict:
+        """Set the daily broadcast window on a transmitter. Outside the window
+        the device rests (idle). Times are the Pi's local time, "HH:MM"."""
+        user_id = _require_admin(request, state.db)
+        params: dict = {"enabled": data.enabled}
+        if data.start is not None:
+            params["start"] = data.start
+        if data.end is not None:
+            params["end"] = data.end
+        if data.enabled:
+            for key in ("start", "end"):
+                val = params.get(key)
+                if not (isinstance(val, str) and _HHMM_RE.match(val)):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"{key} must be 'HH:MM' (00:00–23:59)")
+        try:
+            mqtt_devices.send_control(pi_id, "set_schedule", params=params)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except RuntimeError as e:
+            raise HTTPException(status_code=503, detail=str(e))
+        logger.info("Admin (user_id=%s) set schedule on '%s': %s",
+                    user_id, pi_id, params)
+        return {"ok": True, "pi_id": pi_id, "schedule": params}
+
     @post("/stream/devices/{pi_id:str}/{action:str}")
     async def control_stream_device(
         self, request: Request, state: State, pi_id: str, action: str
     ) -> dict:
         user_id = _require_admin(request, state.db)
+        # This route is only for immediate start/stop; scheduling has its own
+        # endpoint (with a validated body) above.
+        if action not in {"start", "stop"}:
+            raise HTTPException(
+                status_code=400, detail="Action must be 'start' or 'stop'")
         try:
             mqtt_devices.send_control(pi_id, action)
         except ValueError as e:

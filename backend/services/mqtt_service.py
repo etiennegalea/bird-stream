@@ -24,7 +24,7 @@ from paho.mqtt.enums import CallbackAPIVersion
 logger = logging.getLogger("mqtt_service")
 
 _PI_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
-ALLOWED_ACTIONS = {"start", "stop"}
+ALLOWED_ACTIONS = {"start", "stop", "set_schedule"}
 
 _STATUS_TOPIC_RE = re.compile(r"^camera/([A-Za-z0-9_-]+)/status$")
 

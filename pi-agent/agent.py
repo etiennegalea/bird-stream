@@ -86,10 +86,34 @@ DEFAULT_CONFIG = {
         "srt": {"host": None, "port": 8890, "path": "birdcam",
                 "username": None, "password": None},
     },
+    "schedule": {
+        # When enabled, the device only broadcasts between start and end
+        # (HH:MM, the Pi's LOCAL time) and rests (idle) the rest of the day.
+        # start > end wraps past midnight (e.g. 22:00–06:00).
+        "enabled": False,
+        "start": "06:00",
+        "end": "20:00",
+    },
 }
 
 # Camera keys settable via the set_camera action
 CAMERA_KEYS = {"device", "width", "height", "fps", "bitrate", "use_hw_acceleration"}
+
+# How often the scheduler re-checks whether the current local time is inside
+# the broadcast window.
+SCHEDULE_CHECK_SECONDS = 30
+
+
+def _parse_hhmm(value) -> int | None:
+    """Parse 'HH:MM' into minutes-since-midnight, or None if malformed."""
+    try:
+        hh, mm = str(value).strip().split(":")
+        h, m = int(hh), int(mm)
+    except (ValueError, AttributeError):
+        return None
+    if 0 <= h <= 23 and 0 <= m <= 59:
+        return h * 60 + m
+    return None
 
 
 def deep_merge(base: dict, override: dict) -> dict:
@@ -166,6 +190,19 @@ class CameraAgent:
             payload.update(self.stream_details)
         if status == "error" and error_msg:
             payload["error"] = error_msg
+        # Always advertise the schedule so the admin panel can render it, and
+        # flag when the device is idle specifically because it's outside its
+        # broadcast window (resting) rather than merely stopped.
+        sched = self.config.get("schedule") or {}
+        if sched.get("enabled"):
+            payload["schedule"] = {
+                "enabled": True,
+                "start": sched.get("start"),
+                "end": sched.get("end"),
+            }
+            payload["resting"] = status == "idle" and not self._in_window()
+        else:
+            payload["schedule"] = {"enabled": False}
         try:
             self.client.publish(self.topic_status, json.dumps(payload),
                                 qos=1, retain=True)
@@ -406,7 +443,79 @@ class CameraAgent:
     def _is_streaming(self) -> bool:
         return self.stream_process is not None and self.stream_process.poll() is None
 
+    # ── broadcast schedule ────────────────────────────────────────────────
+
+    def _in_window(self) -> bool:
+        """True if the current LOCAL time is inside the broadcast window (or if
+        no schedule is enabled). Handles windows that wrap past midnight."""
+        sched = self.config.get("schedule") or {}
+        if not sched.get("enabled"):
+            return True
+        start = _parse_hhmm(sched.get("start"))
+        end = _parse_hhmm(sched.get("end"))
+        if start is None or end is None or start == end:
+            # Malformed or zero-length window → don't restrict.
+            return True
+        now = time.localtime()
+        cur = now.tm_hour * 60 + now.tm_min
+        if start < end:
+            return start <= cur < end
+        # Overnight window, e.g. 22:00–06:00
+        return cur >= start or cur < end
+
+    def _apply_schedule(self):
+        """Enforce the broadcast window: stream while inside it, rest (idle)
+        while outside. No-op when scheduling is disabled."""
+        if not (self.config.get("schedule") or {}).get("enabled"):
+            return
+        if self._in_window():
+            if not self._is_streaming():
+                logger.info("Schedule window open — starting stream")
+                self.start_stream({})
+        else:
+            if self._is_streaming() or self.should_stream:
+                logger.info("Schedule window closed — resting (stream stopped)")
+                self.stop_stream(manual=True)
+            self.publish_status("idle")
+
+    def _schedule_loop(self):
+        while True:
+            time.sleep(SCHEDULE_CHECK_SECONDS)
+            try:
+                self._apply_schedule()
+            except Exception as e:
+                logger.error(f"Schedule check error: {e}")
+
     # ── control actions ───────────────────────────────────────────────────
+
+    def action_set_schedule(self, payload):
+        """Set (or clear) the daily broadcast window. Applied immediately."""
+        enabled = bool(payload.get("enabled", False))
+        start = payload.get("start")
+        end = payload.get("end")
+        if enabled and (_parse_hhmm(start) is None or _parse_hhmm(end) is None):
+            self.publish_reply(
+                "set_schedule",
+                {"ok": False, "error": "start/end must be 'HH:MM' (00:00–23:59)"},
+                payload.get("request_id"))
+            return
+        self.config["schedule"] = {
+            "enabled": enabled,
+            "start": start if start is not None else self.config.get("schedule", {}).get("start"),
+            "end": end if end is not None else self.config.get("schedule", {}).get("end"),
+        }
+        self._save_config()
+        self.publish_reply(
+            "set_schedule",
+            {"ok": True, "schedule": self.config["schedule"]},
+            payload.get("request_id"))
+        # Enforce right away; if disabled and not streaming, fall back to a
+        # normal start so turning the schedule off resumes broadcasting.
+        if enabled:
+            self._apply_schedule()
+        elif not self._is_streaming() and \
+                self.config["stream"]["srt"].get("host"):
+            self.start_stream({})
 
     def action_set_camera(self, payload):
         changes = {k: v for k, v in payload.get("params", payload).items()
@@ -532,6 +641,7 @@ class CameraAgent:
             "start": lambda: self.start_stream(payload),
             "stop": lambda: (self.stop_stream(manual=True), self.publish_status("idle")),
             "set_camera": lambda: self.action_set_camera(payload),
+            "set_schedule": lambda: self.action_set_schedule(payload),
             "set_controls": lambda: self.action_set_controls(payload),
             "get_controls": lambda: self.action_get_controls(payload),
             "get_config": lambda: self.action_get_config(payload),
@@ -595,8 +705,12 @@ class CameraAgent:
             sys.exit(1)
 
         threading.Thread(target=self._heartbeat, daemon=True).start()
+        threading.Thread(target=self._schedule_loop, daemon=True).start()
 
-        if self.config["stream"].get("auto_start") and \
+        if (self.config.get("schedule") or {}).get("enabled"):
+            logger.info("Schedule enabled — enforcing broadcast window")
+            self._apply_schedule()
+        elif self.config["stream"].get("auto_start") and \
                 self.config["stream"]["srt"].get("host"):
             logger.info("auto_start enabled, starting stream")
             self.start_stream({})

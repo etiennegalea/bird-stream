@@ -44,3 +44,9 @@ stream:
     path: "birdcam"           # MediaMTX path name
     username: "picam"         # must match MEDIAMTX_PUBLISH_USER on the backend
     password: "change-me"     # must match MEDIAMTX_PUBLISH_PASSWORD
+
+schedule:                     # daily broadcast window (Pi's LOCAL time)
+  enabled: false              # true -> only stream between start and end,
+                              # rest (idle) the remainder of the day
+  start: "06:00"              # HH:MM; start > end wraps past midnight (22:00–06:00)
+  end: "20:00"                # settable live from the admin stream panel

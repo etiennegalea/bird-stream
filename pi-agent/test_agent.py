@@ -9,6 +9,7 @@ import json
 import sys
 import types
 import unittest
+from unittest import mock
 
 # The agent imports paho at module level; stub it when not installed so these
 # tests run anywhere (paho is present on the Pi via requirements.txt).
@@ -178,6 +179,88 @@ class TestStreamDetailsAndActions(unittest.TestCase):
         self.assertEqual(cfg["stream"]["srt"]["password"], "***")
         # the real config must be untouched
         self.assertEqual(a.config["mqtt"]["password"], "hunter2")
+
+
+def _at(hour, minute=0):
+    """A time.struct_time for a given local hour/minute (date is irrelevant)."""
+    import time as _t
+    return _t.struct_time((2024, 1, 1, hour, minute, 0, 0, 1, -1))
+
+
+class TestParseHHMM(unittest.TestCase):
+    def test_valid(self):
+        self.assertEqual(agent._parse_hhmm("00:00"), 0)
+        self.assertEqual(agent._parse_hhmm("06:30"), 390)
+        self.assertEqual(agent._parse_hhmm("23:59"), 1439)
+
+    def test_invalid(self):
+        for bad in ["24:00", "6:60", "abc", "12", "", None, "12:99", "99:00"]:
+            self.assertIsNone(agent._parse_hhmm(bad), msg=f"accepted {bad!r}")
+
+
+class TestScheduleWindow(unittest.TestCase):
+    def _agent(self, enabled=True, start="06:00", end="20:00"):
+        return make_agent(**{"schedule.enabled": enabled,
+                             "schedule.start": start, "schedule.end": end})
+
+    def test_disabled_always_in_window(self):
+        a = self._agent(enabled=False)
+        with mock.patch.object(agent.time, "localtime", return_value=_at(3)):
+            self.assertTrue(a._in_window())
+
+    def test_daytime_window(self):
+        a = self._agent(start="06:00", end="20:00")
+        for hour, expected in [(5, False), (6, True), (12, True),
+                               (19, True), (20, False), (23, False)]:
+            with mock.patch.object(agent.time, "localtime",
+                                   return_value=_at(hour)):
+                self.assertEqual(a._in_window(), expected, msg=f"hour {hour}")
+
+    def test_overnight_window_wraps_midnight(self):
+        a = self._agent(start="22:00", end="06:00")
+        for hour, expected in [(22, True), (23, True), (0, True), (5, True),
+                               (6, False), (12, False), (21, False)]:
+            with mock.patch.object(agent.time, "localtime",
+                                   return_value=_at(hour)):
+                self.assertEqual(a._in_window(), expected, msg=f"hour {hour}")
+
+    def test_malformed_window_does_not_restrict(self):
+        a = self._agent(start="nope", end="20:00")
+        with mock.patch.object(agent.time, "localtime", return_value=_at(3)):
+            self.assertTrue(a._in_window())
+
+
+class TestSetScheduleAction(unittest.TestCase):
+    def _agent(self):
+        a = make_agent()
+        a._save_config = lambda: None
+        a._apply_schedule = lambda: None
+        a._is_streaming = lambda: False
+        a.start_stream = lambda params: None
+        a.replies = []
+        a.publish_reply = lambda action, data, request_id=None: a.replies.append(data)
+        return a
+
+    def test_enable_valid_updates_config(self):
+        a = self._agent()
+        a.action_set_schedule({"enabled": True, "start": "07:00", "end": "19:30"})
+        self.assertEqual(a.config["schedule"],
+                         {"enabled": True, "start": "07:00", "end": "19:30"})
+        self.assertTrue(a.replies[-1]["ok"])
+
+    def test_enable_invalid_time_rejected(self):
+        a = self._agent()
+        a.action_set_schedule({"enabled": True, "start": "7am", "end": "19:30"})
+        self.assertFalse(a.replies[-1]["ok"])
+        # config must be untouched (still the default disabled schedule)
+        self.assertFalse(a.config["schedule"]["enabled"])
+
+    def test_disable_clears_flag(self):
+        a = self._agent()
+        a.config["schedule"] = {"enabled": True, "start": "06:00", "end": "20:00"}
+        a.action_set_schedule({"enabled": False})
+        self.assertFalse(a.config["schedule"]["enabled"])
+        self.assertTrue(a.replies[-1]["ok"])
 
 
 if __name__ == "__main__":

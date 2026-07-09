@@ -20,6 +20,8 @@
   let devicesLoading = true;
   let devicesError = '';
   let pending = {};       // pi_id -> true while a command is in flight
+  let schedPending = {};  // pi_id -> true while a schedule save is in flight
+  let scheduleForms = {}; // pi_id -> { enabled, start, end } (edit buffer)
   let pollTimer = null;
 
   function authHeader() {
@@ -75,6 +77,19 @@
         const data = await resp.json();
         brokerConnected = data.broker_connected;
         devices = data.devices;
+        // Seed each device's schedule edit-buffer once, from its reported
+        // window; don't clobber a form the admin may be editing.
+        for (const d of devices) {
+          if (!scheduleForms[d.pi_id]) {
+            const s = d.schedule || {};
+            scheduleForms[d.pi_id] = {
+              enabled: !!s.enabled,
+              start: s.start || '06:00',
+              end: s.end || '20:00',
+            };
+          }
+        }
+        scheduleForms = scheduleForms;
         devicesError = '';
       } else {
         devicesError = resp.status === 403 ? 'Admin access required' : 'Failed to load devices';
@@ -109,8 +124,35 @@
     }, 1500);
   }
 
+  async function saveSchedule(piId) {
+    const form = scheduleForms[piId];
+    if (!form) return;
+    schedPending = { ...schedPending, [piId]: true };
+    try {
+      const resp = await fetch(`${getApiBaseUrl()}/admin/stream/devices/${piId}/schedule`, {
+        method: 'POST',
+        headers: authHeader(),
+        body: JSON.stringify({ enabled: form.enabled, start: form.start, end: form.end }),
+      });
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        devicesError = body.detail || 'Failed to save schedule';
+      } else {
+        devicesError = '';
+      }
+    } catch {
+      devicesError = 'Network error';
+    }
+    // The Pi applies + reports back over MQTT within a second or two.
+    setTimeout(async () => {
+      await fetchDevices();
+      schedPending = { ...schedPending, [piId]: false };
+    }, 1500);
+  }
+
   function statusOf(d) {
     if (d.stale && d.status !== 'offline') return 'unreachable';
+    if (d.status === 'idle' && d.resting) return 'resting';
     return d.status || 'unknown';
   }
 
@@ -218,6 +260,49 @@
                 {pending[d.pi_id] ? '…' : 'Stop'}
               </button>
             </div>
+
+            {#if scheduleForms[d.pi_id]}
+              <div class="device-schedule">
+                <label class="sched-toggle">
+                  <input
+                    type="checkbox"
+                    class="stream-toggle"
+                    bind:checked={scheduleForms[d.pi_id].enabled}
+                    disabled={!brokerConnected}
+                  />
+                  <span>Schedule broadcast window</span>
+                </label>
+                <div class="sched-times" class:disabled={!scheduleForms[d.pi_id].enabled}>
+                  <input
+                    type="time"
+                    class="sched-time"
+                    bind:value={scheduleForms[d.pi_id].start}
+                    disabled={!scheduleForms[d.pi_id].enabled || !brokerConnected}
+                  />
+                  <span class="sched-dash">–</span>
+                  <input
+                    type="time"
+                    class="sched-time"
+                    bind:value={scheduleForms[d.pi_id].end}
+                    disabled={!scheduleForms[d.pi_id].enabled || !brokerConnected}
+                  />
+                  <button
+                    class="sched-save"
+                    disabled={schedPending[d.pi_id] || !brokerConnected}
+                    on:click={() => saveSchedule(d.pi_id)}
+                  >
+                    {schedPending[d.pi_id] ? '…' : 'Save'}
+                  </button>
+                </div>
+                <p class="sched-hint">
+                  {#if scheduleForms[d.pi_id].enabled}
+                    Broadcasts {scheduleForms[d.pi_id].start}–{scheduleForms[d.pi_id].end} (device local time); rests otherwise.
+                  {:else}
+                    Always on — enable to limit broadcasting to set hours.
+                  {/if}
+                </p>
+              </div>
+            {/if}
           </div>
         {/each}
       {/if}

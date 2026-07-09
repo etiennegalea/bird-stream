@@ -174,6 +174,7 @@
 }
 .device-status.streaming   { color: #16a34a; background: #ecfdf5; }
 .device-status.idle        { color: #92700c; background: #fef9e7; }
+.device-status.resting     { color: #6d5bd0; background: #efeafd; }
 .device-status.error       { color: #dc2626; background: #fef2f2; }
 .device-status.offline,
 .device-status.unreachable { color: #6b7280; background: #f3f4f6; }
@@ -221,6 +222,66 @@
 
 .device-btn.stop { background: #fef2f2; color: #dc2626; border-color: #fee2e2; }
 .device-btn.stop:not(:disabled):hover { background: #dc2626; color: #fff; }
+
+/* Per-device broadcast schedule */
+.device-schedule {
+  margin-top: 0.55rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed #eee;
+}
+
+.sched-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #555;
+  cursor: pointer;
+}
+
+.sched-times {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+  transition: opacity 0.15s;
+}
+.sched-times.disabled { opacity: 0.45; }
+
+.sched-time {
+  font-size: 0.68rem;
+  padding: 0.2rem 0.3rem;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  color: #333;
+  background: #fff;
+}
+.sched-time:disabled { background: #f5f5f5; cursor: default; }
+
+.sched-dash { color: #999; }
+
+.sched-save {
+  margin-left: auto;
+  padding: 0.28rem 0.7rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: #fff;
+  background: #B35610;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.sched-save:not(:disabled):hover { background: #E87530; }
+.sched-save:disabled { opacity: 0.45; cursor: default; }
+
+.sched-hint {
+  margin: 0.4rem 0 0;
+  font-size: 0.6rem;
+  color: #aaa;
+  line-height: 1.35;
+}
 
 /* Misc */
 .stream-muted {
