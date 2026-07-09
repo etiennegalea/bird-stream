@@ -20,19 +20,36 @@ import sys
 import threading
 import time
 from collections import deque
+from logging.handlers import RotatingFileHandler
 
 import yaml
 import paho.mqtt.client as mqtt
 from paho.mqtt.enums import CallbackAPIVersion
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-logger = logging.getLogger("pi_camera_agent")
-
 AGENT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(AGENT_DIR, "config.yaml")
+# Persist logs (esp. stream errors) to disk so failures can be inspected after
+# the fact — journald isn't always available/retained on a headless Pi.
+LOG_PATH = os.environ.get("BIRDSTREAM_LOG", os.path.join(AGENT_DIR, "agent.log"))
+
+_LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+_handlers = [logging.StreamHandler()]
+try:
+    _handlers.append(
+        RotatingFileHandler(LOG_PATH, maxBytes=2_000_000, backupCount=5)
+    )
+except OSError as _e:  # read-only fs / permissions — fall back to console only
+    print(f"Could not open log file {LOG_PATH}: {_e}", file=sys.stderr)
+
+logging.basicConfig(level=logging.INFO, format=_LOG_FORMAT, handlers=_handlers)
+logger = logging.getLogger("pi_camera_agent")
+
+# ── Stream auto-recovery ──────────────────────────────────────────────────
+# On an ffmpeg failure the agent restarts the stream itself (backoff below).
+# After MAX consecutive failures it exits so systemd restarts the whole
+# service (Restart=always) — a clean slate for wedged camera/USB state.
+STREAM_RESTART_DELAY = 5     # seconds to wait before an auto-restart attempt
+STREAM_MAX_RESTARTS = 5      # consecutive failures before exiting for systemd
 
 DEFAULT_CONFIG = {
     "device": {"id": "pi-01"},
@@ -109,6 +126,12 @@ class CameraAgent:
         self.stream_process = None
         self.stream_details = {}
         self.lock = threading.Lock()
+
+        # Auto-recovery state
+        self.should_stream = False      # True while streaming is desired
+        self.last_start_params = {}     # params to reuse on auto-restart
+        self.restart_attempts = 0       # consecutive failures since last success
+        self._restart_timer = None
 
     # ── config ────────────────────────────────────────────────────────────
 
@@ -240,13 +263,20 @@ class CameraAgent:
         return cmd
 
     def start_stream(self, params: dict):
-        self.stop_stream()
+        # Remember intent + params so the supervisor can auto-restart.
+        if params:
+            self.last_start_params = params
+        self.should_stream = True
+        self.stop_stream()  # non-manual: keeps should_stream = True
         with self.lock:
             cam = self.config["camera"]
             srt = self.config["stream"]["srt"]
             host = params.get("srt_host") or srt.get("host")
             port = params.get("srt_port") or srt.get("port", 8890)
             if not host:
+                # Config error — restarting can't fix a missing host, so don't
+                # enter the retry loop.
+                self.should_stream = False
                 self.publish_status(
                     "error",
                     "No SRT host (param srt_host or config stream.srt.host)")
@@ -271,9 +301,8 @@ class CameraAgent:
                 if poll is not None:
                     _, stderr = self.stream_process.communicate()
                     msg = f"FFmpeg failed to start (exit {poll}): {stderr[-200:].strip()}"
-                    logger.error(msg)
-                    self.publish_status("error", msg)
                     self.stream_process = None
+                    self._schedule_restart(msg)
                     return
                 self.stream_details = {
                     "srt_destination": f"srt://{host}:{port}",
@@ -282,14 +311,20 @@ class CameraAgent:
                     "bitrate": bitrate, "device": device,
                     "audio": bool((self.config.get("audio") or {}).get("enabled")),
                 }
+                self.restart_attempts = 0  # healthy start resets the backoff
                 self.publish_status("streaming")
                 threading.Thread(target=self._read_stderr,
                                  args=(self.stream_process,), daemon=True).start()
             except Exception as e:
-                logger.error(f"Failed to spawn FFmpeg: {e}")
-                self.publish_status("error", str(e))
+                self.stream_process = None
+                self._schedule_restart(f"Failed to spawn FFmpeg: {e}")
 
-    def stop_stream(self):
+    def stop_stream(self, manual: bool = False):
+        # manual=True means an operator/shutdown asked to stop — cancel any
+        # pending auto-restart and clear the "should stream" intent.
+        if manual:
+            self.should_stream = False
+            self._cancel_restart()
         with self.lock:
             if not self.stream_process:
                 return
@@ -306,6 +341,46 @@ class CameraAgent:
                 self.stream_process = None
                 self.stream_details = {}
 
+    # ── auto-recovery supervisor ──────────────────────────────────────────
+
+    def _cancel_restart(self):
+        if self._restart_timer:
+            self._restart_timer.cancel()
+            self._restart_timer = None
+
+    def _schedule_restart(self, reason: str):
+        """Log a stream failure and, if streaming is still desired, restart it
+        after a short delay. After STREAM_MAX_RESTARTS consecutive failures,
+        exit so systemd restarts the whole service."""
+        logger.error(f"Stream failure: {reason}")
+        self.publish_status("error", reason)
+        if not self.should_stream:
+            return  # operator stopped it — don't fight the intent
+
+        self.restart_attempts += 1
+        if self.restart_attempts > STREAM_MAX_RESTARTS:
+            logger.critical(
+                f"Stream failed {self.restart_attempts} times in a row; "
+                "exiting for systemd to restart the service")
+            self.publish_status(
+                "error",
+                f"{reason} — restarting service after "
+                f"{self.restart_attempts - 1} failed attempts")
+            self.stop_stream(manual=True)
+            self.publish_status("offline")
+            threading.Timer(1.0, lambda: os._exit(1)).start()
+            return
+
+        logger.info(
+            f"Auto-restarting stream in {STREAM_RESTART_DELAY}s "
+            f"(attempt {self.restart_attempts}/{STREAM_MAX_RESTARTS})")
+        self._cancel_restart()
+        self._restart_timer = threading.Timer(
+            STREAM_RESTART_DELAY,
+            lambda: self.start_stream(self.last_start_params))
+        self._restart_timer.daemon = True
+        self._restart_timer.start()
+
     def _read_stderr(self, process):
         tail = deque(maxlen=15)  # keep the last lines for crash reporting
         while process.poll() is None:
@@ -317,14 +392,16 @@ class CameraAgent:
         exit_code = process.poll()
         if exit_code:
             stderr_tail = " | ".join(tail)[-400:]
-            logger.error(f"FFmpeg crashed (exit {exit_code}): {stderr_tail}")
+            # Only react if this is still the active process — an intentional
+            # stop/restart already swapped it out (stream_process != process).
             with self.lock:
-                if self.stream_process == process:
+                is_current = self.stream_process == process
+                if is_current:
                     self.stream_process = None
                     self.stream_details = {}
-                    self.publish_status(
-                        "error",
-                        f"Stream crashed (exit {exit_code}): {stderr_tail}")
+            if is_current:
+                self._schedule_restart(
+                    f"Stream crashed (exit {exit_code}): {stderr_tail}")
 
     def _is_streaming(self) -> bool:
         return self.stream_process is not None and self.stream_process.poll() is None
@@ -418,13 +495,13 @@ class CameraAgent:
                             "restarting": True},
                            payload.get("request_id"))
         logger.info("Update complete, exiting for systemd restart...")
-        self.stop_stream()
+        self.stop_stream(manual=True)
         self.publish_status("offline")
         threading.Timer(1.0, lambda: os._exit(0)).start()
 
     def action_reboot(self, payload):
         self.publish_reply("reboot", {"ok": True}, payload.get("request_id"))
-        self.stop_stream()
+        self.stop_stream(manual=True)
         self.publish_status("offline")
         r = subprocess.run(["sudo", "-n", "reboot"], capture_output=True, text=True)
         if r.returncode != 0:
@@ -453,7 +530,7 @@ class CameraAgent:
         action = payload.get("action")
         handlers = {
             "start": lambda: self.start_stream(payload),
-            "stop": lambda: (self.stop_stream(), self.publish_status("idle")),
+            "stop": lambda: (self.stop_stream(manual=True), self.publish_status("idle")),
             "set_camera": lambda: self.action_set_camera(payload),
             "set_controls": lambda: self.action_set_controls(payload),
             "get_controls": lambda: self.action_get_controls(payload),
@@ -480,11 +557,10 @@ class CameraAgent:
             try:
                 if self._is_streaming():
                     self.publish_status("streaming")
-                elif self.stream_process:  # exists but died
-                    code = self.stream_process.poll()
-                    self.stream_process = None
-                    self.publish_status("error",
-                                        f"FFmpeg exited with code {code}")
+                elif self.should_stream:
+                    # Streaming is desired but not running — an auto-restart is
+                    # pending/in progress. Report error, not idle.
+                    self.publish_status("error", "Stream down, auto-restarting")
                 else:
                     self.publish_status("idle")
             except Exception as e:
@@ -529,7 +605,7 @@ class CameraAgent:
             self.client.loop_forever()
         except KeyboardInterrupt:
             logger.info("Shutting down...")
-            self.stop_stream()
+            self.stop_stream(manual=True)
             self.publish_status("offline")
             self.client.disconnect()
 

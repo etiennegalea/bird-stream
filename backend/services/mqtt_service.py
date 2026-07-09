@@ -58,6 +58,9 @@ class MqttDeviceService:
         client.on_connect = self._on_connect
         client.on_disconnect = self._on_disconnect
         client.on_message = self._on_message
+        # Bounded exponential backoff so a broker restart (e.g. adding users)
+        # is recovered from within seconds instead of lingering "down".
+        client.reconnect_delay_set(min_delay=1, max_delay=30)
         self._client = client
         try:
             # connect_async + loop_start: non-blocking, auto-reconnects.
@@ -107,6 +110,15 @@ class MqttDeviceService:
 
     # ── API used by controllers ───────────────────────────────────────────
 
+    def is_connected(self) -> bool:
+        """Authoritative broker link state, straight from paho's socket/CONNACK
+        state. The hand-maintained `self.connected` flag can drift out of sync
+        (e.g. after a reconnect where a callback is missed), which showed up as
+        a stuck "BROKER DOWN" in the UI while status messages were still
+        flowing. paho's is_connected() reflects reality."""
+        client = self._client
+        return bool(client and client.is_connected())
+
     def devices(self) -> list[dict]:
         """Latest known status per device, freshest heartbeat first."""
         with self._lock:
@@ -126,7 +138,7 @@ class MqttDeviceService:
             raise ValueError("Invalid device id")
         if action not in ALLOWED_ACTIONS:
             raise ValueError(f"Action must be one of {sorted(ALLOWED_ACTIONS)}")
-        if not (self._client and self.connected):
+        if not self.is_connected():
             raise RuntimeError("MQTT broker not connected")
         payload = {"action": action, **(params or {})}
         result = self._client.publish(

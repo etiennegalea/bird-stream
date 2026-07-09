@@ -128,7 +128,7 @@ class AdminController(Controller):
         """Latest retained/heartbeat status of every known transmitter."""
         _require_admin(request, state.db)
         return {
-            "broker_connected": mqtt_devices.connected,
+            "broker_connected": mqtt_devices.is_connected(),
             "devices": mqtt_devices.devices(),
         }
 

@@ -18,9 +18,13 @@ class FakeResult:
 
 
 class FakeClient:
-    def __init__(self):
+    def __init__(self, connected=True):
         self.published = []
         self.subscriptions = []
+        self._connected = connected
+
+    def is_connected(self):
+        return self._connected
 
     def subscribe(self, topic, qos=0):
         self.subscriptions.append((topic, qos))
@@ -42,7 +46,7 @@ class Msg:
 
 def make_service(connected=True):
     svc = MqttDeviceService()
-    svc._client = FakeClient()
+    svc._client = FakeClient(connected=connected)
     svc.connected = connected
     return svc
 
@@ -166,6 +170,18 @@ class TestLifecycle(unittest.TestCase):
         svc = make_service()
         svc._on_disconnect(svc._client, None, None, 1, None)
         self.assertFalse(svc.connected)
+
+    def test_is_connected_reflects_client_state(self):
+        # Authoritative broker status comes from the client's socket state,
+        # not the hand-maintained flag (which can drift out of sync).
+        svc = make_service(connected=True)
+        self.assertTrue(svc.is_connected())
+        svc._client._connected = False
+        self.assertFalse(svc.is_connected())
+
+    def test_is_connected_false_without_client(self):
+        svc = MqttDeviceService()
+        self.assertFalse(svc.is_connected())
 
 
 if __name__ == "__main__":
