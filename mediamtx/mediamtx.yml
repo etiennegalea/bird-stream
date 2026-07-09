@@ -36,9 +36,12 @@ webrtcIPsFromInterfaces: yes
 # NOTE: do NOT use a Cloudflare-proxied (orange-cloud) domain here — it
 # resolves to Cloudflare edge IPs which can't carry WebRTC media. Use the
 # raw public IP, or a DNS-only (grey-cloud) subdomain pointing at it.
-# Public IP (internet viewers, needs 8189/udp forwarded) + LAN IP (viewers
-# on the home network, where hairpin NAT to the public IP often fails).
-webrtcAdditionalHosts: [89.98.230.28, 192.168.178.24]
+# Set via WEBRTC_PUBLIC_HOSTS in .env (compose passes it through as
+# MTX_WEBRTCADDITIONALHOSTS, which overrides this value): public IP or a
+# grey-cloud DNS name + LAN IP. Never an orange-cloud Cloudflare domain —
+# it resolves to Cloudflare edge IPs that can't carry WebRTC media.
+# The value below is only a fallback when the env var is unset.
+webrtcAdditionalHosts: [192.168.178.24]
 webrtcICEServers2:
   - url: stun:stun.l.google.com:19302
   # Your coturn (uncomment + fill from .env):

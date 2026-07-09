@@ -51,3 +51,4 @@ Publish JSON to `camera/<id>/control`. Optional `request_id` is echoed in replie
 - `install.sh` — idempotent installer (apt deps, uv-managed venv, config, systemd)
 - `birdstream-agent.service.template` — unit templated with actual user/path
 - `requirements.txt` — pinned deps
+- `test_agent.py` — unit tests; run with `python -m unittest test_agent -v` (no extra deps)

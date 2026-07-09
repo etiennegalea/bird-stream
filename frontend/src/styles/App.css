@@ -108,6 +108,31 @@ html, body {
   opacity: 0;
 }
 
+/* Stream panel — same width/height/transition as the chat & admin sections */
+.stream-panel-section {
+  position: relative;
+  flex: 0 0 350px;
+  min-height: 0;
+  overflow: hidden;
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    flex-basis 0.35s ease,
+    transform 0.35s ease,
+    opacity 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.stream-panel-section.stream-panel-hidden {
+  flex-basis: 0;
+  transform: translateX(350px);
+  opacity: 0;
+}
+
 .stream-viewport {
   flex: 1;
   min-height: 0;

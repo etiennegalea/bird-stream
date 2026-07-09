@@ -20,7 +20,15 @@ camera:
   height: 720
   fps: 30
   bitrate: "1500k"
-  use_hw_acceleration: true   # h264_v4l2m2m; set false for libx264
+  use_hw_acceleration: false  # h264_v4l2m2m is flaky / absent on Pi 5; libx264 is reliable
+
+audio:                        # webcam/USB mic -> Opus (required codec for WebRTC)
+  enabled: false              # OFF by default (privacy) — set true to capture
+                              # the mic; the admin panel must ALSO enable audio
+  device: "default"           # ALSA device; find yours with: arecord -l
+                              # e.g. "hw:1,0" for card 1, device 0
+  bitrate: "64k"
+  channels: 1
 
 overlay:                      # timestamp burned in on the Pi (FFmpeg drawtext)
   enabled: true

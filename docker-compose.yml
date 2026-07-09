@@ -42,10 +42,10 @@ services:
     build:
       context: ./frontend
       args:
-        - VITE_API_URL=${VITE_API_URL}
+        - VITE_API_URL=${VITE_API_URL:-}
         - VITE_NODE_ENV=${VITE_NODE_ENV:-production}
-        - VITE_OPENRELAY_TURN_USERNAME=${VITE_OPENRELAY_TURN_USERNAME}
-        - VITE_OPENRELAY_TURN_CREDENTIAL=${VITE_OPENRELAY_TURN_CREDENTIAL}
+        # Build-time flag: rebuild the frontend after changing it in .env
+        - VITE_HLS_FALLBACK=${VITE_HLS_FALLBACK:-true}
     container_name: stream-frontend
     ports:
       - "8050:80" # direct LAN access; public traffic comes through traefik
@@ -86,6 +86,10 @@ services:
       - DETECTION_FPS=${DETECTION_FPS:-2}
       - DETECTION_CONF=${DETECTION_CONF:-0.4}
       - DETECTION_CLASSES=${DETECTION_CLASSES:-bird}
+      # MQTT bridge: Pi transmitter status + start/stop from the admin panel
+      - MQTT_HOST=${MQTT_HOST:-mosquitto}
+      - MQTT_USERNAME=${MQTT_USERNAME:-backend}
+      - MQTT_PASSWORD=${MQTT_PASSWORD:-}
     volumes:
       - ./backend:/app
     labels:
@@ -118,11 +122,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     environment:
-      - POSTGRES_DB=birb_db
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=${POSTGRES_DB:-birb_db}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -142,6 +146,10 @@ services:
       - "127.0.0.1:8554:8554/tcp"
     volumes:
       - ./mediamtx/mediamtx.yml:/mediamtx.yml:ro
+    environment:
+      # Overrides webrtcAdditionalHosts in mediamtx.yml. Comma-separated:
+      # public IP (or grey-cloud DNS name) + LAN IP. Set in .env.
+      - MTX_WEBRTCADDITIONALHOSTS=${WEBRTC_PUBLIC_HOSTS:?set WEBRTC_PUBLIC_HOSTS in .env}
     depends_on:
       - backend
     labels:

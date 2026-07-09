@@ -1,6 +1,9 @@
 """Global stream toggle state (video / audio), controlled by admins.
 
-In-memory singleton — resets to fully enabled on backend restart. Viewers
+In-memory singleton — resets on backend restart to video ENABLED but audio
+DISABLED: audio broadcasts whatever the webcam mic picks up, so enabling it
+must be a deliberate admin action every time, never an accidental leftover.
+Viewers
 receive the current state over the public /stream-settings WebSocket and the
 GET /stream/settings endpoint; the MediaMTX auth hook additionally denies new
 viewer reads while the whole stream (both video and audio) is disabled.
@@ -14,7 +17,7 @@ logger = logging.getLogger("stream_settings_service")
 class StreamSettingsService:
     def __init__(self) -> None:
         self.video_enabled: bool = True
-        self.audio_enabled: bool = True
+        self.audio_enabled: bool = False  # privacy: audio is opt-in, always
         self.version: int = 0  # bumped on every change; used by WS push loop
 
     def snapshot(self) -> dict:
@@ -50,7 +53,7 @@ class StreamSettingsService:
     def reset(self) -> None:
         """Restore defaults (used by tests)."""
         self.video_enabled = True
-        self.audio_enabled = True
+        self.audio_enabled = False  # keep in sync with __init__
         self.version = 0
 
 

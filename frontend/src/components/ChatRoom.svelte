@@ -247,16 +247,8 @@
 
 <div class="chat-messages">
   {#if !hasJoined}
-    <div class="join-prompt">
-      <svg class="join-bird-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <ellipse cx="32" cy="36" rx="18" ry="14" fill="#e8e0d8"/>
-        <circle cx="32" cy="20" r="12" fill="#e8e0d8"/>
-        <circle cx="36" cy="17" r="3.5" fill="#222"/>
-        <circle cx="37" cy="16.5" r="1" fill="#fff"/>
-        <polygon points="32,22 40,24 32,26" fill="#E87530"/>
-        <path d="M14 36 Q4 30 8 44 Q14 48 20 42" fill="#e8e0d8"/>
-        <path d="M50 36 Q60 30 56 44 Q50 48 44 42" fill="#e8e0d8"/>
-      </svg>
+    <div class="join-prompt">ß
+      <img class="join-bird-icon" src="/singing-bird.svg" alt="Singing birb icon" />
       <p class="join-heading">Join the conversation</p>
 
       {#if !isLoggedIn}

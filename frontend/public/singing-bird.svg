@@ -1,0 +1,187 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -175 585 775" width="585" height="775">
+  <title>Singing bird stretching upwards with floating music notes</title>
+  <style>
+    .bird {
+      transform-origin: 255px 470px; /* anchor at the feet */
+      animation: stretch 4s ease-in-out infinite;
+    }
+    @keyframes stretch {
+      0%   { transform: scale(1, 1); }
+      12%  { transform: scale(1.05, 0.93); }          /* little crouch */
+      30%  { transform: scale(0.955, 1.09); }         /* stretch up! */
+      70%  { transform: scale(0.955, 1.09); }         /* hold while singing */
+      88%  { transform: scale(1.01, 0.99); }
+      100% { transform: scale(1, 1); }
+    }
+
+    /* both mandibles pivot at the bottom-right corner of the beak */
+    .beak-top {
+      transform-origin: 450px 100px;
+      animation: chirp 4s ease-in-out infinite;
+    }
+    @keyframes chirp {
+      0%, 28%   { transform: rotate(0deg); }   /* closed */
+      34%       { transform: rotate(-16deg); } /* open */
+      40%       { transform: rotate(-3deg); }
+      46%       { transform: rotate(-16deg); }
+      52%       { transform: rotate(-3deg); }
+      58%       { transform: rotate(-16deg); }
+      66%       { transform: rotate(-10deg); }
+      74%, 100% { transform: rotate(0deg); }   /* closed */
+    }
+
+    /* wing wiggles while the bird is stretched and singing */
+    .wing {
+      transform-origin: 300px 205px;
+      animation: wiggle 4s ease-in-out infinite;
+    }
+    @keyframes wiggle {
+      0%, 28%   { transform: rotate(0deg); }
+      34%       { transform: rotate(3.5deg); }
+      40%       { transform: rotate(-3deg); }
+      46%       { transform: rotate(3.5deg); }
+      52%       { transform: rotate(-3deg); }
+      58%       { transform: rotate(2.5deg); }
+      66%       { transform: rotate(-2deg); }
+      74%, 100% { transform: rotate(0deg); }
+    }
+
+    .note { opacity: 0; }
+    .note1 { animation: float1 4s ease-out infinite; }
+    .note2 { animation: float2 4s ease-out infinite; }
+    .note3 { animation: float3 4s ease-out infinite; }
+    .note4 { animation: float4 4s ease-out infinite; }
+
+    @keyframes float1 {
+      0%, 33%  { opacity: 0; transform: translate(0px, 0px)     rotate(0deg)   scale(0.6); }
+      37%      { opacity: 1; transform: translate(8px, -22px)   rotate(-6deg)  scale(1); }   /* pops on 1st chirp */
+      50%      { opacity: 0.8; transform: translate(22px, -66px) rotate(8deg)  scale(1.05); }
+      63%      { opacity: 0; transform: translate(38px, -115px) rotate(-4deg)  scale(1.1); } /* dissipated */
+      100%     { opacity: 0; transform: translate(38px, -115px); }
+    }
+    @keyframes float2 {
+      0%, 45%  { opacity: 0; transform: translate(0px, 0px)     rotate(0deg)   scale(0.6); }
+      49%      { opacity: 1; transform: translate(10px, -22px)  rotate(7deg)   scale(1); }   /* pops on 2nd chirp */
+      62%      { opacity: 0.8; transform: translate(26px, -64px) rotate(-8deg) scale(1.05); }
+      75%      { opacity: 0; transform: translate(44px, -112px) rotate(5deg)   scale(1.1); }
+      100%     { opacity: 0; transform: translate(44px, -112px); }
+    }
+    @keyframes float3 {
+      0%, 57%  { opacity: 0; transform: translate(0px, 0px)     rotate(0deg)   scale(0.6); }
+      61%      { opacity: 1; transform: translate(7px, -20px)   rotate(-8deg)  scale(1); }   /* pops on 3rd chirp */
+      74%      { opacity: 0.75; transform: translate(20px, -60px) rotate(6deg) scale(1.05); }
+      87%      { opacity: 0; transform: translate(34px, -105px) rotate(-5deg)  scale(1.1); }
+      100%     { opacity: 0; transform: translate(34px, -105px); }
+    }
+    @keyframes float4 {
+      0%, 39%  { opacity: 0; transform: translate(0px, 0px)     rotate(0deg)   scale(0.5); }
+      43%      { opacity: 0.9; transform: translate(12px, -26px) rotate(10deg) scale(0.8); } /* between chirps */
+      56%      { opacity: 0.65; transform: translate(28px, -72px) rotate(-9deg) scale(0.9); }
+      69%      { opacity: 0; transform: translate(46px, -120px) rotate(6deg)   scale(1); }
+      100%     { opacity: 0; transform: translate(46px, -120px); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .bird, .beak-top, .wing, .note { animation: none; }
+      .note1 { opacity: 0.9; transform: translate(0px, -60px); }
+      .note2 { opacity: 0.6; transform: translate(-14px, -110px); }
+    }
+  </style>
+
+  <!-- ============ BIRD ============ -->
+  <g class="bird">
+    <!-- Beak: two aligned mandibles hinged at the bottom-right corner (452,104).
+         Closed, they share the seam from the hinge to the tip (486,14) and read
+         as a single beak; the upper half swings left/up to open the mouth. -->
+    <!-- upper mandible (rotates around the hinge) -->
+    <g class="beak-top">
+      <path d="M 450 100 L 430 64 L 478 38 Z" fill="#F0A23A"/>
+    </g>
+
+    <!-- legs -->
+    <g stroke="#E8912D" stroke-width="11" stroke-linecap="round">
+      <line x1="238" y1="455" x2="224" y2="560"/>
+      <line x1="272" y1="455" x2="288" y2="560"/>
+    </g>
+
+    <!-- body: big comma / teardrop -->
+    <path d="M 45 448
+             C 140 424 198 344 204 244
+             C 210 128 288 34 362 32
+             C 446 30 474 118 472 205
+             C 470 300 434 386 352 442
+             C 320 464 286 472 250 472
+             C 188 472 118 462 45 448 Z"
+          fill="#D9525E"/>
+
+    <!-- soft light wash + wing, clipped to the body -->
+    <clipPath id="bodyClip">
+      <path d="M 45 448
+               C 140 424 198 344 204 244
+               C 210 128 288 34 362 32
+               C 446 30 474 118 472 205
+               C 470 300 434 386 352 442
+               C 320 464 286 472 250 472
+               C 188 472 118 462 45 448 Z"/>
+    </clipPath>
+    <g clip-path="url(#bodyClip)">
+      <ellipse cx="400" cy="470" rx="200" ry="180" fill="#F2A9AC" opacity="0.55"/>
+      <!-- wing (wiggles during the stretch) -->
+      <g class="wing">
+        <path d="M 300 190
+                 C 355 190 392 240 390 310
+                 C 388 388 344 446 292 446
+                 C 244 446 214 396 216 322
+                 C 218 250 250 190 300 190 Z"
+              fill="#EE8B90" opacity="0.9"/>
+      </g>
+    </g>
+
+    <!-- closed, happy eye -->
+    <path d="M 292 118 q 34 42 70 2"
+          fill="none" stroke="#5C3A21" stroke-width="9" stroke-linecap="round"/>
+  </g>
+
+  <!-- ============ MUSIC NOTES (spawn at the beak tip) ============ -->
+  <!-- Outer <g> sets the fixed spawn position; inner <g class="note"> carries
+       the CSS animation so its transform doesn't override the positioning. -->
+  <g fill="#D9525E">
+    <!-- single eighth note -->
+    <g transform="translate(470, 8)">
+      <g class="note note1">
+        <ellipse cx="0" cy="0" rx="9" ry="6.5" transform="rotate(-20)"/>
+        <rect x="6" y="-34" width="3.5" height="34" rx="1.5"/>
+        <path d="M 9.5 -34 q 16 4 12 20 q 0 -10 -12 -12 Z"/>
+      </g>
+    </g>
+
+    <!-- double beamed note -->
+    <g transform="translate(472, 12)" fill="#E8912D">
+      <g class="note note2">
+        <ellipse cx="0" cy="0" rx="8" ry="6" transform="rotate(-20)"/>
+        <ellipse cx="24" cy="-5" rx="8" ry="6" transform="rotate(-20 24 -5)"/>
+        <rect x="5.5" y="-30" width="3.2" height="30" rx="1.5"/>
+        <rect x="29.5" y="-35" width="3.2" height="30" rx="1.5"/>
+        <path d="M 5.5 -30 L 32.7 -35 L 32.7 -27 L 5.5 -22 Z"/>
+      </g>
+    </g>
+
+    <!-- single eighth note -->
+    <g transform="translate(468, 6)">
+      <g class="note note3">
+        <ellipse cx="0" cy="0" rx="8" ry="6" transform="rotate(-20)"/>
+        <rect x="5.5" y="-30" width="3.2" height="30" rx="1.5"/>
+        <path d="M 8.7 -30 q 14 4 10 18 q 0 -9 -10 -11 Z"/>
+      </g>
+    </g>
+
+    <!-- tiny note -->
+    <g transform="translate(474, 14)" fill="#5C3A21" opacity="0.8">
+      <g class="note note4">
+        <ellipse cx="0" cy="0" rx="6.5" ry="5" transform="rotate(-20)"/>
+        <rect x="4.5" y="-24" width="2.8" height="24" rx="1.4"/>
+        <path d="M 7.3 -24 q 12 3 8 15 q 0 -8 -8 -9 Z"/>
+      </g>
+    </g>
+  </g>
+</svg>

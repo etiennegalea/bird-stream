@@ -1,0 +1,239 @@
+/* Stream panel — flex section inside .main-content, matching the chat and
+   admin sections in size and feel (see .stream-section in App.css). */
+
+.stream-drawer {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #f8f8f8;
+  border-radius: 8px;
+  font-size: 0.72rem;
+}
+
+.stream-drawer-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1rem 0.7rem;
+  background: #fff;
+  border-bottom: 1px solid #eee;
+  border-radius: 8px 8px 0 0;
+}
+
+.stream-drawer-title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #333;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.stream-drawer-title svg { color: #B35610; flex-shrink: 0; }
+
+.stream-close-btn {
+  background: none;
+  border: none;
+  color: #aaa;
+  font-size: 0.95rem;
+  cursor: pointer;
+  padding: 0.2rem 0.45rem;
+  border-radius: 5px;
+  line-height: 1;
+}
+.stream-close-btn:hover { color: #555; background: #f0f0f0; }
+
+.stream-drawer-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.5rem 0;
+}
+
+/* Sections */
+.stream-group { margin-bottom: 0.5rem; }
+
+.stream-group-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding: 0.55rem 1rem 0.3rem;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #999;
+  text-transform: uppercase;
+}
+
+.stream-broker {
+  font-size: 0.52rem;
+  font-weight: 700;
+  color: #16a34a;
+  background: #ecfdf5;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.stream-broker.off { color: #dc2626; background: #fef2f2; }
+
+/* Broadcast toggle rows */
+.stream-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.35rem 1rem;
+  cursor: pointer;
+}
+
+.stream-row-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: #444;
+}
+
+.stream-state {
+  font-size: 0.52rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #16a34a;
+  background: #ecfdf5;
+  padding: 1px 5px;
+  border-radius: 4px;
+  line-height: 1.5;
+}
+.stream-state.off { color: #dc2626; background: #fef2f2; }
+
+/* Toggle switch (same as the old popover) */
+.stream-toggle {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 34px;
+  height: 19px;
+  border-radius: 10px;
+  background: #d4d4d4;
+  position: relative;
+  cursor: pointer;
+  outline: none;
+  transition: background 0.15s;
+  flex-shrink: 0;
+  margin: 0;
+}
+.stream-toggle::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s;
+}
+.stream-toggle:checked { background: #B35610; }
+.stream-toggle:checked::before { transform: translateX(15px); }
+.stream-toggle:disabled { opacity: 0.5; cursor: default; }
+
+/* Device cards */
+.device-card {
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  margin: 0.3rem 0.75rem;
+  padding: 0.55rem 0.7rem;
+}
+
+.device-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.device-name {
+  font-weight: 700;
+  font-size: 0.76rem;
+  color: #333;
+}
+
+.device-status {
+  font-size: 0.54rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: #666;
+  background: #f0f0f0;
+}
+.device-status.streaming   { color: #16a34a; background: #ecfdf5; }
+.device-status.idle        { color: #92700c; background: #fef9e7; }
+.device-status.error       { color: #dc2626; background: #fef2f2; }
+.device-status.offline,
+.device-status.unreachable { color: #6b7280; background: #f3f4f6; }
+
+.device-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.7rem;
+  margin-top: 0.3rem;
+  font-size: 0.66rem;
+  color: #888;
+}
+.device-seen { color: #b5b5b5; }
+
+.device-error {
+  margin: 0.35rem 0 0;
+  font-size: 0.64rem;
+  color: #dc2626;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.device-actions {
+  display: flex;
+  gap: 0.45rem;
+  margin-top: 0.5rem;
+}
+
+.device-btn {
+  flex: 1;
+  padding: 0.32rem 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.device-btn:disabled { opacity: 0.45; cursor: default; }
+
+.device-btn.start { background: #ecfdf5; color: #16a34a; border-color: #d1fae5; }
+.device-btn.start:not(:disabled):hover { background: #16a34a; color: #fff; }
+
+.device-btn.stop { background: #fef2f2; color: #dc2626; border-color: #fee2e2; }
+.device-btn.stop:not(:disabled):hover { background: #dc2626; color: #fff; }
+
+/* Misc */
+.stream-muted {
+  margin: 0;
+  padding: 0.3rem 1rem;
+  font-size: 0.72rem;
+  color: #bbb;
+  font-style: italic;
+}
+
+.stream-error {
+  margin: 0.3rem 0 0;
+  padding: 0 1rem;
+  font-size: 0.68rem;
+  color: #dc2626;
+}

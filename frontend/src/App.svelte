@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
   import AdminPanel from './components/AdminPanel.svelte';
-  import StreamControls from './components/StreamControls.svelte';
+  import StreamPanel from './components/StreamPanel.svelte';
   import Auth from './components/Auth.svelte';
   import ChatRoom from './components/ChatRoom.svelte';
   import UserSettings from './components/UserSettings.svelte';
@@ -17,9 +17,10 @@
   const streamBase = import.meta.env.VITE_STREAM_URL || window.location.origin;
   const WHEP_URL = `${streamBase}/birdcam/whep`;
   const HLS_URL = `${streamBase}/hls/birdcam/index.m3u8`;
-  // Temporarily off while debugging WHEP — failures should be visible, not
-  // silently absorbed by the fallback. Re-enable once WHEP is confirmed.
-  const ENABLE_HLS_FALLBACK = false;
+  // HLS fallback when WebRTC/WHEP can't connect (e.g. UDP-blocked networks).
+  // Controlled from .env via VITE_HLS_FALLBACK — baked in at BUILD time, so
+  // changing it requires: docker compose build frontend.
+  const ENABLE_HLS_FALLBACK = import.meta.env.VITE_HLS_FALLBACK !== 'false';
 
   let isConnected = false;
   let error = null;
@@ -49,17 +50,13 @@
 
   // Global stream toggles (admin-controlled, enforced for every viewer).
   let videoAllowed = true;
-  let audioAllowed = true;
-  let isStreamControlsOpen = false;
-  let streamControlsWrapEl;
+  let audioAllowed = false; // matches server default: audio is opt-in
+  let isStreamPanelOpen = false;
   let streamSettingsWs = null;
 
   function handleWindowClick(e) {
     if (isMenuOpen && menuWrapEl && !menuWrapEl.contains(e.target)) {
       isMenuOpen = false;
-    }
-    if (isStreamControlsOpen && streamControlsWrapEl && !streamControlsWrapEl.contains(e.target)) {
-      isStreamControlsOpen = false;
     }
   }
 
@@ -298,6 +295,7 @@
     if (!isChatVisible) {
       isChatVisible = true;
       isAdminPanelOpen = false;
+      isStreamPanelOpen = false;
       hasUnreadMessages = false;
     } else {
       isChatVisible = false;
@@ -308,8 +306,19 @@
     if (!isAdminPanelOpen) {
       isAdminPanelOpen = true;
       isChatVisible = false;
+      isStreamPanelOpen = false;
     } else {
       isAdminPanelOpen = false;
+    }
+  }
+
+  function toggleStreamPanel() {
+    if (!isStreamPanelOpen) {
+      isStreamPanelOpen = true;
+      isChatVisible = false;
+      isAdminPanelOpen = false;
+    } else {
+      isStreamPanelOpen = false;
     }
   }
 
@@ -469,6 +478,11 @@
           <AdminPanel on:close={() => isAdminPanelOpen = false} />
         {/if}
       </div>
+      <div class="stream-panel-section" class:stream-panel-hidden={!isStreamPanelOpen}>
+        {#if isStreamPanelOpen}
+          <StreamPanel on:close={() => isStreamPanelOpen = false} />
+        {/if}
+      </div>
     {/if}
 
     <div class="side-buttons">
@@ -493,24 +507,19 @@
             <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
           </svg>
         </button>
-        <div class="stream-controls-wrap" bind:this={streamControlsWrapEl}>
-          <button
-            class="stream-toggle-btn"
-            class:active={isStreamControlsOpen}
-            class:blocking={!videoAllowed || !audioAllowed}
-            on:click={() => isStreamControlsOpen = !isStreamControlsOpen}
-            aria-label={isStreamControlsOpen ? 'Close stream controls' : 'Open stream controls'}
-            aria-expanded={isStreamControlsOpen}
-            title="Stream controls"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
-            </svg>
-          </button>
-          {#if isStreamControlsOpen}
-            <StreamControls />
-          {/if}
-        </div>
+        <button
+          class="stream-toggle-btn"
+          class:active={isStreamPanelOpen}
+          class:blocking={!videoAllowed || !audioAllowed}
+          on:click={toggleStreamPanel}
+          aria-label={isStreamPanelOpen ? 'Close stream panel' : 'Open stream panel'}
+          aria-expanded={isStreamPanelOpen}
+          title="Stream panel"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+          </svg>
+        </button>
       {/if}
     </div>
   </div>

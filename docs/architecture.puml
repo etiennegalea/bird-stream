@@ -1,0 +1,75 @@
+@startuml bird-stream-architecture
+title Bird Live Stream — Architecture
+
+skinparam shadowing false
+skinparam roundCorner 12
+skinparam defaultFontName Helvetica
+skinparam ArrowColor #555555
+skinparam ArrowFontColor #555555
+skinparam node {
+  BackgroundColor #FAFAFA
+  BorderColor #888888
+}
+skinparam component {
+  BackgroundColor #FFFFFF
+  BorderColor #666666
+}
+skinparam cloud {
+  BackgroundColor #FFF8E7
+  BorderColor #E8A33D
+}
+skinparam actor {
+  BackgroundColor #FFFFFF
+}
+skinparam database {
+  BackgroundColor #EFF6FF
+}
+
+actor "Viewer\n(browser)" as viewer
+
+cloud "Cloudflare edge\n(Zero Trust tunnel)" as cf {
+  component "cloudflared" as cfd
+}
+
+node "Raspberry Pi  —  LAN" as pi {
+  component "pi-agent\n(Python, systemd)" as agent
+  component "FFmpeg\nv4l2 cam + ALSA mic\nlibx264 4:2:0 + Opus\ndrawtext overlay" as ffmpeg
+  agent -down-> ffmpeg : spawns /\nsupervises
+}
+
+node "Proxmox server  —  docker compose" as server {
+  component "traefik :80\nedge router" as traefik
+  component "frontend\nSvelte SPA (nginx)\nWHEP player + hls.js" as frontend
+  component "backend\nLitestar\nauth · chat · queue\npeer-count · detection" as backend
+  component "MediaMTX\nmedia plane (no transcode)" as mtx
+  component "mosquitto\nMQTT broker" as mqtt
+  database "PostgreSQL" as db
+}
+
+' ── Pi -> server (LAN only, nothing forwarded) ─────────────────────────────
+ffmpeg -right-> mtx : SRT publish\n:8890/udp (LAN)
+agent <-down-> mqtt : MQTT v5 :1883\ncamera/<id>/control|status|reply
+
+' ── Public HTTP path (rides the tunnel) ────────────────────────────────────
+viewer -down-> cfd : HTTPS\nstream.lifeofarobin.com
+cfd -down-> traefik : tunnel -> http :80
+traefik -down-> frontend : /
+traefik -down-> backend : /api  (strip prefix)\nREST + WebSockets
+traefik -down-> mtx : /birdcam  (WHEP signaling)\n/hls  (fallback)
+
+' ── Media path (direct, NOT through the tunnel) ────────────────────────────
+mtx .up.> viewer : WebRTC media\n:8189/udp (port-forwarded)
+
+' ── Internal wiring ────────────────────────────────────────────────────────
+mtx -> backend : auth hook\nPOST /mediamtx/auth
+backend -> mtx : viewer count\nAPI :9997\nRTSP :8554 (detection)
+backend -down-> db : SQLAlchemy /\nAlembic
+
+legend right
+  |= Path |= Transport |
+  | Pi -> server | SRT + MQTT, LAN only |
+  | HTTP (app, API, signaling) | Cloudflare tunnel |
+  | WebRTC media | direct UDP :8189 (forwarded) |
+endlegend
+
+@enduml

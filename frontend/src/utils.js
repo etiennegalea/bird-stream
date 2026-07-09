@@ -53,23 +53,5 @@ export const getApiBaseUrl = (ws = false) => {
   return `${protocol}://${host}`;
 };
 
-export const getTurnServers = () => {
-  const username = import.meta.env.VITE_OPENRELAY_TURN_USERNAME;
-  const credential = import.meta.env.VITE_OPENRELAY_TURN_CREDENTIAL;
-
-  if (!username || !credential) {
-    console.warn('TURN server credentials not found in environment variables');
-    return [];
-  }
-
-  return [
-    {
-      urls: [
-        'turn:global.relay.metered.ca:80?transport=udp',
-        'turn:global.relay.metered.ca:443?transport=udp'
-      ],
-      username,
-      credential
-    }
-  ];
-};
+// TURN servers removed with the switch to WHEP: MediaMTX serves media from a
+// directly reachable address, so viewers never need a relay.

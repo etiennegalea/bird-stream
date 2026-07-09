@@ -36,13 +36,14 @@ async def test_update_stream_settings_forbidden_for_non_admin(client, make_token
 
 # ── admin toggling ────────────────────────────────────────────────────────────
 
-async def test_defaults_are_enabled(client, make_admin_token):
+async def test_defaults_video_on_audio_off(client, make_admin_token):
+    """Audio must never be on by default — enabling it is a deliberate act."""
     token = make_admin_token()
     resp = await client.get(
         "/admin/stream-settings", headers={"Authorization": f"Bearer {token}"}
     )
     assert resp.status_code == 200
-    assert resp.json() == {"video_enabled": True, "audio_enabled": True}
+    assert resp.json() == {"video_enabled": True, "audio_enabled": False}
 
 
 async def test_admin_can_disable_video(client, make_admin_token):
@@ -53,32 +54,32 @@ async def test_admin_can_disable_video(client, make_admin_token):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 201
-    assert resp.json() == {"video_enabled": False, "audio_enabled": True}
+    assert resp.json() == {"video_enabled": False, "audio_enabled": False}
     assert stream_settings.video_enabled is False
 
 
-async def test_admin_can_disable_audio(client, make_admin_token):
+async def test_admin_can_enable_audio(client, make_admin_token):
     token = make_admin_token()
     resp = await client.post(
         "/admin/stream-settings",
-        json={"audio_enabled": False},
+        json={"audio_enabled": True},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 201
-    assert resp.json() == {"video_enabled": True, "audio_enabled": False}
-    assert stream_settings.audio_enabled is False
+    assert resp.json() == {"video_enabled": True, "audio_enabled": True}
+    assert stream_settings.audio_enabled is True
 
 
 async def test_partial_update_leaves_other_setting_untouched(client, make_admin_token):
     token = make_admin_token()
     headers = {"Authorization": f"Bearer {token}"}
 
-    await client.post("/admin/stream-settings", json={"video_enabled": False}, headers=headers)
+    await client.post("/admin/stream-settings", json={"audio_enabled": True}, headers=headers)
+    resp = await client.post("/admin/stream-settings", json={"video_enabled": False}, headers=headers)
+    assert resp.json() == {"video_enabled": False, "audio_enabled": True}
+
     resp = await client.post("/admin/stream-settings", json={"audio_enabled": False}, headers=headers)
     assert resp.json() == {"video_enabled": False, "audio_enabled": False}
-
-    resp = await client.post("/admin/stream-settings", json={"video_enabled": True}, headers=headers)
-    assert resp.json() == {"video_enabled": True, "audio_enabled": False}
 
 
 async def test_empty_update_rejected(client, make_admin_token):
@@ -94,7 +95,7 @@ async def test_empty_update_rejected(client, make_admin_token):
 async def test_public_settings_endpoint_needs_no_auth(client):
     resp = await client.get("/stream/settings")
     assert resp.status_code == 200
-    assert resp.json() == {"video_enabled": True, "audio_enabled": True}
+    assert resp.json() == {"video_enabled": True, "audio_enabled": False}
 
 
 async def test_public_settings_reflect_admin_changes(client, make_admin_token):
@@ -112,24 +113,24 @@ async def test_stream_settings_ws_pushes_initial_state(client, make_admin_token)
     token = make_admin_token()
     await client.post(
         "/admin/stream-settings",
-        json={"audio_enabled": False},
+        json={"audio_enabled": True},
         headers={"Authorization": f"Bearer {token}"},
     )
 
     with await client.websocket_connect("/stream-settings") as ws:
         msg = ws.receive_json()
-        assert msg == {"video_enabled": True, "audio_enabled": False}
+        assert msg == {"video_enabled": True, "audio_enabled": True}
 
 
 async def test_stream_settings_ws_pushes_updates(client, make_admin_token):
     token = make_admin_token()
 
     with await client.websocket_connect("/stream-settings") as ws:
-        assert ws.receive_json() == {"video_enabled": True, "audio_enabled": True}
+        assert ws.receive_json() == {"video_enabled": True, "audio_enabled": False}
 
         await client.post(
             "/admin/stream-settings",
             json={"video_enabled": False},
             headers={"Authorization": f"Bearer {token}"},
         )
-        assert ws.receive_json() == {"video_enabled": False, "audio_enabled": True}
+        assert ws.receive_json() == {"video_enabled": False, "audio_enabled": False}

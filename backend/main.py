@@ -30,6 +30,7 @@ from controllers.webrtc_controller import WebRTCController
 from db.session import SessionLocal
 from services.auth_service import seed_admin_user
 from services.detection_service import DetectionService, detection_enabled
+from services.mqtt_service import mqtt_devices
 from services.queue_service import QueueService
 from services.video_service import create_local_tracks
 from services.weather_service import fetch_weather_periodically
@@ -63,6 +64,8 @@ async def lifespan(app: Litestar):
         fetch_weather_periodically(cache_expiration=3600)
     )
 
+    mqtt_devices.start()  # Pi transmitter status/control bridge
+
     if detection_enabled():
         app.state.detection_service = DetectionService()
         app.state.detection_service.start()
@@ -84,6 +87,7 @@ async def lifespan(app: Litestar):
     try:
         yield
     finally:
+        mqtt_devices.stop()
         if getattr(app.state, "detection_service", None):
             app.state.detection_service.stop()
         await pcs_manager.clean_up()

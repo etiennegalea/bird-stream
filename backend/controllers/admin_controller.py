@@ -10,6 +10,7 @@ from sqlalchemy import select
 import services.auth_service as auth_svc
 from controllers.chat_controller import chat_service
 from models.orm import User
+from services.mqtt_service import mqtt_devices
 from services.stream_settings_service import stream_settings
 from services.webrtc_service import pcs_manager
 
@@ -119,3 +120,29 @@ class AdminController(Controller):
         )
         logger.info("Admin (user_id=%s) set stream settings: %s", user_id, settings)
         return settings
+
+    # ── Pi transmitter control (MQTT bridge) ─────────────────────────────
+
+    @get("/stream/devices")
+    async def get_stream_devices(self, request: Request, state: State) -> dict:
+        """Latest retained/heartbeat status of every known transmitter."""
+        _require_admin(request, state.db)
+        return {
+            "broker_connected": mqtt_devices.connected,
+            "devices": mqtt_devices.devices(),
+        }
+
+    @post("/stream/devices/{pi_id:str}/{action:str}")
+    async def control_stream_device(
+        self, request: Request, state: State, pi_id: str, action: str
+    ) -> dict:
+        user_id = _require_admin(request, state.db)
+        try:
+            mqtt_devices.send_control(pi_id, action)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except RuntimeError as e:
+            raise HTTPException(status_code=503, detail=str(e))
+        logger.info("Admin (user_id=%s) sent '%s' to device '%s'",
+                    user_id, action, pi_id)
+        return {"ok": True, "pi_id": pi_id, "action": action}

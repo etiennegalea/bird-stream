@@ -52,6 +52,12 @@ DEFAULT_CONFIG = {
         "bitrate": "1500k",
         "use_hw_acceleration": False,
     },
+    "audio": {
+        "enabled": False,       # capture mic audio (e.g. webcam mic via ALSA)
+        "device": "default",    # ALSA device; list with: arecord -l
+        "bitrate": "64k",
+        "channels": 1,
+    },
     "overlay": {
         "enabled": True,
         "time_format": "%Y-%m-%d %H:%M:%S",
@@ -191,16 +197,25 @@ class CameraAgent:
                           device, use_hw):
         vf = self._drawtext_filter()
         url = self._srt_url(host, port)
+        audio = self.config.get("audio") or {}
+        audio_on = bool(audio.get("enabled", False))
 
         if sys.platform == "darwin":  # macOS testing
+            avf_input = f"{device}:{audio.get('device', '0')}" if audio_on \
+                else f"{device}:none"
             cmd = ["ffmpeg", "-f", "avfoundation", "-framerate", str(fps),
-                   "-i", f"{device}:none",
+                   "-i", avf_input,
                    "-c:v", "libx264", "-preset", "ultrafast",
                    "-tune", "zerolatency"]
         else:  # Linux / Raspberry Pi
             cmd = ["ffmpeg", "-f", "v4l2", "-input_format", "mjpeg",
                    "-video_size", f"{width}x{height}", "-framerate", str(fps),
                    "-i", device]
+            if audio_on:
+                # Second input: ALSA mic (webcam mic). List devices: arecord -l
+                cmd += ["-f", "alsa",
+                        "-channels", str(audio.get("channels", 1)),
+                        "-i", audio.get("device", "default")]
             if use_hw:
                 cmd += ["-c:v", "h264_v4l2m2m"]
             else:
@@ -212,7 +227,16 @@ class CameraAgent:
         # Force 4:2:0: MJPEG cams deliver yuvj422p and browsers can't decode
         # H264 4:2:2 profiles (also breaks the Pi's v4l2m2m HW encoder).
         cmd += ["-pix_fmt", "yuv420p",
-                "-b:v", bitrate, "-g", str(int(fps) * 2), "-f", "mpegts", url]
+                "-b:v", bitrate, "-g", str(int(fps) * 2)]
+        if audio_on:
+            # Opus @48k: the codec WebRTC/WHEP requires — passes through
+            # MediaMTX untouched (mpegts carries opus fine).
+            cmd += ["-c:a", "libopus",
+                    "-b:a", audio.get("bitrate", "64k"),
+                    "-ar", "48000",
+                    "-ac", str(audio.get("channels", 1)),
+                    "-application", "audio"]
+        cmd += ["-f", "mpegts", url]
         return cmd
 
     def start_stream(self, params: dict):
@@ -256,6 +280,7 @@ class CameraAgent:
                     "path": srt.get("path", "birdcam"),
                     "width": width, "height": height, "fps": fps,
                     "bitrate": bitrate, "device": device,
+                    "audio": bool((self.config.get("audio") or {}).get("enabled")),
                 }
                 self.publish_status("streaming")
                 threading.Thread(target=self._read_stderr,
