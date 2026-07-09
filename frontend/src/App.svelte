@@ -285,6 +285,13 @@
     }
   }
 
+  function reconnect() {
+    // Full restart: cleanup() + re-enter the viewer queue, which starts the
+    // stream again (WHEP, then HLS fallback). Clears any prior error first.
+    error = null;
+    enterQueue();
+  }
+
   function handleNewMessage() {
     if (!isChatVisible) {
       hasUnreadMessages = true;
@@ -423,7 +430,10 @@
             <p class="queue-sublabel">You're in the queue</p>
           </div>
         {:else if error}
-          <div class="error-message">{error}</div>
+          <div class="error-display">
+            <p class="error-text">{error}</p>
+            <button class="reconnect-btn" on:click={reconnect}>Reconnect</button>
+          </div>
         {:else}
           {#if !isConnected}
             <LoadingCircleDots />

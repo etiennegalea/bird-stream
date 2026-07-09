@@ -413,6 +413,47 @@ video.stream-viewport {
   color: #555;
 }
 
+/* Stream error overlay + reconnect */
+.error-display {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 1.5rem;
+  background: #111;
+  border-radius: 8px;
+  color: #fff;
+  text-align: center;
+  z-index: 2;
+}
+
+.error-text {
+  margin: 0;
+  max-width: 90%;
+  font-size: 0.95rem;
+  color: #e0e0e0;
+  line-height: 1.4;
+}
+
+.reconnect-btn {
+  padding: 0.55rem 1.4rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #fff;
+  background: #B35610;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.reconnect-btn:hover {
+  background: #E87530;
+}
+
 /* Loading container styles */
 .loading-container {
   position: absolute;
