@@ -282,6 +282,13 @@
 
 .sched-dash { color: #999; }
 
+.sched-suffix {
+  font-size: 0.58rem;
+  color: #b08968;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
 .sched-save {
   margin-left: auto;
   padding: 0.28rem 0.7rem;

@@ -293,6 +293,7 @@
                 </label>
 
                 {#if scheduleForms[d.pi_id].enabled}
+                  {@const sun = scheduleForms[d.pi_id].mode === 'sun'}
                   <div class="sched-mode">
                     <label class="sched-mode-opt">
                       <input type="radio" value="sun" bind:group={scheduleForms[d.pi_id].mode} disabled={!brokerConnected} />
@@ -304,13 +305,20 @@
                     </label>
                   </div>
 
-                  {#if scheduleForms[d.pi_id].mode === 'fixed'}
-                    <div class="sched-times">
+                  <!-- In sun mode the pickers are kept but disabled, showing the
+                       device's actual computed sunrise/sunset for today. -->
+                  <div class="sched-times">
+                    {#if sun}
+                      <input type="time" class="sched-time" value={(d.schedule && d.schedule.start) || ''} disabled title="Today's sunrise" />
+                      <span class="sched-dash">–</span>
+                      <input type="time" class="sched-time" value={(d.schedule && d.schedule.end) || ''} disabled title="Today's sunset" />
+                      <span class="sched-suffix">sunrise – sunset</span>
+                    {:else}
                       <input type="time" class="sched-time" bind:value={scheduleForms[d.pi_id].start} disabled={!brokerConnected} />
                       <span class="sched-dash">–</span>
                       <input type="time" class="sched-time" bind:value={scheduleForms[d.pi_id].end} disabled={!brokerConnected} />
-                    </div>
-                  {/if}
+                    {/if}
+                  </div>
                 {/if}
 
                 <div class="sched-actions">
@@ -318,9 +326,9 @@
                     {#if !scheduleForms[d.pi_id].enabled}
                       Always on — enable to rest the device outside set hours.
                     {:else if scheduleForms[d.pi_id].mode === 'sun'}
-                      Wakes at sunrise, rests at sunset{#if d.schedule && d.schedule.start} (today {d.schedule.start}–{d.schedule.end}){/if}.
+                      Wakes at sunrise, rests at sunset (device local time).
                     {:else}
-                      Broadcasts {scheduleForms[d.pi_id].start}–{scheduleForms[d.pi_id].end} (device local time); rests otherwise.
+                      Broadcasts the set hours (device local time); rests otherwise.
                     {/if}
                   </p>
                   <button
