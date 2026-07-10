@@ -240,14 +240,35 @@
   cursor: pointer;
 }
 
+.sched-mode {
+  display: flex;
+  gap: 0.9rem;
+  margin-top: 0.45rem;
+}
+.sched-mode-opt {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.66rem;
+  color: #555;
+  cursor: pointer;
+}
+.sched-mode-opt input { accent-color: #B35610; margin: 0; }
+
 .sched-times {
   display: flex;
   align-items: center;
   gap: 0.35rem;
   margin-top: 0.45rem;
-  transition: opacity 0.15s;
 }
-.sched-times.disabled { opacity: 0.45; }
+
+.sched-actions {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
 
 .sched-time {
   font-size: 0.68rem;

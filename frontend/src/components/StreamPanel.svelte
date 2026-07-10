@@ -7,6 +7,10 @@
 
   const dispatch = createEventDispatcher();
 
+  // Reports the currently-streaming transmitter's id up to the parent so it
+  // can be shown on the video viewport. null when nothing is live.
+  export let onActiveDeviceChange = () => {};
+
   // ── Broadcast settings (public video/audio blocking) ────────────────────
   let videoEnabled = true;
   let audioEnabled = false; // matches server default: audio is opt-in
@@ -84,12 +88,19 @@
             const s = d.schedule || {};
             scheduleForms[d.pi_id] = {
               enabled: !!s.enabled,
-              start: s.start || '06:00',
-              end: s.end || '20:00',
+              mode: s.mode || 'sun',
+              // In sun mode s.start/end are the computed sunrise/sunset; keep
+              // sensible fixed-mode defaults for the pickers.
+              start: (s.mode === 'fixed' && s.start) || '06:00',
+              end: (s.mode === 'fixed' && s.end) || '20:00',
             };
           }
         }
         scheduleForms = scheduleForms;
+        // Tell the parent which transmitter is currently feeding the stream
+        // (devices are sorted freshest-first, so the first live one wins).
+        const active = devices.find(d => d.status === 'streaming' && !d.stale);
+        onActiveDeviceChange(active ? active.pi_id : null);
         devicesError = '';
       } else {
         devicesError = resp.status === 403 ? 'Admin access required' : 'Failed to load devices';
@@ -132,7 +143,12 @@
       const resp = await fetch(`${getApiBaseUrl()}/admin/stream/devices/${piId}/schedule`, {
         method: 'POST',
         headers: authHeader(),
-        body: JSON.stringify({ enabled: form.enabled, start: form.start, end: form.end }),
+        body: JSON.stringify({
+          enabled: form.enabled,
+          mode: form.mode,
+          start: form.start,
+          end: form.end,
+        }),
       });
       if (!resp.ok) {
         const body = await resp.json().catch(() => ({}));
@@ -161,7 +177,10 @@
     fetchDevices();
     pollTimer = setInterval(fetchDevices, 5000);
   });
-  onDestroy(() => clearInterval(pollTimer));
+  onDestroy(() => {
+    clearInterval(pollTimer);
+    onActiveDeviceChange(null);
+  });
 </script>
 
 <div class="stream-drawer" role="region" aria-label="Stream control panel">
@@ -272,20 +291,38 @@
                   />
                   <span>Schedule broadcast window</span>
                 </label>
-                <div class="sched-times" class:disabled={!scheduleForms[d.pi_id].enabled}>
-                  <input
-                    type="time"
-                    class="sched-time"
-                    bind:value={scheduleForms[d.pi_id].start}
-                    disabled={!scheduleForms[d.pi_id].enabled || !brokerConnected}
-                  />
-                  <span class="sched-dash">–</span>
-                  <input
-                    type="time"
-                    class="sched-time"
-                    bind:value={scheduleForms[d.pi_id].end}
-                    disabled={!scheduleForms[d.pi_id].enabled || !brokerConnected}
-                  />
+
+                {#if scheduleForms[d.pi_id].enabled}
+                  <div class="sched-mode">
+                    <label class="sched-mode-opt">
+                      <input type="radio" value="sun" bind:group={scheduleForms[d.pi_id].mode} disabled={!brokerConnected} />
+                      Sunrise → Sunset
+                    </label>
+                    <label class="sched-mode-opt">
+                      <input type="radio" value="fixed" bind:group={scheduleForms[d.pi_id].mode} disabled={!brokerConnected} />
+                      Fixed hours
+                    </label>
+                  </div>
+
+                  {#if scheduleForms[d.pi_id].mode === 'fixed'}
+                    <div class="sched-times">
+                      <input type="time" class="sched-time" bind:value={scheduleForms[d.pi_id].start} disabled={!brokerConnected} />
+                      <span class="sched-dash">–</span>
+                      <input type="time" class="sched-time" bind:value={scheduleForms[d.pi_id].end} disabled={!brokerConnected} />
+                    </div>
+                  {/if}
+                {/if}
+
+                <div class="sched-actions">
+                  <p class="sched-hint">
+                    {#if !scheduleForms[d.pi_id].enabled}
+                      Always on — enable to rest the device outside set hours.
+                    {:else if scheduleForms[d.pi_id].mode === 'sun'}
+                      Wakes at sunrise, rests at sunset{#if d.schedule && d.schedule.start} (today {d.schedule.start}–{d.schedule.end}){/if}.
+                    {:else}
+                      Broadcasts {scheduleForms[d.pi_id].start}–{scheduleForms[d.pi_id].end} (device local time); rests otherwise.
+                    {/if}
+                  </p>
                   <button
                     class="sched-save"
                     disabled={schedPending[d.pi_id] || !brokerConnected}
@@ -294,13 +331,6 @@
                     {schedPending[d.pi_id] ? '…' : 'Save'}
                   </button>
                 </div>
-                <p class="sched-hint">
-                  {#if scheduleForms[d.pi_id].enabled}
-                    Broadcasts {scheduleForms[d.pi_id].start}–{scheduleForms[d.pi_id].end} (device local time); rests otherwise.
-                  {:else}
-                    Always on — enable to limit broadcasting to set hours.
-                  {/if}
-                </p>
               </div>
             {/if}
           </div>

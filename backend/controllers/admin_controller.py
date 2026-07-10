@@ -47,8 +47,11 @@ class StreamSettingsRequest(msgspec.Struct):
 
 class ScheduleRequest(msgspec.Struct):
     enabled: bool
-    start: str | None = None  # "HH:MM" local Pi time
+    mode: str | None = None   # "sun" (sunrise–sunset) or "fixed"
+    start: str | None = None  # "HH:MM" local Pi time (fixed mode / sun fallback)
     end: str | None = None
+    latitude: float | None = None   # sun mode: override IP geolocation
+    longitude: float | None = None
 
 
 class AdminController(Controller):
@@ -148,12 +151,21 @@ class AdminController(Controller):
         """Set the daily broadcast window on a transmitter. Outside the window
         the device rests (idle). Times are the Pi's local time, "HH:MM"."""
         user_id = _require_admin(request, state.db)
-        params: dict = {"enabled": data.enabled}
+        mode = data.mode or "sun"
+        if mode not in ("sun", "fixed"):
+            raise HTTPException(status_code=400,
+                                detail="mode must be 'sun' or 'fixed'")
+        params: dict = {"enabled": data.enabled, "mode": mode}
         if data.start is not None:
             params["start"] = data.start
         if data.end is not None:
             params["end"] = data.end
-        if data.enabled:
+        if data.latitude is not None:
+            params["latitude"] = data.latitude
+        if data.longitude is not None:
+            params["longitude"] = data.longitude
+        # Fixed mode requires valid clock times; sun mode derives them.
+        if data.enabled and mode == "fixed":
             for key in ("start", "end"):
                 val = params.get(key)
                 if not (isinstance(val, str) and _HHMM_RE.match(val)):

@@ -53,6 +53,7 @@
   let audioAllowed = false; // matches server default: audio is opt-in
   let isStreamPanelOpen = false;
   let streamSettingsWs = null;
+  let activeDeviceId = null; // transmitter feeding the stream (panel open only)
 
   function handleWindowClick(e) {
     if (isMenuOpen && menuWrapEl && !menuWrapEl.contains(e.target)) {
@@ -423,6 +424,14 @@
   <div class="main-content" class:chat-hidden={!isChatVisible}>
     <div class="stream-section">
       <div class="stream-viewport">
+        {#if isStreamPanelOpen && activeDeviceId}
+          <div class="device-id-badge" title="Transmitter feeding this stream">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+            </svg>
+            {activeDeviceId}
+          </div>
+        {/if}
         {#if queuePosition !== null}
           <div class="queue-display">
             <p class="queue-label">Stream is full</p>
@@ -490,7 +499,10 @@
       </div>
       <div class="stream-panel-section" class:stream-panel-hidden={!isStreamPanelOpen}>
         {#if isStreamPanelOpen}
-          <StreamPanel on:close={() => isStreamPanelOpen = false} />
+          <StreamPanel
+            on:close={() => isStreamPanelOpen = false}
+            onActiveDeviceChange={(id) => activeDeviceId = id}
+          />
         {/if}
       </div>
     {/if}
@@ -711,6 +723,27 @@
     border-radius: 50%;
     background: #d63a1f;
   }
+
+  /* Transmitter id badge — shown on the viewport while the stream panel is
+     open so you can tell which device is feeding the stream. */
+  .device-id-badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 3px 8px;
+    background: rgba(17, 17, 17, 0.72);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    border-radius: 6px;
+    pointer-events: none;
+  }
+  .device-id-badge svg { color: #E87530; }
 
   /* Video block: opaque overlay on the stream viewport (audio keeps playing). */
   .video-disabled-overlay {

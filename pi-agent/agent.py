@@ -11,14 +11,17 @@ topics so one broker can manage many Pis:
     camera/<pi_id>/reply     (publish)    responses to get_* / update actions
 """
 
+import datetime
 import json
 import logging
+import math
 import os
 import shutil
 import subprocess
 import sys
 import threading
 import time
+import urllib.request
 from collections import deque
 from logging.handlers import RotatingFileHandler
 
@@ -87,12 +90,21 @@ DEFAULT_CONFIG = {
                 "username": None, "password": None},
     },
     "schedule": {
-        # When enabled, the device only broadcasts between start and end
-        # (HH:MM, the Pi's LOCAL time) and rests (idle) the rest of the day.
-        # start > end wraps past midnight (e.g. 22:00–06:00).
-        "enabled": False,
+        # The device only broadcasts inside its daily window and rests (idle,
+        # ffmpeg stopped → cools down) the rest of the day. ON by default, in
+        # "sun" mode: it wakes at sunrise and sleeps at sunset.
+        #   mode "sun"   → sunrise..sunset for the device's location
+        #                  (auto-detected via IP; override with lat/long below)
+        #   mode "fixed" → the start/end clock times (Pi LOCAL time, HH:MM;
+        #                  start > end wraps past midnight, e.g. 22:00–06:00)
+        # start/end also serve as the fallback window if sun times can't be
+        # computed (no location / polar day/night).
+        "enabled": True,
+        "mode": "sun",
         "start": "06:00",
         "end": "20:00",
+        "latitude": None,
+        "longitude": None,
     },
 }
 
@@ -114,6 +126,43 @@ def _parse_hhmm(value) -> int | None:
     if 0 <= h <= 23 and 0 <= m <= 59:
         return h * 60 + m
     return None
+
+
+def _fmt_hhmm(minutes: int) -> str:
+    minutes %= 1440
+    return f"{minutes // 60:02d}:{minutes % 60:02d}"
+
+
+# ── Sunrise/sunset (NOAA algorithm, pure stdlib — no extra deps) ───────────
+# Returns local minutes-since-midnight for a given date/location, or None when
+# the sun doesn't cross the horizon that day (polar day/night).
+
+def _sun_event(lat, lon, year, month, day, rising, tz_offset_hours,
+               zenith=90.833) -> int | None:
+    N = datetime.date(year, month, day).timetuple().tm_yday
+    lng_hour = lon / 15.0
+    t = N + (((6 if rising else 18) - lng_hour) / 24.0)
+    M = (0.9856 * t) - 3.289
+    L = M + (1.916 * math.sin(math.radians(M))) \
+        + (0.020 * math.sin(math.radians(2 * M))) + 282.634
+    L %= 360
+    RA = math.degrees(math.atan(0.91764 * math.tan(math.radians(L)))) % 360
+    # Put RA in the same quadrant as L, then convert to hours.
+    RA += (math.floor(L / 90) * 90) - (math.floor(RA / 90) * 90)
+    RA /= 15.0
+    sin_dec = 0.39782 * math.sin(math.radians(L))
+    cos_dec = math.cos(math.asin(sin_dec))
+    cos_h = (math.cos(math.radians(zenith)) - (sin_dec * math.sin(math.radians(lat)))) \
+        / (cos_dec * math.cos(math.radians(lat)))
+    if cos_h > 1 or cos_h < -1:
+        return None  # sun never rises / never sets on this day
+    H = (360 - math.degrees(math.acos(cos_h))) if rising \
+        else math.degrees(math.acos(cos_h))
+    H /= 15.0
+    T = H + RA - (0.06571 * t) - 6.622
+    UT = (T - lng_hour) % 24
+    local = (UT + tz_offset_hours) % 24
+    return int(round(local * 60)) % 1440
 
 
 def deep_merge(base: dict, override: dict) -> dict:
@@ -157,6 +206,10 @@ class CameraAgent:
         self.restart_attempts = 0       # consecutive failures since last success
         self._restart_timer = None
 
+        # Cached IP-geolocation for the sunrise/sunset schedule
+        self._geo = None                # (lat, lon), False (failed), or None
+        self._geo_ts = 0.0
+
     # ── config ────────────────────────────────────────────────────────────
 
     def _load_config(self) -> dict:
@@ -195,14 +248,19 @@ class CameraAgent:
         # broadcast window (resting) rather than merely stopped.
         sched = self.config.get("schedule") or {}
         if sched.get("enabled"):
-            payload["schedule"] = {
-                "enabled": True,
-                "start": sched.get("start"),
-                "end": sched.get("end"),
-            }
+            info = {"enabled": True, "mode": sched.get("mode", "sun")}
+            bounds = self._window_bounds()
+            if bounds:
+                # Report the *effective* window (today's sunrise/sunset in sun
+                # mode) so the panel shows the real hours.
+                info["start"], info["end"] = _fmt_hhmm(bounds[0]), _fmt_hhmm(bounds[1])
+            else:
+                info["start"], info["end"] = sched.get("start"), sched.get("end")
+            payload["schedule"] = info
             payload["resting"] = status == "idle" and not self._in_window()
         else:
-            payload["schedule"] = {"enabled": False}
+            payload["schedule"] = {"enabled": False,
+                                   "mode": sched.get("mode", "sun")}
         try:
             self.client.publish(self.topic_status, json.dumps(payload),
                                 qos=1, retain=True)
@@ -303,6 +361,14 @@ class CameraAgent:
         # Remember intent + params so the supervisor can auto-restart.
         if params:
             self.last_start_params = params
+        # Cooldown guard: never run ffmpeg outside the broadcast window. This
+        # keeps "rest" truly at rest (no encoding load) even if a start slips
+        # in from a manual command or an in-flight auto-restart.
+        if not self._in_window():
+            logger.info("Outside broadcast window — resting (stream not started)")
+            self.stop_stream(manual=True)
+            self.publish_status("idle")
+            return
         self.should_stream = True
         self.stop_stream()  # non-manual: keeps should_stream = True
         with self.lock:
@@ -445,17 +511,67 @@ class CameraAgent:
 
     # ── broadcast schedule ────────────────────────────────────────────────
 
-    def _in_window(self) -> bool:
-        """True if the current LOCAL time is inside the broadcast window (or if
-        no schedule is enabled). Handles windows that wrap past midnight."""
+    def _resolve_location(self):
+        """(lat, lon) for the sunrise/sunset calc: explicit config if set,
+        otherwise IP-geolocated once and cached (retried every 30 min on
+        failure). Returns None if location is unknown."""
+        sched = self.config.get("schedule") or {}
+        lat, lon = sched.get("latitude"), sched.get("longitude")
+        if lat is not None and lon is not None:
+            try:
+                return float(lat), float(lon)
+            except (TypeError, ValueError):
+                pass
+        now = time.time()
+        if self._geo is not None and (now - self._geo_ts) < 1800:
+            return self._geo or None
+        self._geo_ts = now
+        try:
+            with urllib.request.urlopen("http://ip-api.com/json/", timeout=5) as r:
+                info = json.loads(r.read().decode())
+            if info.get("status") == "success":
+                self._geo = (float(info["lat"]), float(info["lon"]))
+                logger.info(f"Auto-detected location {self._geo} for sun schedule")
+            else:
+                self._geo = False
+        except Exception as e:
+            logger.warning(f"IP geolocation failed ({e}); sun schedule will use "
+                           "the fixed fallback window")
+            self._geo = False
+        return self._geo or None
+
+    def _window_bounds(self):
+        """Effective (start_min, end_min) for today, or None to not restrict
+        (schedule disabled / unresolvable). Sun mode computes sunrise/sunset
+        and falls back to the fixed start/end when that isn't possible."""
         sched = self.config.get("schedule") or {}
         if not sched.get("enabled"):
-            return True
+            return None
+        if sched.get("mode", "sun") == "sun":
+            loc = self._resolve_location()
+            if loc:
+                now = time.localtime()
+                tz = (now.tm_gmtoff or 0) / 3600.0
+                sr = _sun_event(loc[0], loc[1], now.tm_year, now.tm_mon,
+                                now.tm_mday, True, tz)
+                ss = _sun_event(loc[0], loc[1], now.tm_year, now.tm_mon,
+                                now.tm_mday, False, tz)
+                if sr is not None and ss is not None:
+                    return sr, ss
+        # Fixed mode, or sun fallback.
         start = _parse_hhmm(sched.get("start"))
         end = _parse_hhmm(sched.get("end"))
         if start is None or end is None or start == end:
-            # Malformed or zero-length window → don't restrict.
+            return None
+        return start, end
+
+    def _in_window(self) -> bool:
+        """True if the current LOCAL time is inside the broadcast window (or if
+        no schedule is active). Handles windows that wrap past midnight."""
+        bounds = self._window_bounds()
+        if bounds is None:
             return True
+        start, end = bounds
         now = time.localtime()
         cur = now.tm_hour * 60 + now.tm_min
         if start < end:
@@ -489,21 +605,37 @@ class CameraAgent:
     # ── control actions ───────────────────────────────────────────────────
 
     def action_set_schedule(self, payload):
-        """Set (or clear) the daily broadcast window. Applied immediately."""
+        """Set (or clear) the daily broadcast window. Applied immediately.
+
+        Params: enabled (bool), mode ('sun' | 'fixed'), start/end ('HH:MM',
+        used in fixed mode and as the sun-mode fallback), and optional
+        latitude/longitude to override IP geolocation for sunrise/sunset."""
+        cur = self.config.get("schedule") or {}
         enabled = bool(payload.get("enabled", False))
-        start = payload.get("start")
-        end = payload.get("end")
-        if enabled and (_parse_hhmm(start) is None or _parse_hhmm(end) is None):
+        mode = payload.get("mode", cur.get("mode", "sun"))
+        if mode not in ("sun", "fixed"):
+            self.publish_reply(
+                "set_schedule",
+                {"ok": False, "error": "mode must be 'sun' or 'fixed'"},
+                payload.get("request_id"))
+            return
+        start = payload.get("start", cur.get("start"))
+        end = payload.get("end", cur.get("end"))
+        # Fixed mode needs valid clock times; sun mode still keeps them as the
+        # fallback window, so validate whenever they're provided.
+        if mode == "fixed" and (_parse_hhmm(start) is None or _parse_hhmm(end) is None):
             self.publish_reply(
                 "set_schedule",
                 {"ok": False, "error": "start/end must be 'HH:MM' (00:00–23:59)"},
                 payload.get("request_id"))
             return
+        lat = payload.get("latitude", cur.get("latitude"))
+        lon = payload.get("longitude", cur.get("longitude"))
         self.config["schedule"] = {
-            "enabled": enabled,
-            "start": start if start is not None else self.config.get("schedule", {}).get("start"),
-            "end": end if end is not None else self.config.get("schedule", {}).get("end"),
+            "enabled": enabled, "mode": mode, "start": start, "end": end,
+            "latitude": lat, "longitude": lon,
         }
+        self._geo = None  # re-resolve location on next check
         self._save_config()
         self.publish_reply(
             "set_schedule",

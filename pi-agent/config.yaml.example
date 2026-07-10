@@ -45,8 +45,12 @@ stream:
     username: "picam"         # must match MEDIAMTX_PUBLISH_USER on the backend
     password: "change-me"     # must match MEDIAMTX_PUBLISH_PASSWORD
 
-schedule:                     # daily broadcast window (Pi's LOCAL time)
-  enabled: false              # true -> only stream between start and end,
-                              # rest (idle) the remainder of the day
-  start: "06:00"              # HH:MM; start > end wraps past midnight (22:00–06:00)
-  end: "20:00"                # settable live from the admin stream panel
+schedule:                     # daily broadcast window — device rests (ffmpeg
+                              # stopped, cools down) outside it
+  enabled: true               # on by default
+  mode: "sun"                 # "sun" = sunrise..sunset; "fixed" = start..end
+  start: "06:00"              # fixed-mode window / sun-mode fallback (LOCAL HH:MM;
+  end: "20:00"                # start > end wraps past midnight, e.g. 22:00–06:00)
+  latitude: null              # sun mode: auto-detected via IP if null,
+  longitude: null             # or set explicitly to pin the location
+                              # (all settable live from the admin stream panel)

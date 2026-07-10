@@ -200,7 +200,7 @@ class TestParseHHMM(unittest.TestCase):
 
 class TestScheduleWindow(unittest.TestCase):
     def _agent(self, enabled=True, start="06:00", end="20:00"):
-        return make_agent(**{"schedule.enabled": enabled,
+        return make_agent(**{"schedule.enabled": enabled, "schedule.mode": "fixed",
                              "schedule.start": start, "schedule.end": end})
 
     def test_disabled_always_in_window(self):
@@ -230,6 +230,42 @@ class TestScheduleWindow(unittest.TestCase):
             self.assertTrue(a._in_window())
 
 
+class TestSunSchedule(unittest.TestCase):
+    def _agent(self):
+        # Explicit lat/lon avoids any network geolocation. London, Jan 1
+        # (via _at's date): sunrise ~08:06, sunset ~16:02 UTC.
+        return make_agent(**{
+            "schedule.enabled": True, "schedule.mode": "sun",
+            "schedule.latitude": 51.5, "schedule.longitude": -0.1,
+        })
+
+    def test_streams_during_daylight_rests_at_night(self):
+        a = self._agent()
+        for hour, expected in [(4, False), (12, True), (20, False)]:
+            with mock.patch.object(agent.time, "localtime",
+                                   return_value=_at(hour)):
+                self.assertEqual(a._in_window(), expected, msg=f"hour {hour}")
+
+    def test_window_bounds_are_sunrise_sunset(self):
+        a = self._agent()
+        with mock.patch.object(agent.time, "localtime", return_value=_at(12)):
+            start, end = a._window_bounds()
+        # Morning sunrise, afternoon sunset, and sunrise before sunset.
+        self.assertTrue(6 * 60 < start < 10 * 60, msg=start)
+        self.assertTrue(14 * 60 < end < 18 * 60, msg=end)
+        self.assertLess(start, end)
+
+    def test_polar_night_falls_back_to_fixed(self):
+        # Far north in deep winter: no sunrise → fall back to fixed start/end.
+        a = make_agent(**{
+            "schedule.enabled": True, "schedule.mode": "sun",
+            "schedule.latitude": 78.2, "schedule.longitude": 15.6,  # Svalbard
+            "schedule.start": "09:00", "schedule.end": "15:00",
+        })
+        with mock.patch.object(agent.time, "localtime", return_value=_at(12)):
+            self.assertEqual(a._window_bounds(), (9 * 60, 15 * 60))
+
+
 class TestSetScheduleAction(unittest.TestCase):
     def _agent(self):
         a = make_agent()
@@ -241,23 +277,39 @@ class TestSetScheduleAction(unittest.TestCase):
         a.publish_reply = lambda action, data, request_id=None: a.replies.append(data)
         return a
 
-    def test_enable_valid_updates_config(self):
+    def test_enable_fixed_updates_config(self):
         a = self._agent()
-        a.action_set_schedule({"enabled": True, "start": "07:00", "end": "19:30"})
-        self.assertEqual(a.config["schedule"],
-                         {"enabled": True, "start": "07:00", "end": "19:30"})
+        a.action_set_schedule({"enabled": True, "mode": "fixed",
+                               "start": "07:00", "end": "19:30"})
+        s = a.config["schedule"]
+        self.assertEqual((s["enabled"], s["mode"], s["start"], s["end"]),
+                         (True, "fixed", "07:00", "19:30"))
         self.assertTrue(a.replies[-1]["ok"])
 
-    def test_enable_invalid_time_rejected(self):
+    def test_enable_sun_mode(self):
         a = self._agent()
-        a.action_set_schedule({"enabled": True, "start": "7am", "end": "19:30"})
+        a.action_set_schedule({"enabled": True, "mode": "sun",
+                               "latitude": 51.5, "longitude": -0.1})
+        s = a.config["schedule"]
+        self.assertEqual((s["enabled"], s["mode"]), (True, "sun"))
+        self.assertEqual((s["latitude"], s["longitude"]), (51.5, -0.1))
+        self.assertTrue(a.replies[-1]["ok"])
+
+    def test_fixed_mode_invalid_time_rejected(self):
+        a = self._agent()
+        a.action_set_schedule({"enabled": True, "mode": "fixed",
+                               "start": "7am", "end": "19:30"})
         self.assertFalse(a.replies[-1]["ok"])
-        # config must be untouched (still the default disabled schedule)
-        self.assertFalse(a.config["schedule"]["enabled"])
+        # config untouched (still the default schedule)
+        self.assertEqual(a.config["schedule"]["start"], "06:00")
+
+    def test_invalid_mode_rejected(self):
+        a = self._agent()
+        a.action_set_schedule({"enabled": True, "mode": "banana"})
+        self.assertFalse(a.replies[-1]["ok"])
 
     def test_disable_clears_flag(self):
         a = self._agent()
-        a.config["schedule"] = {"enabled": True, "start": "06:00", "end": "20:00"}
         a.action_set_schedule({"enabled": False})
         self.assertFalse(a.config["schedule"]["enabled"])
         self.assertTrue(a.replies[-1]["ok"])
