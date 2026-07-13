@@ -51,47 +51,54 @@ def _check_read(query: str) -> bool:
     return auth_svc.decode_jwt(token) is not None
 
 
+async def authenticate_request(data: dict) -> None:
+    """Core MediaMTX auth decision. Returns None to allow, raises HTTPException
+    to deny. Kept as a plain module-level function so it's unit-testable
+    without instantiating the Litestar Controller."""
+    action = data.get("action", "")
+    path = data.get("path", "")
+    protocol = data.get("protocol", "")
+    ip = data.get("ip", "")
+
+    if action in _PUBLISH_ACTIONS:
+        if _check_publish(data.get("user") or "", data.get("password") or ""):
+            logger.info(f"Allow publish path={path} proto={protocol} ip={ip}")
+            return
+        logger.warning(f"Deny publish path={path} proto={protocol} ip={ip}")
+        raise HTTPException(status_code=401, detail="Publish not authorized")
+
+    if action in _READ_ACTIONS:
+        # RTSP is only reachable inside the docker network (port 8554 is
+        # not published) — used by the detection worker, always allowed.
+        if protocol == "rtsp":
+            logger.debug(f"Allow internal rtsp read path={path} ip={ip}")
+            return
+        # Admin kill-switch: while both video and audio are disabled, no
+        # new viewer sessions may start. (Per-track blocking of a live
+        # session is enforced client-side via /stream-settings.)
+        if stream_settings.fully_blocked():
+            logger.warning(f"Deny read (stream disabled by admin) path={path} proto={protocol} ip={ip}")
+            raise HTTPException(status_code=401, detail="Stream disabled by admin")
+        if _check_read(data.get("query") or ""):
+            logger.debug(f"Allow read path={path} proto={protocol} ip={ip}")
+            return
+        logger.warning(f"Deny read path={path} proto={protocol} ip={ip}")
+        raise HTTPException(status_code=401, detail="Viewer not authorized")
+
+    # Control API: port 9997 is never published, only reachable on the
+    # docker network (backend peer-count polling) — allow.
+    if action == "api":
+        return
+
+    # metrics / pprof / playback listing — deny by default
+    logger.warning(f"Deny action={action} path={path} ip={ip}")
+    raise HTTPException(status_code=401, detail="Not authorized")
+
+
 class MediaMTXController(Controller):
     path = "/mediamtx"
     tags = ["mediamtx"]
 
     @post("/auth", status_code=204)
     async def authenticate(self, data: dict) -> None:
-        action = data.get("action", "")
-        path = data.get("path", "")
-        protocol = data.get("protocol", "")
-        ip = data.get("ip", "")
-
-        if action in _PUBLISH_ACTIONS:
-            if _check_publish(data.get("user") or "", data.get("password") or ""):
-                logger.info(f"Allow publish path={path} proto={protocol} ip={ip}")
-                return
-            logger.warning(f"Deny publish path={path} proto={protocol} ip={ip}")
-            raise HTTPException(status_code=401, detail="Publish not authorized")
-
-        if action in _READ_ACTIONS:
-            # RTSP is only reachable inside the docker network (port 8554 is
-            # not published) — used by the detection worker, always allowed.
-            if protocol == "rtsp":
-                logger.debug(f"Allow internal rtsp read path={path} ip={ip}")
-                return
-            # Admin kill-switch: while both video and audio are disabled, no
-            # new viewer sessions may start. (Per-track blocking of a live
-            # session is enforced client-side via /stream-settings.)
-            if stream_settings.fully_blocked():
-                logger.warning(f"Deny read (stream disabled by admin) path={path} proto={protocol} ip={ip}")
-                raise HTTPException(status_code=401, detail="Stream disabled by admin")
-            if _check_read(data.get("query") or ""):
-                logger.debug(f"Allow read path={path} proto={protocol} ip={ip}")
-                return
-            logger.warning(f"Deny read path={path} proto={protocol} ip={ip}")
-            raise HTTPException(status_code=401, detail="Viewer not authorized")
-
-        # Control API: port 9997 is never published, only reachable on the
-        # docker network (backend peer-count polling) — allow.
-        if action == "api":
-            return
-
-        # metrics / pprof / playback listing — deny by default
-        logger.warning(f"Deny action={action} path={path} ip={ip}")
-        raise HTTPException(status_code=401, detail="Not authorized")
+        await authenticate_request(data)

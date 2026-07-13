@@ -16,9 +16,12 @@ import controllers.mediamtx_controller as mc  # noqa: E402
 
 
 def auth(data: dict):
-    """Run the async authenticate handler; returns None when allowed."""
-    controller = mc.MediaMTXController()
-    return asyncio.run(controller.authenticate(data=data))
+    """Run the async authenticate logic; returns None when allowed.
+
+    Calls the module-level function directly so the test doesn't depend on
+    instantiating the Litestar Controller (whose __init__ requires an owner
+    and whose @post wraps the method in a route handler)."""
+    return asyncio.run(mc.authenticate_request(data=data))
 
 
 PUBLISH_ENV = {"MEDIAMTX_PUBLISH_USER": "picam",
