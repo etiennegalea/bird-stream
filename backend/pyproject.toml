@@ -29,8 +29,13 @@ dependencies = [
 # Bird object detection (DETECTION_ENABLED=true). Optional: pulls in torch CPU.
 # Install with: uv sync --group detection
 # In Docker: build with --build-arg INSTALL_DETECTION=true
+# torch/torchvision are pinned to the CPU-only index below — the default PyPI
+# wheels drag in the full NVIDIA CUDA runtime (several GB), useless on a
+# GPU-less host and it overflowed the image/disk during the build.
 detection = [
     "ultralytics>=8.3",
+    "torch",
+    "torchvision",
 ]
 dev = [
     "pytest>=8.0",
@@ -47,3 +52,15 @@ pythonpath = ["."]
 
 [tool.uv]
 package = false
+
+# Pull PyTorch from its CPU-only wheel index. Default PyPI torch wheels bundle
+# the NVIDIA CUDA runtime (nvidia-cu13-*, multiple GB) which a GPU-less server
+# can't use — and which filled the disk during the detection image build.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+torchvision = [{ index = "pytorch-cpu" }]
