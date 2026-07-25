@@ -1,6 +1,8 @@
 """Unit tests for detection service config parsing and motion gating."""
 
 import os
+import sys
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -68,11 +70,13 @@ class TestMotionGate:
 class TestDetectionServiceConfig:
     def test_defaults(self, monkeypatch):
         for var in ["DETECTION_STREAM_URL", "DETECTION_MODEL", "DETECTION_FPS",
-                    "DETECTION_CONF", "DETECTION_CLASSES", "DETECTION_MOTION_GATE"]:
+                    "DETECTION_MODEL_DIR", "DETECTION_CONF",
+                    "DETECTION_CLASSES", "DETECTION_MOTION_GATE"]:
             monkeypatch.delenv(var, raising=False)
         svc = DetectionService()
         assert svc.stream_url == "rtsp://mediamtx:8554/birdcam"
         assert svc.model_name == "yolo11n.pt"
+        assert str(svc.model_path) == "/var/lib/birdstream/models/yolo11n.pt"
         assert svc.sample_fps == 2.0
         assert svc.conf == 0.4
         assert svc.classes == {"bird"}
@@ -89,6 +93,47 @@ class TestDetectionServiceConfig:
         assert svc.sample_fps == 5.0
         assert svc.classes == {"bird", "cat"}
         assert svc.motion_gate_enabled is False
+
+    def test_bare_model_name_uses_writable_model_dir(
+            self, monkeypatch, tmp_path):
+        monkeypatch.setenv("DETECTION_MODEL", "yolo11n.pt")
+        monkeypatch.setenv("DETECTION_MODEL_DIR", str(tmp_path / "models"))
+        loaded = []
+
+        class FakeModel:
+            names = {0: "bird"}
+
+        monkeypatch.setitem(
+            sys.modules,
+            "ultralytics",
+            SimpleNamespace(YOLO=lambda path: loaded.append(path) or FakeModel()),
+        )
+
+        svc = DetectionService()
+        assert svc._load_model() is not None
+        assert loaded == [str(tmp_path / "models" / "yolo11n.pt")]
+        assert (tmp_path / "models").is_dir()
+        assert svc.last_error is None
+
+    def test_absolute_model_path_is_preserved(self, monkeypatch, tmp_path):
+        model_path = tmp_path / "custom.pt"
+        monkeypatch.setenv("DETECTION_MODEL", str(model_path))
+        svc = DetectionService()
+        assert svc.model_path == model_path
+
+    def test_model_load_failure_is_reported(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("DETECTION_MODEL_DIR", str(tmp_path))
+
+        def fail(_path):
+            raise PermissionError("read-only")
+
+        monkeypatch.setitem(
+            sys.modules, "ultralytics", SimpleNamespace(YOLO=fail))
+
+        svc = DetectionService()
+        assert svc._load_model() is None
+        assert "read-only" in svc.last_error
+        assert svc.status()["last_error"] == svc.last_error
 
     def test_status_shape(self):
         svc = DetectionService()

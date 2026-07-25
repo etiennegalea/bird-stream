@@ -175,6 +175,11 @@ curl localhost:8051/detection/status     # or /detection/latest, /detection/even
 ```
 
 Tune with `DETECTION_FPS`, `DETECTION_CONF`, `DETECTION_CLASSES`.
+`DETECTION_MODEL` defaults to `yolo11n.pt`. On first use, its weights are
+downloaded into the persistent `detection_models` Docker volume mounted at
+`DETECTION_MODEL_DIR=/var/lib/birdstream/models`, so container rebuilds do not
+download the model again. Keep this directory writable by the backend's
+non-root container user.
 
 ## Verifying the pipeline
 

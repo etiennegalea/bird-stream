@@ -49,7 +49,8 @@ ENV PATH="/venv/bin:$PATH"
 
 # Set ownership and make entrypoint executable in one layer.
 RUN chmod +x entrypoint.sh \
-    && chown -R appuser:appgroup /app /venv
+    && mkdir -p /var/lib/birdstream/models \
+    && chown -R appuser:appgroup /app /venv /var/lib/birdstream
 
 USER appuser
 

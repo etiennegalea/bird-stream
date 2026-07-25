@@ -10,6 +10,8 @@ Env:
     DETECTION_STREAM_URL    default rtsp://mediamtx:8554/birdcam
     DETECTION_MODEL         ultralytics model name/path (default yolo11n.pt,
                             auto-downloaded on first run)
+    DETECTION_MODEL_DIR     writable model cache for bare model names
+                            (default /var/lib/birdstream/models)
     DETECTION_FPS           inference sampling rate (default 2)
     DETECTION_CONF          min confidence (default 0.4)
     DETECTION_CLASSES       comma-separated COCO class names (default "bird")
@@ -26,6 +28,7 @@ import os
 import threading
 import time
 from collections import deque
+from pathlib import Path
 
 logger = logging.getLogger("detection_service")
 
@@ -70,6 +73,15 @@ class DetectionService:
         self.stream_url = os.environ.get(
             "DETECTION_STREAM_URL", "rtsp://mediamtx:8554/birdcam")
         self.model_name = os.environ.get("DETECTION_MODEL", "yolo11n.pt")
+        self.model_dir = Path(os.environ.get(
+            "DETECTION_MODEL_DIR", "/var/lib/birdstream/models"
+        )).expanduser()
+        configured_model = Path(self.model_name).expanduser()
+        self.model_path = (
+            configured_model
+            if configured_model.is_absolute()
+            else self.model_dir / configured_model
+        )
         self.sample_fps = float(os.environ.get("DETECTION_FPS", "2"))
         self.conf = float(os.environ.get("DETECTION_CONF", "0.4"))
         self.classes = _parse_classes(os.environ.get("DETECTION_CLASSES", "bird"))
@@ -89,6 +101,7 @@ class DetectionService:
         self.frames_seen = 0
         self.frames_inferred = 0
         self.last_frame_ts = None
+        self.last_error = None
         self.latest = {"timestamp": None, "detections": []}
         self.events = deque(maxlen=100)  # only frames that contained a match
 
@@ -124,7 +137,19 @@ class DetectionService:
                 "Install with: uv sync --group detection "
                 "(or build the image with INSTALL_DETECTION=true)")
             return None
-        model = YOLO(self.model_name)  # auto-downloads weights if missing
+        try:
+            self.model_path.parent.mkdir(parents=True, exist_ok=True)
+            model = YOLO(str(self.model_path))
+        except Exception as exc:
+            self.last_error = f"Unable to load detection model: {exc}"
+            logger.exception(
+                "Unable to load detection model %s. Ensure %s is writable.",
+                self.model_path,
+                self.model_path.parent,
+            )
+            return None
+
+        self.last_error = None
         # Resolve requested class names -> ids for this model
         name_to_id = {v.lower(): k for k, v in model.names.items()}
         self._class_ids = [name_to_id[c] for c in self.classes if c in name_to_id]
@@ -232,6 +257,8 @@ class DetectionService:
             "connected": self.connected,
             "stream_url": self.stream_url,
             "model": self.model_name,
+            "model_path": str(self.model_path),
+            "last_error": self.last_error,
             "sample_fps": self.sample_fps,
             "confidence_threshold": self.conf,
             "classes": sorted(self.classes),

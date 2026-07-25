@@ -83,6 +83,7 @@ services:
       - DETECTION_ENABLED=${DETECTION_ENABLED:-false}
       - DETECTION_STREAM_URL=${DETECTION_STREAM_URL:-rtsp://mediamtx:8554/birdcam}
       - DETECTION_MODEL=${DETECTION_MODEL:-yolo11n.pt}
+      - DETECTION_MODEL_DIR=${DETECTION_MODEL_DIR:-/var/lib/birdstream/models}
       - DETECTION_FPS=${DETECTION_FPS:-2}
       - DETECTION_CONF=${DETECTION_CONF:-0.4}
       - DETECTION_CLASSES=${DETECTION_CLASSES:-bird}
@@ -92,6 +93,9 @@ services:
       - MQTT_PASSWORD=${MQTT_PASSWORD:-}
     volumes:
       - ./backend:/app
+      # Persistent writable cache for YOLO weights. /app can be read-only to
+      # the container user when bind-mounted from the Proxmox host.
+      - detection_models:/var/lib/birdstream/models
     labels:
       traefik.enable: "true"
       # /api/* -> backend (prefix stripped). Longer rules win in traefik, so
@@ -196,3 +200,4 @@ networks:
 
 volumes:
   postgres_data:
+  detection_models:
