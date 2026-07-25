@@ -326,3 +326,58 @@
   font-size: 0.68rem;
   color: #dc2626;
 }
+
+.camera-list {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.camera-card {
+  padding: 0.55rem;
+  border: 1px solid #e7e7e7;
+  border-radius: 7px;
+  background: #fff;
+  transition: opacity 0.2s, background 0.2s;
+}
+
+.camera-card.disabled {
+  opacity: 0.62;
+  background: #f5f5f5;
+}
+
+.camera-head,
+.camera-enabled-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+}
+
+.camera-name {
+  display: block;
+  color: #333;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.camera-path {
+  display: block;
+  max-width: 145px;
+  overflow: hidden;
+  color: #aaa;
+  font-family: monospace;
+  font-size: 0.55rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.camera-enabled-toggle {
+  color: #777;
+  cursor: pointer;
+  font-size: 0.6rem;
+}
+
+.device-actions.compact {
+  margin-top: 0.4rem;
+}

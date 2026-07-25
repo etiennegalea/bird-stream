@@ -15,6 +15,25 @@ mqtt:
     ca_cert: null             # e.g. /etc/birdstream/ca.crt
 
 camera:
+  auto_detect: true           # stream every V4L2 capture device automatically
+  enabled_by_default: true    # newly attached cameras start automatically
+  primary_id: null            # filled automatically; keeps the first camera on
+                              # the legacy "birdcam" path even after unplugging
+  devices: []                 # optional stable per-camera overrides; prefer
+                              # /dev/v4l/by-id paths, for example:
+  # devices:
+  #   - id: "feeder"
+  #     label: "Feeder camera"
+  #     device: "/dev/v4l/by-id/usb-Example_Camera-video-index0"
+  #     enabled: true
+  #   - id: "nest"
+  #     label: "Nest camera"
+  #     device: "/dev/v4l/by-id/usb-Other_Camera-video-index0"
+  #     enabled: false
+  #     width: 1920            # optional per-camera overrides
+  #     height: 1080
+  #     bitrate: "2500k"
+  # Legacy/default settings shared by every detected camera:
   device: "/dev/video0"
   width: 1280
   height: 720
@@ -41,7 +60,8 @@ stream:
   srt:                        # MediaMTX SRT ingest on the Proxmox box
     host: "192.168.1.100"
     port: 8890
-    path: "birdcam"           # MediaMTX path name
+    path: "birdcam"           # first camera path; additional cameras become
+                              # birdcam-<pi-id>-<camera-id>
     username: "picam"         # must match MEDIAMTX_PUBLISH_USER on the backend
     password: "change-me"     # must match MEDIAMTX_PUBLISH_PASSWORD
 

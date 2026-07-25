@@ -86,6 +86,84 @@ class TestSrtUrl(unittest.TestCase):
         a = make_agent(**{"stream.srt.path": "cam2"})
         self.assertIn("streamid=publish:cam2", a._srt_url("h", 1))
 
+    def test_path_argument_overrides_config_for_additional_camera(self):
+        a = make_agent(**{"stream.srt.path": "birdcam"})
+        self.assertIn(
+            "streamid=publish:birdcam-pi-01-cam-2",
+            a._srt_url("h", 8890, "birdcam-pi-01-cam-2"),
+        )
+
+
+class TestCameraDiscovery(unittest.TestCase):
+    def _agent(self):
+        a = make_agent()
+        a.pi_id = "pi-01"
+        a.config["camera"]["auto_detect"] = True
+        return a
+
+    def test_detects_each_capture_device_and_assigns_paths(self):
+        a = self._agent()
+        by_id = "/dev/v4l/by-id/usb-one-video-index0"
+        with mock.patch.object(agent.glob, "glob") as glob_mock, \
+                mock.patch.object(a, "_is_capture_device", return_value=True), \
+                mock.patch.object(agent.os.path, "realpath", side_effect=lambda p: p):
+            glob_mock.side_effect = lambda pattern: (
+                [by_id] if "by-id" in pattern else ["/dev/video2"]
+            )
+            cameras = a.discover_cameras()
+        self.assertEqual([c["id"] for c in cameras], ["usb-one", "video2"])
+        self.assertEqual(
+            [c["path"] for c in cameras],
+            ["birdcam", "birdcam-pi-01-video2"],
+        )
+        self.assertTrue(all(c["enabled"] for c in cameras))
+
+    def test_by_id_and_video_node_for_same_camera_are_deduplicated(self):
+        a = self._agent()
+        by_id = "/dev/v4l/by-id/usb-one-video-index0"
+        real = {by_id: "/dev/video0", "/dev/video0": "/dev/video0"}
+        with mock.patch.object(agent.glob, "glob") as glob_mock, \
+                mock.patch.object(a, "_is_capture_device", return_value=True), \
+                mock.patch.object(
+                    agent.os.path, "realpath", side_effect=lambda p: real.get(p, p)):
+            glob_mock.side_effect = lambda pattern: (
+                [by_id] if "by-id" in pattern else ["/dev/video0"]
+            )
+            cameras = a.discover_cameras()
+        self.assertEqual(len(cameras), 1)
+        self.assertEqual(cameras[0]["device"], by_id)
+
+    def test_persisted_primary_path_does_not_shift_when_camera_is_removed(self):
+        a = self._agent()
+        a.config["camera"]["primary_id"] = "usb-one"
+        with mock.patch.object(agent.glob, "glob") as glob_mock, \
+                mock.patch.object(a, "_is_capture_device", return_value=True), \
+                mock.patch.object(agent.os.path, "realpath", side_effect=lambda p: p):
+            glob_mock.side_effect = lambda pattern: (
+                [] if "by-id" in pattern else ["/dev/video2"]
+            )
+            cameras = a.discover_cameras()
+        self.assertEqual(cameras[0]["id"], "video2")
+        self.assertEqual(cameras[0]["path"], "birdcam-pi-01-video2")
+
+    def test_config_override_sets_stable_identity_and_disabled_state(self):
+        a = self._agent()
+        a.config["camera"]["devices"] = [{
+            "id": "Nest Box",
+            "label": "Nest camera",
+            "device": "/dev/video4",
+            "enabled": False,
+            "bitrate": "2500k",
+        }]
+        with mock.patch.object(agent.glob, "glob", return_value=[]), \
+                mock.patch.object(a, "_is_capture_device", return_value=True), \
+                mock.patch.object(agent.os.path, "realpath", side_effect=lambda p: p):
+            camera = a.discover_cameras()[0]
+        self.assertEqual(camera["id"], "nest-box")
+        self.assertEqual(camera["label"], "Nest camera")
+        self.assertFalse(camera["enabled"])
+        self.assertEqual(camera["bitrate"], "2500k")
+
 
 class LinuxCmdMixin:
     """Force the Linux/Pi branch regardless of the test host platform."""
@@ -179,6 +257,125 @@ class TestStreamDetailsAndActions(unittest.TestCase):
         self.assertEqual(cfg["stream"]["srt"]["password"], "***")
         # the real config must be untouched
         self.assertEqual(a.config["mqtt"]["password"], "hunter2")
+
+    def test_status_contains_independent_streams(self):
+        a = make_agent()
+        a.pi_id = "pi-01"
+        a.streams = {
+            "cam-1": {
+                "process": mock.Mock(poll=lambda: None),
+                "status": "streaming",
+                "details": {"width": 1280, "audio": True},
+            },
+            "cam-2": {
+                "process": None,
+                "status": "idle",
+                "details": {},
+            },
+        }
+        a.discover_cameras = lambda: [
+            {"id": "cam-1", "label": "Camera 1", "device": "/dev/video0",
+             "enabled": True, "path": "birdcam"},
+            {"id": "cam-2", "label": "Camera 2", "device": "/dev/video2",
+             "enabled": False, "path": "birdcam-pi-01-cam-2"},
+        ]
+        a._window_bounds = lambda: None
+        a._in_window = lambda: True
+        published = []
+        a.client = mock.Mock()
+        a.client.publish.side_effect = \
+            lambda topic, body, **kwargs: published.append(json.loads(body))
+        a.topic_status = "camera/pi-01/status"
+        a.publish_status()
+        payload = published[-1]
+        self.assertEqual(payload["status"], "streaming")
+        self.assertEqual(len(payload["streams"]), 2)
+        self.assertEqual(payload["streams"][0]["path"], "birdcam")
+        self.assertFalse(payload["streams"][1]["enabled"])
+
+    def test_disable_camera_is_persisted_and_stopped(self):
+        a = make_agent()
+        a.pi_id = "pi-01"
+        a.streams = {}
+        camera = {
+            "id": "cam-2", "label": "Camera 2", "device": "/dev/video2",
+            "real_device": "/dev/video2", "enabled": True,
+            "path": "birdcam-pi-01-cam-2", "index": 1,
+        }
+        a.discover_cameras = lambda: [camera]
+        a._save_config = mock.Mock()
+        a.stop_stream = mock.Mock()
+        a.publish_status = mock.Mock()
+        replies = []
+        a.publish_reply = lambda action, data, request_id=None: replies.append(data)
+        a.action_set_camera_enabled({
+            "camera_id": "cam-2", "enabled": False,
+        })
+        self.assertFalse(a.config["camera"]["devices"][0]["enabled"])
+        a.stop_stream.assert_called_once_with(manual=True, camera_id="cam-2")
+        self.assertTrue(replies[-1]["ok"])
+
+
+class TestMultiCameraProcesses(unittest.TestCase):
+    def test_start_all_launches_one_ffmpeg_process_per_enabled_camera(self):
+        a = make_agent(**{
+            "stream.srt.host": "server",
+            "audio.enabled": True,
+            "schedule.enabled": False,
+        })
+        a.pi_id = "pi-01"
+        a.streams = {}
+        a.should_stream = False
+        a.last_start_params = {}
+        a.lock = mock.MagicMock()
+        cameras = [
+            {"id": "primary", "label": "Primary", "device": "/dev/video0",
+             "enabled": True, "path": "birdcam", "index": 0},
+            {"id": "second", "label": "Second", "device": "/dev/video2",
+             "enabled": True, "path": "birdcam-pi-01-second", "index": 1},
+        ]
+        a.discover_cameras = lambda: cameras
+        a.publish_status = mock.Mock()
+        processes = []
+
+        def fake_popen(command, **kwargs):
+            process = mock.Mock()
+            process.poll.return_value = None
+            process.command = command
+            processes.append(process)
+            return process
+
+        with mock.patch.object(agent.subprocess, "Popen", side_effect=fake_popen), \
+                mock.patch.object(agent.time, "sleep"), \
+                mock.patch("agent.threading.Thread") as thread:
+            a.start_stream({})
+
+        self.assertEqual(len(processes), 2)
+        first, second = (p.command for p in processes)
+        self.assertIn("streamid=publish:birdcam", first[-1])
+        self.assertIn("streamid=publish:birdcam-pi-01-second", second[-1])
+        self.assertIn("libopus", first)
+        self.assertNotIn("libopus", second)
+        self.assertEqual(thread.call_count, 2)
+
+    def test_disabled_camera_does_not_launch_process(self):
+        a = make_agent(**{
+            "stream.srt.host": "server",
+            "schedule.enabled": False,
+        })
+        a.pi_id = "pi-01"
+        a.streams = {}
+        a.should_stream = False
+        a.last_start_params = {}
+        a.lock = mock.MagicMock()
+        a.discover_cameras = lambda: [{
+            "id": "disabled", "label": "Disabled", "device": "/dev/video2",
+            "enabled": False, "path": "birdcam-pi-01-disabled", "index": 1,
+        }]
+        a.publish_status = mock.Mock()
+        with mock.patch.object(agent.subprocess, "Popen") as popen:
+            a.start_stream({})
+        popen.assert_not_called()
 
 
 def _at(hour, minute=0):

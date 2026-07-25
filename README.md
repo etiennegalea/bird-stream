@@ -1,6 +1,11 @@
 # Bird Live Stream
 
-A self-hosted bird-watching live stream. A Raspberry Pi captures and encodes the camera feed and pushes it over SRT to a home server, where MediaMTX re-broadcasts it to the public via WebRTC (WHEP, sub-second latency) with an HLS fallback — no transcoding on the server. Live chat, accounts, viewer count, an admin panel, and optional on-server bird detection (YOLO) round it out.
+A self-hosted bird-watching live stream. Raspberry Pi transmitters automatically
+detect attached webcams and push one independent SRT stream per camera to a
+home server, where MediaMTX re-broadcasts them to the public via WebRTC (WHEP,
+sub-second latency) with an optional HLS fallback — no transcoding on the
+server. Live chat, accounts, viewer count, an admin panel, and optional
+on-server bird detection (YOLO) round it out.
 
 ## Architecture
 
@@ -127,7 +132,38 @@ stream:
     password: "<srt-password>"    # = MEDIAMTX_PUBLISH_PASSWORD
 ```
 
-With `auto_start: true` (default) the Pi streams on boot. Control it over MQTT (`camera/<id>/control`): `start`, `stop`, `set_camera` (resolution/fps/bitrate, persisted), `set_controls` (v4l2 brightness/exposure/…), `get_config`, `update` (git pull + restart), `reboot`. Status heartbeats (retained, with CPU temp) on `camera/<id>/status`. See `pi-agent/README.md` for payload examples.
+Every V4L2 capture device is enabled automatically. The first detected camera
+keeps the `birdcam` path; additional cameras publish as
+`birdcam-<pi-id>-<camera-id>`. Their enabled state is persisted in
+`config.yaml`, and enabled live cameras appear automatically in the public
+camera picker. For stable names and labels, use `/dev/v4l/by-id/...` entries:
+
+```yaml
+camera:
+  auto_detect: true
+  enabled_by_default: true
+  devices:
+    - id: feeder
+      label: Feeder camera
+      device: /dev/v4l/by-id/usb-Example-video-index0
+      enabled: true
+    - id: nest
+      label: Nest box
+      device: /dev/v4l/by-id/usb-Other-video-index0
+      enabled: false
+```
+
+List stable camera paths with `ls -l /dev/v4l/by-id/`. The installer adds the
+agent user to the `video` and `audio` groups. Each camera is a separate
+software H.264 encoder, so monitor Pi CPU temperature and lower FPS/resolution
+or bitrate when attaching several cameras.
+
+With `auto_start: true` (default) the Pi streams on boot. Control it over MQTT
+(`camera/<id>/control`): `start`/`stop` (all cameras or one with `camera_id`),
+`set_camera_enabled`, `set_camera`, `set_controls`, `get_config`, `update`, and
+`reboot`. Status heartbeats contain a `streams[]` entry for every attached
+camera. The admin stream panel exposes the same per-camera status, enable,
+start, and stop controls. See `pi-agent/README.md` for payload examples.
 
 ## Bird detection (optional)
 
@@ -146,10 +182,11 @@ Tune with `DETECTION_FPS`, `DETECTION_CONF`, `DETECTION_CLASSES`.
 # 1. Pi is streaming? (retained MQTT status, includes CPU temp + stream details)
 docker exec mosquitto mosquitto_sub -u pi-01 -P <pw> -t 'camera/pi-01/status' -C 1 -v
 
-# 2. MediaMTX receiving?  expect: 'birdcam' is publishing, 2 tracks (H264, Opus)
+# 2. MediaMTX receiving? Expect one "is publishing" line per enabled camera.
 docker logs mediamtx --tail 20
 
-# 3. Watch on the LAN, bypassing the app:  http://<server-LAN-IP>:8889/birdcam
+# 3. Watch the primary camera on LAN: http://<server-LAN-IP>:8889/birdcam
+#    Additional path names are in the MQTT streams[] status payload.
 
 # 4. Public: https://stream.example.com — watch mediamtx logs for
 #    "peer connection established" per viewer.

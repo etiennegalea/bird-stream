@@ -100,6 +100,60 @@ class TestStatusIngestion(unittest.TestCase):
         svc._on_message(None, None, Msg("camera/new/status", {"status": "idle"}))
         self.assertEqual([d["pi_id"] for d in svc.devices()], ["new", "old"])
 
+    def test_offline_last_will_keeps_camera_inventory(self):
+        svc = make_service()
+        streams = [{"camera_id": "cam-1", "path": "birdcam",
+                    "enabled": True, "status": "streaming"}]
+        svc._on_message(
+            None, None,
+            Msg("camera/pi-01/status", {"status": "streaming", "streams": streams}),
+        )
+        svc._on_message(
+            None, None, Msg("camera/pi-01/status", {"status": "offline"}))
+        self.assertEqual(svc.devices()[0]["streams"], streams)
+
+
+class TestStreamCatalog(unittest.TestCase):
+    def test_only_enabled_streams_are_public(self):
+        svc = make_service()
+        svc._on_message(None, None, Msg("camera/pi-01/status", {
+            "status": "streaming",
+            "streams": [
+                {"camera_id": "cam-1", "label": "Feeder",
+                 "path": "birdcam", "enabled": True, "status": "streaming"},
+                {"camera_id": "cam-2", "label": "Nest",
+                 "path": "birdcam-pi-01-cam-2", "enabled": False,
+                 "status": "idle"},
+            ],
+        }))
+        catalog = svc.stream_catalog()
+        self.assertEqual(len(catalog), 1)
+        self.assertEqual(catalog[0]["path"], "birdcam")
+        self.assertTrue(catalog[0]["available"])
+
+    def test_stale_transmitter_stream_is_listed_but_unavailable(self):
+        svc = make_service()
+        svc._on_message(None, None, Msg("camera/pi-01/status", {
+            "streams": [{
+                "camera_id": "cam-1", "path": "birdcam",
+                "enabled": True, "status": "streaming",
+            }],
+        }))
+        svc._devices["pi-01"]["received_at"] = time.time() - 60
+        item = svc.stream_catalog()[0]
+        self.assertEqual(item["status"], "offline")
+        self.assertFalse(item["available"])
+
+    def test_legacy_single_camera_status_remains_viewable_during_upgrade(self):
+        svc = make_service()
+        svc._on_message(None, None, Msg("camera/pi-old/status", {
+            "status": "streaming", "path": "birdcam", "audio": False,
+        }))
+        catalog = svc.stream_catalog()
+        self.assertEqual(catalog[0]["path"], "birdcam")
+        self.assertEqual(catalog[0]["camera_id"], "cam-1")
+        self.assertTrue(catalog[0]["available"])
+
 
 class TestSendControl(unittest.TestCase):
     def test_publishes_action_to_device_topic(self):
@@ -119,8 +173,31 @@ class TestSendControl(unittest.TestCase):
     def test_all_allowed_actions_accepted(self):
         svc = make_service()
         for action in ALLOWED_ACTIONS:
-            svc.send_control("pi-01", action)
+            params = {"camera_id": "cam-1", "enabled": True} \
+                if action == "set_camera_enabled" else None
+            svc.send_control("pi-01", action, params=params)
         self.assertEqual(len(svc._client.published), len(ALLOWED_ACTIONS))
+
+    def test_camera_action_validates_and_includes_camera_id(self):
+        svc = make_service()
+        svc.send_control(
+            "pi-01", "start", params={"camera_id": "cam-2"})
+        _, payload, _ = svc._client.published[-1]
+        self.assertEqual(
+            json.loads(payload),
+            {"action": "start", "camera_id": "cam-2"},
+        )
+        with self.assertRaises(ValueError):
+            svc.send_control(
+                "pi-01", "start", params={"camera_id": "../camera"})
+
+    def test_camera_enabled_requires_boolean(self):
+        svc = make_service()
+        with self.assertRaises(ValueError):
+            svc.send_control(
+                "pi-01", "set_camera_enabled",
+                params={"camera_id": "cam-1", "enabled": "true"},
+            )
 
     def test_rejects_unknown_action(self):
         svc = make_service()

@@ -22,6 +22,7 @@ from controllers.mediamtx_controller import MediaMTXController
 from controllers.peer_count_controller import peer_count_endpoint
 from controllers.queue_controller import queue_endpoint
 from controllers.stream_settings_controller import (
+    get_stream_catalog,
     get_stream_settings,
     stream_settings_endpoint,
 )
@@ -113,6 +114,7 @@ app = Litestar(
         chat_usernames,
         peer_count_endpoint,
         queue_endpoint,
+        get_stream_catalog,
         get_stream_settings,
         stream_settings_endpoint,
     ],

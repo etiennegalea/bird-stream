@@ -10,13 +10,12 @@
   import LoadingCircleDots from './components/LoadingCircleDots.svelte';
   import Hls from 'hls.js';
   import { auth } from './stores/auth.js';
+  import { chooseStreamPath, streamUrls } from './streamCatalog.js';
   import { getApiBaseUrl } from './utils.js';
 
   // Stream endpoints (MediaMTX via traefik, same-origin). Override for local
   // dev against a bare MediaMTX with VITE_STREAM_URL=http://localhost:8889-style base.
   const streamBase = import.meta.env.VITE_STREAM_URL || window.location.origin;
-  const WHEP_URL = `${streamBase}/birdcam/whep`;
-  const HLS_URL = `${streamBase}/hls/birdcam/index.m3u8`;
   // HLS fallback when WebRTC/WHEP can't connect (e.g. UDP-blocked networks).
   // Controlled from .env via VITE_HLS_FALLBACK — baked in at BUILD time, so
   // changing it requires: docker compose build frontend.
@@ -29,6 +28,10 @@
   let viewerCount = 0;
   let fps = 0;
   let city = '...';
+  let streamCatalog = [];
+  let selectedStreamPath = null;
+  let selectedStream = null;
+  let catalogTimer = null;
 
   let videoEl;
   let peerConnection = null;
@@ -53,7 +56,56 @@
   let audioAllowed = false; // matches server default: audio is opt-in
   let isStreamPanelOpen = false;
   let streamSettingsWs = null;
-  let activeDeviceId = null; // transmitter feeding the stream (panel open only)
+  let activeDeviceId = null;
+
+  $: selectedStream = streamCatalog.find(s => s.path === selectedStreamPath);
+  $: activeDeviceId = selectedStream
+    ? `${selectedStream.pi_id} / ${selectedStream.label}`
+    : null;
+
+  function whepUrl() {
+    return streamUrls(streamBase, selectedStreamPath).whep;
+  }
+
+  function hlsUrl() {
+    return streamUrls(streamBase, selectedStreamPath).hls;
+  }
+
+  async function fetchStreamCatalog({ reconnectIfChanged = true } = {}) {
+    try {
+      const resp = await fetch(`${getApiBaseUrl()}/stream/catalog`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const next = data.streams || [];
+      const previousPath = selectedStreamPath;
+      streamCatalog = next;
+      selectedStreamPath = chooseStreamPath(
+        next,
+        previousPath,
+        localStorage.getItem('birdstream_camera_path'),
+      );
+      if (selectedStreamPath) {
+        localStorage.setItem('birdstream_camera_path', selectedStreamPath);
+      }
+      if (reconnectIfChanged && selectedStreamPath !== previousPath) {
+        if (selectedStreamPath) {
+          enterQueue();
+        } else {
+          cleanup();
+          error = 'No enabled camera stream is currently available.';
+        }
+      }
+    } catch (_) {
+      // Retain the last catalog during brief API/MQTT interruptions.
+    }
+  }
+
+  function selectStream(path) {
+    if (!path || path === selectedStreamPath) return;
+    selectedStreamPath = path;
+    localStorage.setItem('birdstream_camera_path', path);
+    enterQueue();
+  }
 
   function handleWindowClick(e) {
     if (isMenuOpen && menuWrapEl && !menuWrapEl.contains(e.target)) {
@@ -180,6 +232,10 @@
   async function startStream() {
     cleanup();
     error = null;
+    if (!selectedStreamPath) {
+      error = 'No enabled camera stream is currently available.';
+      return;
+    }
     try {
       await startWhep();
     } catch (err) {
@@ -251,7 +307,7 @@
     await pc.setLocalDescription(offer);
     await waitForIceGathering(pc);
 
-    const response = await fetch(WHEP_URL, {
+    const response = await fetch(whepUrl(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/sdp' },
       body: pc.localDescription.sdp
@@ -267,12 +323,12 @@
     const onPlaying = () => { isConnected = true; };
     if (videoEl && videoEl.canPlayType('application/vnd.apple.mpegurl')) {
       // Native HLS (Safari/iOS)
-      videoEl.src = HLS_URL;
+      videoEl.src = hlsUrl();
       videoEl.addEventListener('playing', onPlaying, { once: true });
       videoEl.play?.().catch(() => {});
     } else if (Hls.isSupported()) {
       hls = new Hls({ lowLatencyMode: true });
-      hls.loadSource(HLS_URL);
+      hls.loadSource(hlsUrl());
       hls.attachMedia(videoEl);
       videoEl.addEventListener('playing', onPlaying, { once: true });
       hls.on(Hls.Events.ERROR, (_e, data) => {
@@ -361,10 +417,13 @@
 
     setupPeerCountWs();
     setupStreamSettingsWs();
+    await fetchStreamCatalog({ reconnectIfChanged: false });
+    catalogTimer = setInterval(fetchStreamCatalog, 5000);
     enterQueue();
 
     return () => {
       cleanup();
+      clearInterval(catalogTimer);
       if (peerCountWs) peerCountWs.close();
       if (streamSettingsWs) {
         streamSettingsWs.onclose = null; // prevent reconnect
@@ -424,7 +483,7 @@
   <div class="main-content" class:chat-hidden={!isChatVisible}>
     <div class="stream-section">
       <div class="stream-viewport">
-        {#if isStreamPanelOpen && activeDeviceId}
+        {#if activeDeviceId}
           <div class="device-id-badge" title="Transmitter feeding this stream">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
               <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
@@ -478,6 +537,22 @@
             <span class="value">{fps}</span>
           </div>
         </div>
+        {#if streamCatalog.length > 1}
+          <label class="camera-picker">
+            <span>Camera</span>
+            <select
+              value={selectedStreamPath || ''}
+              on:change={(e) => selectStream(e.target.value)}
+              aria-label="Select camera stream"
+            >
+              {#each streamCatalog as camera (camera.path)}
+                <option value={camera.path} disabled={!camera.available}>
+                  {camera.label} · {camera.pi_id}{camera.available ? '' : ' (offline)'}
+                </option>
+              {/each}
+            </select>
+          </label>
+        {/if}
         <div class="weather-info">
           <Weather onCityChange={(name) => city = name} />
         </div>
@@ -501,7 +576,6 @@
         {#if isStreamPanelOpen}
           <StreamPanel
             on:close={() => isStreamPanelOpen = false}
-            onActiveDeviceChange={(id) => activeDeviceId = id}
           />
         {/if}
       </div>
@@ -692,10 +766,6 @@
   }
   .admin-toggle-btn:hover { background: #fff; color: #B35610; border-color: #e0c8b8; }
   .admin-toggle-btn.active { background: #B35610; color: #fff; border-color: #B35610; }
-
-  .stream-controls-wrap {
-    position: relative;
-  }
 
   .stream-toggle-btn {
     position: relative;

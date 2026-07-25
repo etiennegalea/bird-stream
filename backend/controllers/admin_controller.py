@@ -54,6 +54,10 @@ class ScheduleRequest(msgspec.Struct):
     longitude: float | None = None
 
 
+class CameraEnabledRequest(msgspec.Struct):
+    enabled: bool
+
+
 class AdminController(Controller):
     path = "/admin"
     tags = ["admin"]
@@ -201,3 +205,51 @@ class AdminController(Controller):
         logger.info("Admin (user_id=%s) sent '%s' to device '%s'",
                     user_id, action, pi_id)
         return {"ok": True, "pi_id": pi_id, "action": action}
+
+    @post("/stream/devices/{pi_id:str}/cameras/{camera_id:str}/{action:str}")
+    async def control_stream_camera(
+        self, request: Request, state: State, pi_id: str, camera_id: str,
+        action: str,
+    ) -> dict:
+        user_id = _require_admin(request, state.db)
+        if action not in {"start", "stop"}:
+            raise HTTPException(
+                status_code=400, detail="Action must be 'start' or 'stop'")
+        try:
+            mqtt_devices.send_control(
+                pi_id, action, params={"camera_id": camera_id})
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except RuntimeError as e:
+            raise HTTPException(status_code=503, detail=str(e))
+        logger.info(
+            "Admin (user_id=%s) sent '%s' to camera '%s/%s'",
+            user_id, action, pi_id, camera_id)
+        return {
+            "ok": True, "pi_id": pi_id, "camera_id": camera_id,
+            "action": action,
+        }
+
+    @post("/stream/devices/{pi_id:str}/cameras/{camera_id:str}/enabled")
+    async def set_stream_camera_enabled(
+        self, request: Request, state: State, pi_id: str, camera_id: str,
+        data: CameraEnabledRequest,
+    ) -> dict:
+        user_id = _require_admin(request, state.db)
+        try:
+            mqtt_devices.send_control(
+                pi_id,
+                "set_camera_enabled",
+                params={"camera_id": camera_id, "enabled": data.enabled},
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except RuntimeError as e:
+            raise HTTPException(status_code=503, detail=str(e))
+        logger.info(
+            "Admin (user_id=%s) set camera '%s/%s' enabled=%s",
+            user_id, pi_id, camera_id, data.enabled)
+        return {
+            "ok": True, "pi_id": pi_id, "camera_id": camera_id,
+            "enabled": data.enabled,
+        }

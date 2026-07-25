@@ -220,6 +220,24 @@ video.stream-viewport {
   margin-bottom: -4px;
 }
 
+.camera-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #777;
+  font-weight: 600;
+}
+
+.camera-picker select {
+  max-width: 210px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  background: #fff;
+  color: #333;
+  font: inherit;
+  padding: 0.2rem 0.35rem;
+}
+
 .info-container {
   position: relative;
   display: inline-block;

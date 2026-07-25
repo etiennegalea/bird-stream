@@ -1,7 +1,7 @@
 """Viewer count over WebSocket, sourced from the MediaMTX control API.
 
 Viewers connect to MediaMTX (WHEP/HLS), not to this backend, so the count
-comes from polling /v3/paths/get/<path> for its readers list.
+comes from polling /v3/paths/list and summing readers across all camera paths.
 """
 
 import asyncio
@@ -22,13 +22,19 @@ POLL_INTERVAL = float(os.environ.get("PEER_COUNT_POLL_SECONDS", "3"))
 async def get_viewer_count(session: aiohttp.ClientSession) -> int:
     try:
         async with session.get(
-            f"{MEDIAMTX_API_URL}/v3/paths/get/{MEDIAMTX_PATH}",
+            f"{MEDIAMTX_API_URL}/v3/paths/list",
             timeout=aiohttp.ClientTimeout(total=2),
         ) as resp:
             if resp.status != 200:  # 404 = path not active (Pi offline)
                 return 0
             data = await resp.json()
-            return len(data.get("readers", []))
+            paths = data.get("items", [])
+            return sum(
+                len(path.get("readers", []))
+                for path in paths
+                if path.get("name") == MEDIAMTX_PATH
+                or path.get("name", "").startswith(f"{MEDIAMTX_PATH}-")
+            )
     except Exception as e:
         logger.debug(f"MediaMTX API poll failed: {e}")
         return 0

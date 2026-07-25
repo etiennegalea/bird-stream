@@ -1,8 +1,9 @@
 # Birdstream Pi Agent
 
-Camera transmitter for Raspberry Pi. FFmpeg captures the camera, burns in a
-timestamp overlay, and pushes SRT to MediaMTX on the server. Controlled
-remotely over MQTT v5.
+Multi-camera transmitter for Raspberry Pi. The agent detects every V4L2
+capture device, supervises one FFmpeg/SRT process per enabled camera, and
+reports them together over MQTT. Cameras can be hot-plugged and appear in the
+public application automatically.
 
 ## Install (on the Pi)
 
@@ -32,8 +33,11 @@ Publish JSON to `camera/<id>/control`. Optional `request_id` is echoed in replie
 
 ```jsonc
 {"action": "start"}                          // uses stream.srt from config
+{"action": "start", "camera_id": "cam-2"}    // one camera only
 {"action": "start", "srt_host": "10.0.0.5", "srt_port": 8890, "fps": 25}
 {"action": "stop"}
+{"action": "stop", "camera_id": "cam-2"}
+{"action": "set_camera_enabled", "camera_id": "cam-2", "enabled": false}
 {"action": "set_camera", "params": {"width": 1920, "height": 1080, "bitrate": "3000k"}}
                                              // persists to config.yaml, restarts stream if live
 {"action": "set_controls", "controls": {"brightness": 60, "exposure_auto": 1}}
@@ -43,6 +47,40 @@ Publish JSON to `camera/<id>/control`. Optional `request_id` is echoed in replie
 {"action": "update"}                         // git pull + pip install, systemd restarts agent
 {"action": "reboot"}                         // needs install.sh --allow-reboot
 ```
+
+## Multiple webcams
+
+Run `ls -l /dev/v4l/by-id/` to find stable names. With
+`camera.auto_detect: true`, every capture-capable webcam is enabled by default.
+The first registered camera publishes to `birdcam`; subsequent cameras use
+`birdcam-<pi-id>-<camera-id>`. The first camera identity is persisted as
+`camera.primary_id`, so unplugging it does not make another camera steal the
+legacy path.
+
+Use `camera.devices` in `config.yaml` to give cameras stable labels, override
+quality settings, or keep one disabled:
+
+```yaml
+camera:
+  auto_detect: true
+  enabled_by_default: true
+  devices:
+    - id: feeder
+      label: Feeder camera
+      device: /dev/v4l/by-id/usb-Example-video-index0
+      enabled: true
+    - id: nest
+      label: Nest box
+      device: /dev/v4l/by-id/usb-Other-video-index0
+      enabled: false
+      width: 1920
+      height: 1080
+      bitrate: 2500k
+```
+
+Only the primary camera process opens the configured ALSA microphone. This
+avoids multiple FFmpeg processes competing for the same audio device. Audio
+capture and public playback remain off by default.
 
 ## Files
 

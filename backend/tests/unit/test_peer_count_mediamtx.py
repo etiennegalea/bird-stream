@@ -48,18 +48,22 @@ def count(session):
 
 class TestGetViewerCount(unittest.TestCase):
     def test_counts_readers(self):
-        session = FakeSession(FakeResponse(200, {"readers": [
-            {"type": "webRTCSession", "id": "a"},
-            {"type": "hlsMuxer", "id": "b"},
+        session = FakeSession(FakeResponse(200, {"items": [
+            {"name": "birdcam", "readers": [
+                {"type": "webRTCSession", "id": "a"}]},
+            {"name": "birdcam-pi-01-cam-2", "readers": [
+                {"type": "webRTCSession", "id": "b"},
+                {"type": "hlsMuxer", "id": "c"}]},
+            {"name": "unrelated", "readers": [{"id": "ignored"}]},
         ]}))
-        self.assertEqual(count(session), 2)
+        self.assertEqual(count(session), 3)
 
     def test_polls_the_configured_path(self):
-        session = FakeSession(FakeResponse(200, {"readers": []}))
+        session = FakeSession(FakeResponse(200, {"items": []}))
         count(session)
-        self.assertIn("/v3/paths/get/", session.last_url)
+        self.assertIn("/v3/paths/list", session.last_url)
 
-    def test_zero_when_no_readers_key(self):
+    def test_zero_when_no_items_key(self):
         self.assertEqual(count(FakeSession(FakeResponse(200, {}))), 0)
 
     def test_zero_when_path_inactive(self):

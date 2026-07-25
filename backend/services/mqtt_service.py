@@ -1,8 +1,8 @@
 """MQTT bridge to the Pi transmitters.
 
-Subscribes to camera/+/status (retained, so device state is known immediately
-on connect) and publishes commands to camera/<pi_id>/control. Runs paho's
-network loop in a background thread; safe to read from async handlers.
+Subscribes to camera/+/status (retained, including each transmitter's
+streams[] camera inventory) and publishes aggregate or per-camera commands to
+camera/<pi_id>/control. Runs paho's network loop in a background thread.
 
 Env:
     MQTT_ENABLED   "false" to skip connecting (default true)
@@ -24,7 +24,7 @@ from paho.mqtt.enums import CallbackAPIVersion
 logger = logging.getLogger("mqtt_service")
 
 _PI_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
-ALLOWED_ACTIONS = {"start", "stop", "set_schedule"}
+ALLOWED_ACTIONS = {"start", "stop", "set_schedule", "set_camera_enabled"}
 
 _STATUS_TOPIC_RE = re.compile(r"^camera/([A-Za-z0-9_-]+)/status$")
 
@@ -106,6 +106,11 @@ class MqttDeviceService:
         payload["pi_id"] = pi_id
         payload["received_at"] = time.time()
         with self._lock:
+            # The Pi's MQTT last-will is intentionally small. Retain the last
+            # camera inventory while marking the transmitter offline.
+            previous = self._devices.get(pi_id, {})
+            if "streams" not in payload and previous.get("streams"):
+                payload["streams"] = previous["streams"]
             self._devices[pi_id] = payload
 
     # ── API used by controllers ───────────────────────────────────────────
@@ -131,6 +136,39 @@ class MqttDeviceService:
         items.sort(key=lambda d: d.get("received_at", 0), reverse=True)
         return items
 
+    def stream_catalog(self) -> list[dict]:
+        """Public, secret-free catalog of enabled camera streams."""
+        catalog = []
+        for device in self.devices():
+            streams = device.get("streams") or []
+            # Rolling-upgrade compatibility with the old one-camera agent.
+            if not streams and device.get("path"):
+                streams = [{
+                    "camera_id": "cam-1",
+                    "label": device["pi_id"],
+                    "path": device["path"],
+                    "enabled": True,
+                    "status": device.get("status"),
+                    "audio": device.get("audio", False),
+                }]
+            for stream in streams:
+                if not stream.get("enabled", True):
+                    continue
+                catalog.append({
+                    "pi_id": device["pi_id"],
+                    "camera_id": stream.get("camera_id", "cam-1"),
+                    "label": stream.get("label", "Camera"),
+                    "path": stream.get("path"),
+                    "status": "offline" if device.get("stale") else
+                              stream.get("status", device.get("status", "unknown")),
+                    "available": (
+                        not device.get("stale")
+                        and stream.get("status") == "streaming"
+                    ),
+                    "audio": bool(stream.get("audio", False)),
+                })
+        return [item for item in catalog if item["path"]]
+
     def send_control(self, pi_id: str, action: str, params: dict | None = None) -> None:
         """Publish a control command. Raises ValueError on bad input,
         RuntimeError when the broker is unreachable."""
@@ -138,6 +176,12 @@ class MqttDeviceService:
             raise ValueError("Invalid device id")
         if action not in ALLOWED_ACTIONS:
             raise ValueError(f"Action must be one of {sorted(ALLOWED_ACTIONS)}")
+        camera_id = (params or {}).get("camera_id")
+        if camera_id is not None and not _PI_ID_RE.match(camera_id):
+            raise ValueError("Invalid camera id")
+        if action == "set_camera_enabled" and not isinstance(
+                (params or {}).get("enabled"), bool):
+            raise ValueError("enabled must be a boolean")
         if not self.is_connected():
             raise RuntimeError("MQTT broker not connected")
         payload = {"action": action, **(params or {})}

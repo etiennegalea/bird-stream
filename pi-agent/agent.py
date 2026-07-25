@@ -1,21 +1,23 @@
 #!/usr/bin/env python3
 """Birdstream Pi agent.
 
-Captures the camera with FFmpeg (timestamp overlay burned in on-device) and
-pushes SRT to MediaMTX on the server. Controlled over MQTT v5 with per-device
-topics so one broker can manage many Pis:
+Auto-detects V4L2 cameras, captures each enabled camera with its own FFmpeg
+process (timestamp overlay burned in on-device), and pushes independent SRT
+streams to MediaMTX. Controlled over MQTT v5 with per-device topics:
 
     camera/<pi_id>/control   (subscribe)  start | stop | set_camera | set_controls
                                           get_config | get_controls | update | reboot
-    camera/<pi_id>/status    (publish, retained)  idle | streaming | error | offline
+    camera/<pi_id>/status    (publish, retained)  aggregate + streams[] details
     camera/<pi_id>/reply     (publish)    responses to get_* / update actions
 """
 
 import datetime
+import glob
 import json
 import logging
 import math
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -48,9 +50,9 @@ logging.basicConfig(level=logging.INFO, format=_LOG_FORMAT, handlers=_handlers)
 logger = logging.getLogger("pi_camera_agent")
 
 # ── Stream auto-recovery ──────────────────────────────────────────────────
-# On an ffmpeg failure the agent restarts the stream itself (backoff below).
-# After MAX consecutive failures it exits so systemd restarts the whole
-# service (Restart=always) — a clean slate for wedged camera/USB state.
+# Each failed FFmpeg child is restarted independently. After MAX consecutive
+# failures that camera is left in an error state without disrupting healthy
+# cameras; an operator can retry it from the admin panel.
 STREAM_RESTART_DELAY = 5     # seconds to wait before an auto-restart attempt
 STREAM_MAX_RESTARTS = 5      # consecutive failures before exiting for systemd
 
@@ -65,6 +67,14 @@ DEFAULT_CONFIG = {
         "tls": {"enabled": False, "ca_cert": None},
     },
     "camera": {
+        # Every detected V4L2 capture device is streamed independently.
+        # `devices` can override the generated id/label/enabled state for a
+        # stable /dev/v4l/by-id path. Existing single-camera configs continue
+        # to work through `device`.
+        "auto_detect": True,
+        "enabled_by_default": True,
+        "primary_id": None,
+        "devices": [],
         "device": "/dev/video0",
         "width": 1280,
         "height": 720,
@@ -109,7 +119,10 @@ DEFAULT_CONFIG = {
 }
 
 # Camera keys settable via the set_camera action
-CAMERA_KEYS = {"device", "width", "height", "fps", "bitrate", "use_hw_acceleration"}
+CAMERA_KEYS = {
+    "device", "width", "height", "fps", "bitrate", "use_hw_acceleration",
+}
+CAMERA_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 # How often the scheduler re-checks whether the current local time is inside
 # the broadcast window.
@@ -196,15 +209,15 @@ class CameraAgent:
         self.topic_reply = f"{base}/reply"
 
         self.client = None
-        self.stream_process = None
-        self.stream_details = {}
+        # camera_id -> process/details/recovery state. One agent supervises
+        # one independent FFmpeg/SRT publisher per detected camera.
+        self.streams: dict[str, dict] = {}
+        self._capture_devices: set[str] = set()
         self.lock = threading.Lock()
 
         # Auto-recovery state
         self.should_stream = False      # True while streaming is desired
         self.last_start_params = {}     # params to reuse on auto-restart
-        self.restart_attempts = 0       # consecutive failures since last success
-        self._restart_timer = None
 
         # Cached IP-geolocation for the sunrise/sunset schedule
         self._geo = None                # (lat, lon), False (failed), or None
@@ -230,17 +243,165 @@ class CameraAgent:
             yaml.safe_dump(self.config, f, default_flow_style=False, sort_keys=False)
         logger.info("Configuration persisted to config.yaml")
 
+    # ── camera discovery ─────────────────────────────────────────────────
+
+    @staticmethod
+    def _camera_slug(value: str, fallback: str) -> str:
+        slug = re.sub(r"[^A-Za-z0-9_-]+", "-", value).strip("-_").lower()
+        return slug or fallback
+
+    def _is_capture_device(self, device: str) -> bool:
+        """Reject metadata-only V4L2 nodes exposed by some USB webcams."""
+        if not os.path.exists(device):
+            return False
+        real = os.path.realpath(device)
+        known = getattr(self, "_capture_devices", set())
+        if real in known:
+            return True
+        ctl = shutil.which("v4l2-ctl")
+        if not ctl:
+            known.add(real)
+            self._capture_devices = known
+            return True
+        try:
+            result = subprocess.run(
+                [ctl, "-d", device, "--get-fmt-video"],
+                capture_output=True, text=True, timeout=3,
+            )
+            if result.returncode == 0:
+                known.add(real)
+                self._capture_devices = known
+                return True
+            return False
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+
+    def discover_cameras(self) -> list[dict]:
+        """Return deterministic camera specs and MediaMTX paths.
+
+        Stable `/dev/v4l/by-id/*-video-index0` links are preferred. Configured
+        `camera.devices` entries override id, label and enabled state.
+        """
+        cam_cfg = self.config.get("camera") or {}
+        configured = cam_cfg.get("devices") or []
+        overrides_by_real = {}
+        explicit = []
+        for item in configured:
+            if not isinstance(item, dict) or not item.get("device"):
+                continue
+            spec = dict(item)
+            overrides_by_real[os.path.realpath(spec["device"])] = spec
+            explicit.append(spec["device"])
+
+        candidates = []
+        if cam_cfg.get("auto_detect", True):
+            candidates.extend(sorted(glob.glob("/dev/v4l/by-id/*-video-index0")))
+            candidates.extend(sorted(
+                glob.glob("/dev/video*"),
+                key=lambda p: int(re.search(r"\d+$", p).group())
+                if re.search(r"\d+$", p) else 9999,
+            ))
+        candidates.extend(explicit)
+        # Backward-compatible single-camera fallback, including tests and
+        # systems without /dev/v4l/by-id.
+        if not candidates and cam_cfg.get("device"):
+            candidates.append(cam_cfg["device"])
+
+        unique = []
+        seen_real = set()
+        for candidate in candidates:
+            real = os.path.realpath(candidate)
+            if real in seen_real or not self._is_capture_device(candidate):
+                continue
+            seen_real.add(real)
+            unique.append((candidate, real))
+
+        base_path = (self.config.get("stream", {}).get("srt", {})
+                     .get("path", "birdcam"))
+        specs = []
+        used_ids = set()
+        primary_id = cam_cfg.get("primary_id")
+        for index, (candidate, real) in enumerate(unique):
+            override = overrides_by_real.get(real, {})
+            detected_name = os.path.basename(candidate).removesuffix(
+                "-video-index0")
+            original = self._camera_slug(
+                str(override.get("id") or detected_name),
+                f"cam-{index + 1}",
+            )[:32]
+            camera_id = original
+            suffix = 2
+            while camera_id in used_ids:
+                camera_id = f"{original}-{suffix}"
+                suffix += 1
+            used_ids.add(camera_id)
+            is_primary = camera_id == primary_id or (
+                primary_id is None and index == 0)
+            path = base_path if is_primary else \
+                f"{base_path}-{self.pi_id}-{camera_id}"
+            specs.append({
+                "id": camera_id,
+                "label": override.get("label") or f"Camera {index + 1}",
+                "device": override.get("device") or candidate,
+                "real_device": real,
+                "enabled": bool(override.get(
+                    "enabled", cam_cfg.get("enabled_by_default", True))),
+                "path": self._camera_slug(path, f"{base_path}-{index + 1}"),
+                "index": index,
+                **{k: override[k] for k in CAMERA_KEYS if k in override},
+            })
+        return specs
+
+    def _ensure_primary_camera(self):
+        """Persist the first detected camera as the legacy `birdcam` stream."""
+        cam_cfg = self.config.get("camera") or {}
+        if cam_cfg.get("primary_id"):
+            return
+        cameras = self.discover_cameras()
+        if cameras:
+            cam_cfg["primary_id"] = cameras[0]["id"]
+            self._save_config()
+            logger.info(
+                "Registered %s as the primary camera", cameras[0]["id"])
+
     # ── MQTT publishing ───────────────────────────────────────────────────
 
-    def publish_status(self, status: str, error_msg: str = None):
+    def publish_status(self, status: str | None = None, error_msg: str = None):
+        stream_items = []
+        for camera in self.discover_cameras():
+            state = self.streams.get(camera["id"], {})
+            process = state.get("process")
+            running = process is not None and process.poll() is None
+            camera_status = "streaming" if running else state.get("status", "idle")
+            stream_items.append({
+                "camera_id": camera["id"],
+                "label": camera["label"],
+                "device": camera["device"],
+                "enabled": camera["enabled"],
+                "status": camera_status,
+                "path": camera["path"],
+                **dict(state.get("details") or {}),
+                **({"error": state["error"]} if state.get("error") else {}),
+            })
+        if status is None:
+            if any(s["status"] == "streaming" for s in stream_items):
+                status = "streaming"
+            elif any(s["status"] == "error" for s in stream_items):
+                status = "error"
+            else:
+                status = "idle"
         payload = {
             "status": status,
             "pi_id": self.pi_id,
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "cpu_temp": get_cpu_temp(),
+            "streams": stream_items,
         }
-        if status == "streaming" and self.stream_details:
-            payload.update(self.stream_details)
+        # Preserve old top-level details for clients that only know one stream.
+        live = next((s for s in stream_items if s["status"] == "streaming"), None)
+        if live:
+            payload.update({k: v for k, v in live.items()
+                            if k not in {"status", "error", "enabled"}})
         if status == "error" and error_msg:
             payload["error"] = error_msg
         # Always advertise the schedule so the admin panel can render it, and
@@ -302,9 +463,9 @@ class CameraAgent:
             f":box=1:boxcolor=black@0.4"
         )
 
-    def _srt_url(self, host: str, port: int) -> str:
+    def _srt_url(self, host: str, port: int, path: str | None = None) -> str:
         srt = self.config["stream"]["srt"]
-        path = srt.get("path", "birdcam")
+        path = path or srt.get("path", "birdcam")
         user, pw = srt.get("username"), srt.get("password")
         streamid = f"publish:{path}"
         if user and pw:
@@ -312,11 +473,12 @@ class CameraAgent:
         return f"srt://{host}:{port}?mode=caller&streamid={streamid}"
 
     def _build_ffmpeg_cmd(self, host, port, width, height, fps, bitrate,
-                          device, use_hw):
+                          device, use_hw, path=None, audio_enabled=None):
         vf = self._drawtext_filter()
-        url = self._srt_url(host, port)
+        url = self._srt_url(host, port, path)
         audio = self.config.get("audio") or {}
-        audio_on = bool(audio.get("enabled", False))
+        audio_on = bool(audio.get("enabled", False)) if audio_enabled is None \
+            else bool(audio_enabled)
 
         if sys.platform == "darwin":  # macOS testing
             avf_input = f"{device}:{audio.get('device', '0')}" if audio_on \
@@ -358,133 +520,174 @@ class CameraAgent:
         return cmd
 
     def start_stream(self, params: dict):
-        # Remember intent + params so the supervisor can auto-restart.
+        """Start one camera (`camera_id`) or every enabled detected camera."""
         if params:
             self.last_start_params = params
-        # Cooldown guard: never run ffmpeg outside the broadcast window. This
-        # keeps "rest" truly at rest (no encoding load) even if a start slips
-        # in from a manual command or an in-flight auto-restart.
         if not self._in_window():
             logger.info("Outside broadcast window — resting (stream not started)")
             self.stop_stream(manual=True)
             self.publish_status("idle")
             return
         self.should_stream = True
-        self.stop_stream()  # non-manual: keeps should_stream = True
-        with self.lock:
-            cam = self.config["camera"]
-            srt = self.config["stream"]["srt"]
-            host = params.get("srt_host") or srt.get("host")
-            port = params.get("srt_port") or srt.get("port", 8890)
-            if not host:
-                # Config error — restarting can't fix a missing host, so don't
-                # enter the retry loop.
-                self.should_stream = False
-                self.publish_status(
-                    "error",
-                    "No SRT host (param srt_host or config stream.srt.host)")
+        requested_id = params.get("camera_id")
+        cameras = self.discover_cameras()
+        if requested_id:
+            cameras = [c for c in cameras if c["id"] == requested_id]
+            if not cameras:
+                self.publish_reply("start", {
+                    "ok": False, "error": f"Unknown camera: {requested_id}"})
                 return
+        for camera in cameras:
+            if camera["enabled"]:
+                if camera["id"] in self.streams:
+                    self.streams[camera["id"]]["restart_attempts"] = 0
+                self._start_camera(camera, params)
+        self.publish_status()
 
-            width = params.get("width", cam["width"])
-            height = params.get("height", cam["height"])
-            fps = params.get("fps", cam["fps"])
-            bitrate = params.get("bitrate", cam["bitrate"])
-            device = params.get("device", cam["device"])
-            use_hw = cam.get("use_hw_acceleration", True)
+    def _start_camera(self, camera: dict, params: dict):
+        camera_id = camera["id"]
+        state = self.streams.setdefault(camera_id, {
+            "process": None, "details": {}, "status": "idle",
+            "desired": True, "restart_attempts": 0, "restart_timer": None,
+        })
+        state["desired"] = True
+        self._stop_camera(camera_id, clear_intent=False)
 
-            cmd = self._build_ffmpeg_cmd(host, port, width, height, fps,
-                                         bitrate, device, use_hw)
-            logger.info(f"Running: {' '.join(cmd)}")
-            try:
-                self.stream_process = subprocess.Popen(
-                    cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-                )
-                time.sleep(1)
-                poll = self.stream_process.poll()
-                if poll is not None:
-                    _, stderr = self.stream_process.communicate()
-                    msg = f"FFmpeg failed to start (exit {poll}): {stderr[-200:].strip()}"
-                    self.stream_process = None
-                    self._schedule_restart(msg)
-                    return
-                self.stream_details = {
-                    "srt_destination": f"srt://{host}:{port}",
-                    "path": srt.get("path", "birdcam"),
-                    "width": width, "height": height, "fps": fps,
-                    "bitrate": bitrate, "device": device,
-                    "audio": bool((self.config.get("audio") or {}).get("enabled")),
-                }
-                self.restart_attempts = 0  # healthy start resets the backoff
-                self.publish_status("streaming")
-                threading.Thread(target=self._read_stderr,
-                                 args=(self.stream_process,), daemon=True).start()
-            except Exception as e:
-                self.stream_process = None
-                self._schedule_restart(f"Failed to spawn FFmpeg: {e}")
-
-    def stop_stream(self, manual: bool = False):
-        # manual=True means an operator/shutdown asked to stop — cancel any
-        # pending auto-restart and clear the "should stream" intent.
-        if manual:
+        cam = self.config["camera"]
+        srt = self.config["stream"]["srt"]
+        host = params.get("srt_host") or srt.get("host")
+        port = params.get("srt_port") or srt.get("port", 8890)
+        if not host:
+            state.update(status="error", error="No SRT host")
             self.should_stream = False
-            self._cancel_restart()
-        with self.lock:
-            if not self.stream_process:
+            return
+        width = params.get("width", camera.get("width", cam["width"]))
+        height = params.get("height", camera.get("height", cam["height"]))
+        fps = params.get("fps", camera.get("fps", cam["fps"]))
+        bitrate = params.get("bitrate", camera.get("bitrate", cam["bitrate"]))
+        use_hw = camera.get(
+            "use_hw_acceleration", cam.get("use_hw_acceleration", False))
+        # One ALSA device cannot generally be opened by multiple FFmpeg
+        # processes. Keep audio on the primary camera stream only.
+        primary_id = self.config["camera"].get("primary_id")
+        is_primary = camera["id"] == primary_id or (
+            primary_id is None and camera["index"] == 0)
+        audio_enabled = is_primary and bool(
+            (self.config.get("audio") or {}).get("enabled", False))
+        cmd = self._build_ffmpeg_cmd(
+            host, port, width, height, fps, bitrate, camera["device"], use_hw,
+            path=camera["path"], audio_enabled=audio_enabled,
+        )
+        logger.info("[%s] Running: %s", camera_id, " ".join(cmd))
+        try:
+            process = subprocess.Popen(
+                cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True
+            )
+            state["process"] = process
+            time.sleep(1)
+            poll = process.poll()
+            if poll is not None:
+                _, stderr = process.communicate()
+                state["process"] = None
+                self._schedule_restart(
+                    camera_id,
+                    f"FFmpeg failed to start (exit {poll}): "
+                    f"{stderr[-200:].strip()}",
+                )
                 return
-            logger.info("Stopping stream process...")
+            state.update(
+                status="streaming",
+                error=None,
+                restart_attempts=0,
+                details={
+                    "srt_destination": f"srt://{host}:{port}",
+                    "width": width, "height": height, "fps": fps,
+                    "bitrate": bitrate, "audio": audio_enabled,
+                },
+            )
+            threading.Thread(
+                target=self._read_stderr,
+                args=(camera_id, process),
+                daemon=True,
+            ).start()
+        except Exception as e:
+            state["process"] = None
+            self._schedule_restart(camera_id, f"Failed to spawn FFmpeg: {e}")
+
+    def stop_stream(self, manual: bool = False, camera_id: str | None = None):
+        if manual and camera_id is None:
+            self.should_stream = False
+        ids = [camera_id] if camera_id else list(self.streams)
+        for current_id in ids:
+            self._stop_camera(current_id, clear_intent=manual)
+
+    def _stop_camera(self, camera_id: str, clear_intent: bool):
+        state = self.streams.get(camera_id)
+        if not state:
+            return
+        if clear_intent:
+            state["desired"] = False
+        timer = state.get("restart_timer")
+        if timer:
+            timer.cancel()
+            state["restart_timer"] = None
+        process = state.get("process")
+        if process:
+            logger.info("[%s] Stopping stream process", camera_id)
             try:
-                self.stream_process.terminate()
-                self.stream_process.wait(timeout=5)
+                process.terminate()
+                process.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                self.stream_process.kill()
-                self.stream_process.wait()
+                process.kill()
+                process.wait()
             except Exception as e:
-                logger.error(f"Error terminating stream: {e}")
-            finally:
-                self.stream_process = None
-                self.stream_details = {}
+                logger.error("[%s] Error terminating stream: %s", camera_id, e)
+        state.update(process=None, details={}, status="idle", error=None)
 
     # ── auto-recovery supervisor ──────────────────────────────────────────
 
-    def _cancel_restart(self):
-        if self._restart_timer:
-            self._restart_timer.cancel()
-            self._restart_timer = None
-
-    def _schedule_restart(self, reason: str):
+    def _schedule_restart(self, camera_id: str, reason: str):
         """Log a stream failure and, if streaming is still desired, restart it
         after a short delay. After STREAM_MAX_RESTARTS consecutive failures,
-        exit so systemd restarts the whole service."""
-        logger.error(f"Stream failure: {reason}")
-        self.publish_status("error", reason)
-        if not self.should_stream:
+        leave only that camera in an error state."""
+        state = self.streams.get(camera_id)
+        if not state:
+            return
+        logger.error("[%s] Stream failure: %s", camera_id, reason)
+        state.update(status="error", error=reason, process=None, details={})
+        self.publish_status()
+        if not state.get("desired"):
             return  # operator stopped it — don't fight the intent
 
-        self.restart_attempts += 1
-        if self.restart_attempts > STREAM_MAX_RESTARTS:
+        state["restart_attempts"] = state.get("restart_attempts", 0) + 1
+        if state["restart_attempts"] > STREAM_MAX_RESTARTS:
             logger.critical(
-                f"Stream failed {self.restart_attempts} times in a row; "
-                "exiting for systemd to restart the service")
-            self.publish_status(
-                "error",
-                f"{reason} — restarting service after "
-                f"{self.restart_attempts - 1} failed attempts")
-            self.stop_stream(manual=True)
-            self.publish_status("offline")
-            threading.Timer(1.0, lambda: os._exit(1)).start()
+                "[%s] Stream failed %s times; giving up until the service "
+                "or camera is restarted", camera_id, state["restart_attempts"])
+            state["desired"] = False
+            self.stop_stream(manual=True, camera_id=camera_id)
+            state.update(
+                status="error", error=f"{reason} — retry limit reached")
+            self.publish_status()
             return
 
         logger.info(
-            f"Auto-restarting stream in {STREAM_RESTART_DELAY}s "
-            f"(attempt {self.restart_attempts}/{STREAM_MAX_RESTARTS})")
-        self._cancel_restart()
-        self._restart_timer = threading.Timer(
+            "[%s] Auto-restarting in %ss (attempt %s/%s)",
+            camera_id, STREAM_RESTART_DELAY,
+            state["restart_attempts"], STREAM_MAX_RESTARTS)
+        camera = next(
+            (c for c in self.discover_cameras() if c["id"] == camera_id), None)
+        if not camera:
+            return
+        timer = threading.Timer(
             STREAM_RESTART_DELAY,
-            lambda: self.start_stream(self.last_start_params))
-        self._restart_timer.daemon = True
-        self._restart_timer.start()
+            lambda: self._start_camera(camera, self.last_start_params),
+        )
+        timer.daemon = True
+        state["restart_timer"] = timer
+        timer.start()
 
-    def _read_stderr(self, process):
+    def _read_stderr(self, camera_id, process):
         tail = deque(maxlen=15)  # keep the last lines for crash reporting
         while process.poll() is None:
             line = process.stderr.readline()
@@ -495,19 +698,35 @@ class CameraAgent:
         exit_code = process.poll()
         if exit_code:
             stderr_tail = " | ".join(tail)[-400:]
-            # Only react if this is still the active process — an intentional
-            # stop/restart already swapped it out (stream_process != process).
             with self.lock:
-                is_current = self.stream_process == process
+                state = self.streams.get(camera_id, {})
+                is_current = state.get("process") == process
                 if is_current:
-                    self.stream_process = None
-                    self.stream_details = {}
+                    state.update(process=None, details={})
             if is_current:
                 self._schedule_restart(
+                    camera_id,
                     f"Stream crashed (exit {exit_code}): {stderr_tail}")
 
-    def _is_streaming(self) -> bool:
-        return self.stream_process is not None and self.stream_process.poll() is None
+    def _is_streaming(self, camera_id: str | None = None) -> bool:
+        states = [self.streams.get(camera_id)] if camera_id else self.streams.values()
+        return any(
+            state and state.get("process") is not None
+            and state["process"].poll() is None
+            for state in states
+        )
+
+    def _sync_cameras(self):
+        """Hot-plug reconciliation, called from the heartbeat."""
+        detected = {c["id"]: c for c in self.discover_cameras()}
+        for camera_id in list(self.streams):
+            if camera_id not in detected:
+                self._stop_camera(camera_id, clear_intent=True)
+                del self.streams[camera_id]
+        if self.should_stream and self._in_window():
+            for camera in detected.values():
+                if camera["enabled"] and camera["id"] not in self.streams:
+                    self._start_camera(camera, {})
 
     # ── broadcast schedule ────────────────────────────────────────────────
 
@@ -670,10 +889,64 @@ class CameraAgent:
             {"ok": True, "applied": changes, "restarted": restarted},
             payload.get("request_id"))
 
+    def action_set_camera_enabled(self, payload):
+        """Persistently include/exclude a detected camera from broadcasting."""
+        camera_id = payload.get("camera_id")
+        enabled = payload.get("enabled")
+        if not CAMERA_ID_RE.match(camera_id or "") or not isinstance(enabled, bool):
+            self.publish_reply(
+                "set_camera_enabled",
+                {"ok": False, "error": "camera_id and boolean enabled are required"},
+                payload.get("request_id"))
+            return
+        camera = next(
+            (c for c in self.discover_cameras() if c["id"] == camera_id), None)
+        if not camera:
+            self.publish_reply(
+                "set_camera_enabled",
+                {"ok": False, "error": f"Unknown camera: {camera_id}"},
+                payload.get("request_id"))
+            return
+
+        entries = self.config["camera"].setdefault("devices", [])
+        real = camera["real_device"]
+        entry = next(
+            (item for item in entries
+             if os.path.realpath(item.get("device", "")) == real),
+            None,
+        )
+        if entry is None:
+            entry = {
+                "id": camera_id,
+                "label": camera["label"],
+                "device": camera["device"],
+            }
+            entries.append(entry)
+        entry["enabled"] = enabled
+        self._save_config()
+
+        if enabled and self.should_stream and self._in_window():
+            refreshed = next(
+                c for c in self.discover_cameras() if c["id"] == camera_id)
+            if camera_id in self.streams:
+                self.streams[camera_id]["restart_attempts"] = 0
+            self._start_camera(refreshed, {})
+        elif not enabled:
+            self.stop_stream(manual=True, camera_id=camera_id)
+        self.publish_status()
+        self.publish_reply(
+            "set_camera_enabled",
+            {"ok": True, "camera_id": camera_id, "enabled": enabled},
+            payload.get("request_id"))
+
     def action_set_controls(self, payload):
         """Set V4L2 controls (brightness, contrast, exposure, focus, ...)."""
         controls = payload.get("controls", {})
-        device = self.config["camera"]["device"]
+        camera_id = payload.get("camera_id")
+        camera = next(
+            (c for c in self.discover_cameras()
+             if not camera_id or c["id"] == camera_id), None)
+        device = camera["device"] if camera else self.config["camera"]["device"]
         if not shutil.which("v4l2-ctl"):
             self.publish_reply(
                 "set_controls",
@@ -691,7 +964,11 @@ class CameraAgent:
                            payload.get("request_id"))
 
     def action_get_controls(self, payload):
-        device = self.config["camera"]["device"]
+        camera_id = payload.get("camera_id")
+        camera = next(
+            (c for c in self.discover_cameras()
+             if not camera_id or c["id"] == camera_id), None)
+        device = camera["device"] if camera else self.config["camera"]["device"]
         if not shutil.which("v4l2-ctl"):
             self.publish_reply("get_controls",
                                {"ok": False, "error": "v4l2-ctl not installed"},
@@ -757,7 +1034,7 @@ class CameraAgent:
         if reason_code == 0:
             logger.info("Connected to MQTT broker")
             client.subscribe(self.topic_control, qos=1)
-            self.publish_status("streaming" if self._is_streaming() else "idle")
+            self.publish_status()
         else:
             logger.error(f"MQTT connect failed: {reason_code}")
 
@@ -771,8 +1048,13 @@ class CameraAgent:
         action = payload.get("action")
         handlers = {
             "start": lambda: self.start_stream(payload),
-            "stop": lambda: (self.stop_stream(manual=True), self.publish_status("idle")),
+            "stop": lambda: (
+                self.stop_stream(
+                    manual=True, camera_id=payload.get("camera_id")),
+                self.publish_status(),
+            ),
             "set_camera": lambda: self.action_set_camera(payload),
+            "set_camera_enabled": lambda: self.action_set_camera_enabled(payload),
             "set_schedule": lambda: self.action_set_schedule(payload),
             "set_controls": lambda: self.action_set_controls(payload),
             "get_controls": lambda: self.action_get_controls(payload),
@@ -797,18 +1079,13 @@ class CameraAgent:
         while True:
             time.sleep(10)
             try:
-                if self._is_streaming():
-                    self.publish_status("streaming")
-                elif self.should_stream:
-                    # Streaming is desired but not running — an auto-restart is
-                    # pending/in progress. Report error, not idle.
-                    self.publish_status("error", "Stream down, auto-restarting")
-                else:
-                    self.publish_status("idle")
+                self._sync_cameras()
+                self.publish_status()
             except Exception as e:
                 logger.error(f"Heartbeat error: {e}")
 
     def run(self):
+        self._ensure_primary_camera()
         m = self.config["mqtt"]
         self.client = mqtt.Client(
             callback_api_version=CallbackAPIVersion.VERSION2,

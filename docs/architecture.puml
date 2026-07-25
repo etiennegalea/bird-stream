@@ -33,8 +33,8 @@ cloud "Cloudflare edge\n(Zero Trust tunnel)" as cf {
 
 node "Raspberry Pi  —  LAN" as pi {
   component "pi-agent\n(Python, systemd)" as agent
-  component "FFmpeg\nv4l2 cam + ALSA mic\nlibx264 4:2:0 + Opus\ndrawtext overlay" as ffmpeg
-  agent -down-> ffmpeg : spawns /\nsupervises
+  component "FFmpeg × N\none process per V4L2 camera\nlibx264 4:2:0 + overlay\nprimary stream may add Opus" as ffmpeg
+  agent -down-> ffmpeg : discovers /\nspawns / supervises
 }
 
 node "Proxmox server  —  docker compose" as server {
@@ -47,7 +47,7 @@ node "Proxmox server  —  docker compose" as server {
 }
 
 ' ── Pi -> server (LAN only, nothing forwarded) ─────────────────────────────
-ffmpeg -right-> mtx : SRT publish\n:8890/udp (LAN)
+ffmpeg -right-> mtx : independent SRT publishes\n:8890/udp (LAN)\nbirdcam + per-camera paths
 agent <-down-> mqtt : MQTT v5 :1883\ncamera/<id>/control|status|reply
 
 ' ── Public HTTP path (rides the tunnel) ────────────────────────────────────

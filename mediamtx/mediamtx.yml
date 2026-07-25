@@ -22,7 +22,9 @@ rtspTransports: [tcp]
 rtmp: no
 
 # ── SRT ingest (Pi publishes here) ────────────────────────────────────────
-# Pi streamid: publish:birdcam:<user>:<pass>
+# Pi streamids:
+#   publish:birdcam:<user>:<pass>                  (first camera)
+#   publish:birdcam-<pi-id>-<camera-id>:...        (additional cameras)
 srt: yes
 srtAddress: :8890
 
@@ -58,5 +60,7 @@ hlsSegmentCount: 7
 hlsSegmentDuration: 1s
 
 paths:
-  birdcam:
-    source: publisher   # only an authorized SRT publisher may feed this path
+  # First camera keeps the original `birdcam` path; additional auto-detected
+  # cameras use `birdcam-<pi-id>-<camera-id>`.
+  "~^birdcam(-[A-Za-z0-9_-]+)*$":
+    source: publisher   # only an authorized SRT publisher may feed each path

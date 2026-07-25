@@ -19,6 +19,7 @@ log() { echo -e "\033[1;32m[install]\033[0m $*"; }
 log "Installing system packages (ffmpeg, v4l-utils, fonts, git, curl)..."
 sudo apt-get update -qq
 sudo apt-get install -y -qq ffmpeg v4l-utils fonts-dejavu-core git curl
+sudo usermod -aG video,audio "$RUN_USER"
 
 # ── uv ───────────────────────────────────────────────────────────────────
 if ! command -v uv >/dev/null 2>&1; then

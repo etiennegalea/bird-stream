@@ -7,10 +7,6 @@
 
   const dispatch = createEventDispatcher();
 
-  // Reports the currently-streaming transmitter's id up to the parent so it
-  // can be shown on the video viewport. null when nothing is live.
-  export let onActiveDeviceChange = () => {};
-
   // ── Broadcast settings (public video/audio blocking) ────────────────────
   let videoEnabled = true;
   let audioEnabled = false; // matches server default: audio is opt-in
@@ -97,10 +93,6 @@
           }
         }
         scheduleForms = scheduleForms;
-        // Tell the parent which transmitter is currently feeding the stream
-        // (devices are sorted freshest-first, so the first live one wins).
-        const active = devices.find(d => d.status === 'streaming' && !d.stale);
-        onActiveDeviceChange(active ? active.pi_id : null);
         devicesError = '';
       } else {
         devicesError = resp.status === 403 ? 'Admin access required' : 'Failed to load devices';
@@ -132,6 +124,56 @@
     setTimeout(async () => {
       await fetchDevices();
       pending = { ...pending, [piId]: false };
+    }, 1500);
+  }
+
+  async function sendCameraCommand(piId, cameraId, action) {
+    const key = `${piId}/${cameraId}`;
+    pending = { ...pending, [key]: true };
+    try {
+      const resp = await fetch(
+        `${getApiBaseUrl()}/admin/stream/devices/${piId}/cameras/${cameraId}/${action}`,
+        { method: 'POST', headers: authHeader() },
+      );
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        devicesError = body.detail || `Failed to ${action} camera`;
+      } else {
+        devicesError = '';
+      }
+    } catch {
+      devicesError = 'Network error';
+    }
+    setTimeout(async () => {
+      await fetchDevices();
+      pending = { ...pending, [key]: false };
+    }, 1500);
+  }
+
+  async function setCameraEnabled(piId, cameraId, enabled) {
+    const key = `${piId}/${cameraId}/enabled`;
+    pending = { ...pending, [key]: true };
+    try {
+      const resp = await fetch(
+        `${getApiBaseUrl()}/admin/stream/devices/${piId}/cameras/${cameraId}/enabled`,
+        {
+          method: 'POST',
+          headers: authHeader(),
+          body: JSON.stringify({ enabled }),
+        },
+      );
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        devicesError = body.detail || 'Failed to update camera';
+      } else {
+        devicesError = '';
+      }
+    } catch {
+      devicesError = 'Network error';
+    }
+    setTimeout(async () => {
+      await fetchDevices();
+      pending = { ...pending, [key]: false };
     }, 1500);
   }
 
@@ -179,7 +221,6 @@
   });
   onDestroy(() => {
     clearInterval(pollTimer);
-    onActiveDeviceChange(null);
   });
 </script>
 
@@ -278,6 +319,63 @@
               >
                 {pending[d.pi_id] ? '…' : 'Stop'}
               </button>
+            </div>
+
+            <div class="camera-list">
+              {#each d.streams || [] as camera (camera.camera_id)}
+                {@const cameraKey = `${d.pi_id}/${camera.camera_id}`}
+                <div class="camera-card" class:disabled={!camera.enabled}>
+                  <div class="camera-head">
+                    <div>
+                      <span class="camera-name">{camera.label}</span>
+                      <span class="camera-path">{camera.path}</span>
+                    </div>
+                    <label class="camera-enabled-toggle" title="Show this camera publicly">
+                      <span>{camera.enabled ? 'Enabled' : 'Disabled'}</span>
+                      <input
+                        type="checkbox"
+                        class="stream-toggle"
+                        checked={camera.enabled}
+                        disabled={pending[`${cameraKey}/enabled`] || !brokerConnected}
+                        on:change={(e) => setCameraEnabled(
+                          d.pi_id, camera.camera_id, e.target.checked)}
+                      />
+                    </label>
+                  </div>
+                  <div class="device-meta">
+                    <span class="device-status {camera.status || 'unknown'}">
+                      {(camera.status || 'unknown').toUpperCase()}
+                    </span>
+                    <span>{camera.device}</span>
+                    {#if camera.status === 'streaming' && camera.width}
+                      <span>{camera.width}×{camera.height}@{camera.fps}</span>
+                    {/if}
+                  </div>
+                  {#if camera.error}
+                    <p class="device-error" title={camera.error}>{camera.error}</p>
+                  {/if}
+                  <div class="device-actions compact">
+                    <button
+                      class="device-btn start"
+                      disabled={!camera.enabled || pending[cameraKey] ||
+                        camera.status === 'streaming' || !brokerConnected}
+                      on:click={() => sendCameraCommand(
+                        d.pi_id, camera.camera_id, 'start')}
+                    >
+                      {pending[cameraKey] ? '…' : 'Start'}
+                    </button>
+                    <button
+                      class="device-btn stop"
+                      disabled={pending[cameraKey] ||
+                        camera.status !== 'streaming' || !brokerConnected}
+                      on:click={() => sendCameraCommand(
+                        d.pi_id, camera.camera_id, 'stop')}
+                    >
+                      {pending[cameraKey] ? '…' : 'Stop'}
+                    </button>
+                  </div>
+                </div>
+              {/each}
             </div>
 
             {#if scheduleForms[d.pi_id]}

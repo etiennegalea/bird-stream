@@ -11,6 +11,7 @@ import logging
 from litestar import WebSocket, get, websocket
 from litestar.exceptions import WebSocketDisconnect
 
+from services.mqtt_service import mqtt_devices
 from services.stream_settings_service import stream_settings
 
 logger = logging.getLogger("stream_settings_controller")
@@ -21,6 +22,12 @@ WS_POLL_INTERVAL = 1.0
 @get("/stream/settings")
 async def get_stream_settings() -> dict:
     return stream_settings.snapshot()
+
+
+@get("/stream/catalog")
+async def get_stream_catalog() -> dict:
+    """Enabled camera streams reported by all connected Pi transmitters."""
+    return {"streams": mqtt_devices.stream_catalog()}
 
 
 @websocket("/stream-settings")
