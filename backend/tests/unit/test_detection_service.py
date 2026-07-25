@@ -1,7 +1,9 @@
 """Unit tests for detection service config parsing and motion gating."""
 
+import json
 import os
 import sys
+from io import BytesIO
 from types import SimpleNamespace
 
 import numpy as np
@@ -71,10 +73,13 @@ class TestDetectionServiceConfig:
     def test_defaults(self, monkeypatch):
         for var in ["DETECTION_STREAM_URL", "DETECTION_MODEL", "DETECTION_FPS",
                     "DETECTION_MODEL_DIR", "DETECTION_CONF",
-                    "DETECTION_CLASSES", "DETECTION_MOTION_GATE"]:
+                    "DETECTION_CLASSES", "DETECTION_MOTION_GATE",
+                    "DETECTION_RTSP_BASE_URL", "MEDIAMTX_API_URL",
+                    "MEDIAMTX_PATH"]:
             monkeypatch.delenv(var, raising=False)
         svc = DetectionService()
-        assert svc.stream_url == "rtsp://mediamtx:8554/birdcam"
+        assert svc.configured_stream_url == "auto"
+        assert svc.stream_url is None
         assert svc.model_name == "yolo11n.pt"
         assert str(svc.model_path) == "/var/lib/birdstream/models/yolo11n.pt"
         assert svc.sample_fps == 2.0
@@ -89,10 +94,57 @@ class TestDetectionServiceConfig:
         monkeypatch.setenv("DETECTION_CLASSES", "bird,cat")
         monkeypatch.setenv("DETECTION_MOTION_GATE", "false")
         svc = DetectionService()
+        assert svc.configured_stream_url == "rtsp://other:8554/cam2"
         assert svc.stream_url == "rtsp://other:8554/cam2"
         assert svc.sample_fps == 5.0
         assert svc.classes == {"bird", "cat"}
         assert svc.motion_gate_enabled is False
+
+    def test_auto_discovers_primary_stream_first(self, monkeypatch):
+        response = BytesIO(json.dumps({
+            "items": [
+                {"name": "birdcam-pi-01-side", "ready": True},
+                {"name": "other", "ready": True},
+                {"name": "birdcam", "ready": True},
+            ],
+        }).encode())
+        monkeypatch.setattr(
+            "services.detection_service.request.urlopen",
+            lambda *_args, **_kwargs: response,
+        )
+
+        svc = DetectionService()
+        assert svc._discover_stream_url() == "rtsp://mediamtx:8554/birdcam"
+
+    def test_auto_falls_back_to_additional_camera(self, monkeypatch):
+        response = BytesIO(json.dumps({
+            "items": [
+                {"name": "birdcam-pi-01-side", "ready": True},
+                {"name": "birdcam-pi-01-offline", "ready": False},
+            ],
+        }).encode())
+        monkeypatch.setattr(
+            "services.detection_service.request.urlopen",
+            lambda *_args, **_kwargs: response,
+        )
+
+        svc = DetectionService()
+        assert svc._discover_stream_url() == (
+            "rtsp://mediamtx:8554/birdcam-pi-01-side")
+
+    def test_auto_returns_none_without_active_camera(self, monkeypatch):
+        response = BytesIO(json.dumps({"items": []}).encode())
+        monkeypatch.setattr(
+            "services.detection_service.request.urlopen",
+            lambda *_args, **_kwargs: response,
+        )
+
+        assert DetectionService()._discover_stream_url() is None
+
+    def test_explicit_stream_skips_discovery(self, monkeypatch):
+        monkeypatch.setenv("DETECTION_STREAM_URL", "rtsp://example/camera")
+        svc = DetectionService()
+        assert svc._capture_url() == "rtsp://example/camera"
 
     def test_bare_model_name_uses_writable_model_dir(
             self, monkeypatch, tmp_path):

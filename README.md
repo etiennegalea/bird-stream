@@ -175,6 +175,10 @@ curl localhost:8051/detection/status     # or /detection/latest, /detection/even
 ```
 
 Tune with `DETECTION_FPS`, `DETECTION_CONF`, `DETECTION_CLASSES`.
+With `DETECTION_STREAM_URL=auto`, the worker queries MediaMTX and follows the
+first active camera path, preferring the legacy `birdcam` path. Set an explicit
+internal RTSP URL such as `rtsp://mediamtx:8554/birdcam-pi-01-feeder` to pin
+detection to one camera.
 `DETECTION_MODEL` defaults to `yolo11n.pt`. On first use, its weights are
 downloaded into the persistent `detection_models` Docker volume mounted at
 `DETECTION_MODEL_DIR=/var/lib/birdstream/models`, so container rebuilds do not

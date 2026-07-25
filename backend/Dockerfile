@@ -7,6 +7,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app \
     WEBRTC_PORT_MIN=49152 \
     WEBRTC_PORT_MAX=49251 \
+    XDG_CACHE_HOME=/var/cache/birdstream \
+    MPLCONFIGDIR=/var/cache/birdstream/matplotlib \
+    YOLO_CONFIG_DIR=/var/cache/birdstream/ultralytics \
     # Venv lives outside /app so the ./backend:/app bind-mount never overwrites it.
     UV_PROJECT_ENVIRONMENT=/venv
 
@@ -50,7 +53,10 @@ ENV PATH="/venv/bin:$PATH"
 # Set ownership and make entrypoint executable in one layer.
 RUN chmod +x entrypoint.sh \
     && mkdir -p /var/lib/birdstream/models \
-    && chown -R appuser:appgroup /app /venv /var/lib/birdstream
+        /var/cache/birdstream/matplotlib \
+        /var/cache/birdstream/ultralytics \
+    && chown -R appuser:appgroup /app /venv /var/lib/birdstream \
+        /var/cache/birdstream
 
 USER appuser
 

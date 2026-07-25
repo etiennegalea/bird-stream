@@ -7,7 +7,11 @@ exposed via /detection/* endpoints.
 
 Env:
     DETECTION_ENABLED       "true" to start the worker (default false)
-    DETECTION_STREAM_URL    default rtsp://mediamtx:8554/birdcam
+    DETECTION_STREAM_URL    "auto" (default) discovers an active MediaMTX path,
+                            or set an explicit RTSP URL
+    DETECTION_RTSP_BASE_URL MediaMTX RTSP base used by auto discovery
+    MEDIAMTX_API_URL        MediaMTX control API used by auto discovery
+    MEDIAMTX_PATH           accepted camera path prefix (default birdcam)
     DETECTION_MODEL         ultralytics model name/path (default yolo11n.pt,
                             auto-downloaded on first run)
     DETECTION_MODEL_DIR     writable model cache for bare model names
@@ -24,11 +28,13 @@ The ultralytics import is lazy so the backend runs fine without the optional
 """
 
 import logging
+import json
 import os
 import threading
 import time
 from collections import deque
 from pathlib import Path
+from urllib import parse, request
 
 logger = logging.getLogger("detection_service")
 
@@ -70,8 +76,17 @@ class MotionGate:
 
 class DetectionService:
     def __init__(self):
-        self.stream_url = os.environ.get(
-            "DETECTION_STREAM_URL", "rtsp://mediamtx:8554/birdcam")
+        self.configured_stream_url = os.environ.get(
+            "DETECTION_STREAM_URL", "auto").strip()
+        self.stream_url = (
+            None if self.configured_stream_url.lower() == "auto"
+            else self.configured_stream_url
+        )
+        self.mediamtx_api_url = os.environ.get(
+            "MEDIAMTX_API_URL", "http://mediamtx:9997").rstrip("/")
+        self.rtsp_base_url = os.environ.get(
+            "DETECTION_RTSP_BASE_URL", "rtsp://mediamtx:8554").rstrip("/")
+        self.path_prefix = os.environ.get("MEDIAMTX_PATH", "birdcam")
         self.model_name = os.environ.get("DETECTION_MODEL", "yolo11n.pt")
         self.model_dir = Path(os.environ.get(
             "DETECTION_MODEL_DIR", "/var/lib/birdstream/models"
@@ -111,11 +126,12 @@ class DetectionService:
         if self._thread and self._thread.is_alive():
             return
         self._stop.clear()
+        self.running = True
         self._thread = threading.Thread(target=self._run, daemon=True,
                                         name="detection-worker")
         self._thread.start()
-        self.running = True
-        logger.info(f"Detection worker started (stream={self.stream_url}, "
+        logger.info(f"Detection worker started "
+                    f"(stream={self.configured_stream_url}, "
                     f"model={self.model_name}, fps={self.sample_fps}, "
                     f"classes={sorted(self.classes)})")
 
@@ -176,13 +192,57 @@ class DetectionService:
 
     # ── worker loop ───────────────────────────────────────────────────────
 
+    def _discover_stream_url(self) -> str | None:
+        """Return an active MediaMTX camera stream, preferring the legacy path."""
+        try:
+            with request.urlopen(
+                f"{self.mediamtx_api_url}/v3/paths/list", timeout=2
+            ) as response:
+                payload = json.load(response)
+        except Exception as exc:
+            logger.debug("MediaMTX path discovery failed: %s", exc)
+            return None
+
+        names = [
+            item.get("name")
+            for item in payload.get("items", [])
+            if item.get("name")
+            and item.get("ready", True)
+            and (
+                item["name"] == self.path_prefix
+                or item["name"].startswith(f"{self.path_prefix}-")
+            )
+        ]
+        if not names:
+            return None
+        names.sort(key=lambda name: (name != self.path_prefix, name))
+        path = parse.quote(names[0], safe="/-_.~")
+        return f"{self.rtsp_base_url}/{path}"
+
+    def _capture_url(self) -> str | None:
+        if self.configured_stream_url.lower() != "auto":
+            return self.configured_stream_url
+        return self._discover_stream_url()
+
     def _open_capture(self):
         import cv2
 
+        stream_url = self._capture_url()
+        if not stream_url:
+            self.stream_url = None
+            self.last_error = "No active MediaMTX camera stream"
+            return None
+
+        self.stream_url = stream_url
         os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS",
                               "rtsp_transport;tcp")
-        cap = cv2.VideoCapture(self.stream_url, cv2.CAP_FFMPEG)
-        return cap if cap.isOpened() else None
+        cap = cv2.VideoCapture(stream_url, cv2.CAP_FFMPEG)
+        if cap.isOpened():
+            self.last_error = None
+            return cap
+        cap.release()
+        self.last_error = f"Cannot open stream {stream_url}"
+        return None
 
     def _run(self):
         self._model = self._load_model()
@@ -198,8 +258,9 @@ class DetectionService:
             cap = self._open_capture()
             if cap is None:
                 self.connected = False
-                logger.warning(f"Cannot open stream {self.stream_url}, "
-                               f"retrying in {backoff}s")
+                logger.warning("%s, retrying in %ss",
+                               self.last_error or "Cannot open camera stream",
+                               backoff)
                 if self._stop.wait(backoff):
                     break
                 backoff = min(backoff * 2, 30)
@@ -256,6 +317,7 @@ class DetectionService:
             "running": self.running,
             "connected": self.connected,
             "stream_url": self.stream_url,
+            "configured_stream_url": self.configured_stream_url,
             "model": self.model_name,
             "model_path": str(self.model_path),
             "last_error": self.last_error,

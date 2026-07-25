@@ -81,7 +81,8 @@ services:
     environment:
       # Bird object detection (worker runs inside the backend container)
       - DETECTION_ENABLED=${DETECTION_ENABLED:-false}
-      - DETECTION_STREAM_URL=${DETECTION_STREAM_URL:-rtsp://mediamtx:8554/birdcam}
+      - DETECTION_STREAM_URL=${DETECTION_STREAM_URL:-auto}
+      - DETECTION_RTSP_BASE_URL=${DETECTION_RTSP_BASE_URL:-rtsp://mediamtx:8554}
       - DETECTION_MODEL=${DETECTION_MODEL:-yolo11n.pt}
       - DETECTION_MODEL_DIR=${DETECTION_MODEL_DIR:-/var/lib/birdstream/models}
       - DETECTION_FPS=${DETECTION_FPS:-2}
