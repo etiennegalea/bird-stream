@@ -7,18 +7,34 @@ exposed via /detection/* endpoints.
 
 Env:
     DETECTION_ENABLED       "true" to start the worker (default false)
-    DETECTION_STREAM_URL    default rtsp://mediamtx:8554/birdcam
+    DETECTION_STREAM_URL    default rtsp://mediamtx:8554/birdcam. A bare integer
+                            (e.g. "0") opens that local camera device index —
+                            handy for testing on a laptop/Mac webcam.
     DETECTION_MODEL         ultralytics model name/path (default yolo11n.pt,
                             auto-downloaded on first run)
     DETECTION_FPS           inference sampling rate (default 2)
     DETECTION_CONF          min confidence (default 0.4)
-    DETECTION_CLASSES       comma-separated COCO class names (default "bird")
+    DETECTION_CLASSES       comma-separated COCO class names (default "bird,cat")
     DETECTION_MOTION_GATE   "false" to run inference on every sampled frame
     DETECTION_MOTION_MIN_AREA  min changed-pixel fraction to count as motion
                                (default 0.005 = 0.5% of the frame)
 
-The ultralytics import is lazy so the backend runs fine without the optional
-'detection' dependency group installed (uv sync --group detection).
+Bird species classification (optional second stage): when enabled, each YOLO
+"bird" box is cropped and passed to a fine-grained image classifier, and the
+detection gains "species" / "species_confidence" fields. Cats (and any other
+class) are left as-is.
+
+    DETECTION_SPECIES_ENABLED   "true" to enable (default false)
+    DETECTION_SPECIES_MODEL     HF image-classification model (default
+                                dennisjooo/Birds-Classifier-EfficientNetB2,
+                                525 species, auto-downloaded on first run)
+    DETECTION_SPECIES_CONF      min classifier confidence to attach a species
+                                (default 0.5; below it the label stays "bird")
+    DETECTION_SPECIES_MIN_PX    min crop side in pixels to bother classifying
+                                (default 32 — tiny distant birds are skipped)
+
+The ultralytics/transformers imports are lazy so the backend runs fine without
+the optional 'detection' dependency group installed (uv sync --group detection).
 """
 
 import logging
@@ -36,6 +52,87 @@ def detection_enabled() -> bool:
 
 def _parse_classes(raw: str) -> set[str]:
     return {c.strip().lower() for c in raw.split(",") if c.strip()}
+
+
+def _crop_bbox(frame, bbox, pad_fraction: float = 0.1, min_size: int = 32):
+    """Crop a padded bbox from a frame; None if the clamped crop is too small.
+
+    A little padding of context around the box helps the classifier; the crop
+    is clamped to the frame, so boxes at the edge shrink rather than error.
+    """
+    h, w = frame.shape[:2]
+    x1, y1, x2, y2 = bbox
+    pad_x = (x2 - x1) * pad_fraction
+    pad_y = (y2 - y1) * pad_fraction
+    x1 = max(0, int(x1 - pad_x))
+    y1 = max(0, int(y1 - pad_y))
+    x2 = min(w, int(x2 + pad_x))
+    y2 = min(h, int(y2 + pad_y))
+    if (x2 - x1) < min_size or (y2 - y1) < min_size:
+        return None
+    return frame[y1:y2, x1:x2]
+
+
+class SpeciesClassifier:
+    """Second-stage fine-grained bird species classifier over YOLO crops."""
+
+    def __init__(self, model_name: str, min_conf: float = 0.5,
+                 min_crop_px: int = 32):
+        self.model_name = model_name
+        self.min_conf = min_conf
+        self.min_crop_px = min_crop_px
+        self._pipeline = None
+
+    @property
+    def loaded(self) -> bool:
+        return self._pipeline is not None
+
+    def load(self) -> bool:
+        try:
+            from transformers import pipeline
+        except ImportError:
+            logger.error(
+                "DETECTION_SPECIES_ENABLED is true but transformers is not "
+                "installed. Install with: uv sync --group detection")
+            return False
+        try:
+            pipe = pipeline("image-classification", model=self.model_name)
+        except Exception:
+            logger.exception(f"Failed to load species model {self.model_name}")
+            return False
+
+        # Wrap PIL conversion here so classify() stays importable without
+        # pillow (installed with the detection group; unit tests stub this).
+        import numpy as np
+        from PIL import Image
+
+        def run(crop_rgb, top_k=1):
+            return pipe(Image.fromarray(np.ascontiguousarray(crop_rgb)),
+                        top_k=top_k)
+
+        self._pipeline = run
+        logger.info(f"Species classifier loaded ({self.model_name})")
+        return True
+
+    def classify(self, frame, bbox) -> tuple[str, float] | None:
+        """Return (species, confidence) for a bird crop, or None."""
+        if self._pipeline is None:
+            return None
+        crop = _crop_bbox(frame, bbox, min_size=self.min_crop_px)
+        if crop is None:
+            return None
+        try:
+            preds = self._pipeline(crop[:, :, ::-1], top_k=1)  # BGR -> RGB
+        except Exception:
+            logger.exception("Species classification failed")
+            return None
+        if not preds:
+            return None
+        top = preds[0]
+        score = float(top["score"])
+        if score < self.min_conf:
+            return None
+        return top["label"].title(), round(score, 3)
 
 
 class MotionGate:
@@ -72,10 +169,22 @@ class DetectionService:
         self.model_name = os.environ.get("DETECTION_MODEL", "yolo11n.pt")
         self.sample_fps = float(os.environ.get("DETECTION_FPS", "2"))
         self.conf = float(os.environ.get("DETECTION_CONF", "0.4"))
-        self.classes = _parse_classes(os.environ.get("DETECTION_CLASSES", "bird"))
+        self.classes = _parse_classes(
+            os.environ.get("DETECTION_CLASSES", "bird,cat"))
         self.motion_gate_enabled = os.environ.get(
             "DETECTION_MOTION_GATE", "true").lower() == "true"
         min_area = float(os.environ.get("DETECTION_MOTION_MIN_AREA", "0.005"))
+
+        self.species_enabled = os.environ.get(
+            "DETECTION_SPECIES_ENABLED", "false").lower() == "true"
+        self.species_model = os.environ.get(
+            "DETECTION_SPECIES_MODEL",
+            "dennisjooo/Birds-Classifier-EfficientNetB2")
+        species_conf = float(os.environ.get("DETECTION_SPECIES_CONF", "0.5"))
+        species_min_px = int(os.environ.get("DETECTION_SPECIES_MIN_PX", "32"))
+        self._species = SpeciesClassifier(
+            self.species_model, min_conf=species_conf,
+            min_crop_px=species_min_px) if self.species_enabled else None
 
         self._gate = MotionGate(min_area_fraction=min_area)
         self._lock = threading.Lock()
@@ -147,16 +256,36 @@ class DetectionService:
                     "confidence": round(float(b.conf), 3),
                     "bbox": [round(float(v), 1) for v in b.xyxy[0].tolist()],
                 })
+        self._attach_species(frame, detections)
         return detections
+
+    def _attach_species(self, frame, detections: list[dict]) -> None:
+        """Add species/species_confidence to bird detections (in place)."""
+        if not (self._species and self._species.loaded):
+            return
+        for det in detections:
+            if det["label"] != "bird":
+                continue
+            result = self._species.classify(frame, det["bbox"])
+            if result:
+                det["species"], det["species_confidence"] = result
 
     # ── worker loop ───────────────────────────────────────────────────────
 
     def _open_capture(self):
         import cv2
 
-        os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS",
-                              "rtsp_transport;tcp")
-        cap = cv2.VideoCapture(self.stream_url, cv2.CAP_FFMPEG)
+        src = str(self.stream_url)
+        # A bare integer source (e.g. DETECTION_STREAM_URL=0) is a local camera
+        # device index — used to test detection on a laptop webcam. Open it with
+        # the platform's default backend (AVFoundation on macOS, V4L2 on Linux).
+        # Anything else is treated as a stream URL (RTSP via FFmpeg).
+        if src.isdigit():
+            cap = cv2.VideoCapture(int(src))
+        else:
+            os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS",
+                                  "rtsp_transport;tcp")
+            cap = cv2.VideoCapture(src, cv2.CAP_FFMPEG)
         return cap if cap.isOpened() else None
 
     def _run(self):
@@ -164,6 +293,11 @@ class DetectionService:
         if self._model is None:
             self.running = False
             return
+
+        if self._species and not self._species.load():
+            logger.warning("Species classification disabled (load failed); "
+                           "detections will keep the generic 'bird' label")
+            self._species = None
 
         interval = 1.0 / self.sample_fps if self.sample_fps > 0 else 0.5
         backoff = 2
@@ -235,6 +369,9 @@ class DetectionService:
             "sample_fps": self.sample_fps,
             "confidence_threshold": self.conf,
             "classes": sorted(self.classes),
+            "species_enabled": self.species_enabled,
+            "species_model": self.species_model if self.species_enabled else None,
+            "species_active": bool(self._species and self._species.loaded),
             "motion_gate": self.motion_gate_enabled,
             "frames_seen": self.frames_seen,
             "frames_inferred": self.frames_inferred,

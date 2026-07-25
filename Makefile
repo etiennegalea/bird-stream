@@ -1,10 +1,19 @@
 UNAME := $(shell uname -s)
 
-.PHONY: up down build logs dev-backend dev-frontend migrate test-backend cli
+.PHONY: up down build logs dev-backend dev-frontend migrate test-backend cli detect-webcam
 
 # Run backend locally (uses macOS camera automatically via AVFoundation)
 dev-backend:
 	cd backend && uv run python server.py
+
+# Test the detection model on your Mac webcam. Opens the camera, runs the active
+# YOLO model, and serves an annotated live preview at http://localhost:8060.
+# Installs the detection deps (ultralytics + CPU torch) on first run.
+# Usage: make detect-webcam
+#        make detect-webcam ARGS="--classes bird"     (birds only)
+#        make detect-webcam ARGS="--source 1 --conf 0.3"
+detect-webcam:
+	cd backend && uv run --group detection python scripts/detect_webcam.py $(ARGS)
 
 # Run frontend dev server
 dev-frontend:

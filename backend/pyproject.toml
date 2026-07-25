@@ -36,6 +36,8 @@ detection = [
     "ultralytics>=8.3",
     "torch",
     "torchvision",
+    # Second-stage bird species classifier (DETECTION_SPECIES_ENABLED=true)
+    "transformers>=4.44",
 ]
 dev = [
     "pytest>=8.0",
