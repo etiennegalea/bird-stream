@@ -2,6 +2,7 @@
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   import { get } from 'svelte/store';
   import { auth } from '../stores/auth.js';
+  import { temperatureState } from '../deviceStatus.js';
   import { getApiBaseUrl } from '../utils.js';
   import '../styles/StreamPanel.css';
 
@@ -10,6 +11,7 @@
   // ── Broadcast settings (public video/audio blocking) ────────────────────
   let videoEnabled = true;
   let audioEnabled = false; // matches server default: audio is opt-in
+  let privateEnabled = false;
   let settingsLoading = true;
   let saving = false;
   let settingsError = '';
@@ -22,6 +24,7 @@
   let pending = {};       // pi_id -> true while a command is in flight
   let schedPending = {};  // pi_id -> true while a schedule save is in flight
   let scheduleForms = {}; // pi_id -> { enabled, start, end } (edit buffer)
+  let expandedDevices = {}; // pi_id -> false when manually collapsed
   let pollTimer = null;
 
   function authHeader() {
@@ -36,6 +39,7 @@
         const data = await resp.json();
         videoEnabled = data.video_enabled;
         audioEnabled = data.audio_enabled;
+        privateEnabled = data.private_enabled;
         settingsError = '';
       } else {
         settingsError = resp.status === 403 ? 'Admin access required' : 'Failed to load settings';
@@ -59,7 +63,9 @@
         const data = await resp.json();
         videoEnabled = data.video_enabled;
         audioEnabled = data.audio_enabled;
+        privateEnabled = data.private_enabled;
         settingsError = '';
+        dispatch('settingschange', data);
       } else {
         settingsError = resp.status === 403 ? 'Admin access required' : 'Failed to update settings';
       }
@@ -214,6 +220,17 @@
     return d.status || 'unknown';
   }
 
+  function deviceExpanded(piId) {
+    return expandedDevices[piId] !== false;
+  }
+
+  function toggleDevice(piId) {
+    expandedDevices = {
+      ...expandedDevices,
+      [piId]: !deviceExpanded(piId),
+    };
+  }
+
   onMount(() => {
     fetchSettings();
     fetchDevices();
@@ -268,6 +285,24 @@
             on:change={(e) => updateSetting({ audio_enabled: e.target.checked })}
           />
         </label>
+        <label class="stream-row">
+          <span class="stream-row-label">
+            Admin-only viewing
+            <span
+              class="stream-state"
+              class:private={privateEnabled}
+            >{privateEnabled ? 'PRIVATE' : 'PUBLIC'}</span>
+          </span>
+          <input
+            type="checkbox"
+            class="stream-toggle"
+            checked={privateEnabled}
+            disabled={saving}
+            on:change={(e) => updateSetting({
+              private_enabled: e.target.checked,
+            })}
+          />
+        </label>
         {#if settingsError}<p class="stream-error">{settingsError}</p>{/if}
       {/if}
     </div>
@@ -287,24 +322,46 @@
         <p class="stream-muted">No transmitters have reported yet.</p>
       {:else}
         {#each devices as d (d.pi_id)}
-          <div class="device-card">
-            <div class="device-head">
-              <span class="device-name">{d.pi_id}</span>
-              <span class="device-status {statusOf(d)}">{statusOf(d).toUpperCase()}</span>
-            </div>
-            <div class="device-meta">
-              {#if d.cpu_temp != null}<span title="CPU temperature">{d.cpu_temp}°C</span>{/if}
-              {#if d.status === 'streaming' && d.width}
-                <span>{d.width}×{d.height}@{d.fps}</span>
-                <span>{d.bitrate}</span>
-                {#if d.audio}<span title="Audio enabled">♪</span>{/if}
-              {/if}
-              {#if d.timestamp}<span class="device-seen" title="Last heartbeat">{d.timestamp}</span>{/if}
-            </div>
-            {#if d.status === 'error' && d.error}
-              <p class="device-error" title={d.error}>{d.error}</p>
-            {/if}
-            <div class="device-actions">
+          {@const expanded = deviceExpanded(d.pi_id)}
+          {@const temperature = temperatureState(d.cpu_temp)}
+          <div class="device-card" class:collapsed={!expanded}>
+            <button
+              type="button"
+              class="device-summary"
+              on:click={() => toggleDevice(d.pi_id)}
+              aria-expanded={expanded}
+              aria-controls={`device-${d.pi_id}-details`}
+            >
+              <div class="device-head">
+                <span class="device-chevron" aria-hidden="true">›</span>
+                <span class="device-name">{d.pi_id}</span>
+                <span class="device-status {statusOf(d)}">{statusOf(d).toUpperCase()}</span>
+              </div>
+              <div class="device-meta">
+                {#if temperature}
+                  <span
+                    class="device-temperature {temperature.level}"
+                    title={temperature.description}
+                    aria-label={`${d.cpu_temp} degrees Celsius, ${temperature.description}`}
+                  >
+                    {d.cpu_temp}°C · {temperature.label}
+                  </span>
+                {/if}
+                {#if d.status === 'streaming' && d.width}
+                  <span>{d.width}×{d.height}@{d.fps}</span>
+                  <span>{d.bitrate}</span>
+                  {#if d.audio}<span title="Audio enabled">♪</span>{/if}
+                {/if}
+                {#if d.timestamp}<span class="device-seen" title="Last heartbeat">{d.timestamp}</span>{/if}
+              </div>
+            </button>
+
+            {#if expanded}
+              <div class="device-details" id={`device-${d.pi_id}-details`}>
+                {#if d.status === 'error' && d.error}
+                  <p class="device-error" title={d.error}>{d.error}</p>
+                {/if}
+                <div class="device-actions">
               <button
                 class="device-btn start"
                 disabled={pending[d.pi_id] || d.status === 'streaming' || !brokerConnected}
@@ -319,10 +376,10 @@
               >
                 {pending[d.pi_id] ? '…' : 'Stop'}
               </button>
-            </div>
+                </div>
 
-            <div class="camera-list">
-              {#each d.streams || [] as camera (camera.camera_id)}
+                <div class="camera-list">
+                  {#each d.streams || [] as camera (camera.camera_id)}
                 {@const cameraKey = `${d.pi_id}/${camera.camera_id}`}
                 <div class="camera-card" class:disabled={!camera.enabled}>
                   <div class="camera-head">
@@ -375,11 +432,11 @@
                     </button>
                   </div>
                 </div>
-              {/each}
-            </div>
+                  {/each}
+                </div>
 
-            {#if scheduleForms[d.pi_id]}
-              <div class="device-schedule">
+                {#if scheduleForms[d.pi_id]}
+                  <div class="device-schedule">
                 <label class="sched-toggle">
                   <input
                     type="checkbox"
@@ -437,6 +494,8 @@
                     {schedPending[d.pi_id] ? '…' : 'Save'}
                   </button>
                 </div>
+                  </div>
+                {/if}
               </div>
             {/if}
           </div>

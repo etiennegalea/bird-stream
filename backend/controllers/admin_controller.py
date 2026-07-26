@@ -43,6 +43,7 @@ class BlockIpRequest(msgspec.Struct):
 class StreamSettingsRequest(msgspec.Struct):
     video_enabled: bool | None = None
     audio_enabled: bool | None = None
+    private_enabled: bool | None = None
 
 
 class ScheduleRequest(msgspec.Struct):
@@ -128,14 +129,31 @@ class AdminController(Controller):
         self, request: Request, data: StreamSettingsRequest, state: State
     ) -> dict:
         user_id = _require_admin(request, state.db)
-        if data.video_enabled is None and data.audio_enabled is None:
+        if (
+            data.video_enabled is None
+            and data.audio_enabled is None
+            and data.private_enabled is None
+        ):
             raise HTTPException(status_code=400, detail="No settings provided")
         settings = stream_settings.update(
             video_enabled=data.video_enabled,
             audio_enabled=data.audio_enabled,
+            private_enabled=data.private_enabled,
+            db_factory=state.db,
         )
         logger.info("Admin (user_id=%s) set stream settings: %s", user_id, settings)
         return settings
+
+    @post("/stream-access-token")
+    async def create_stream_access_token(
+        self, request: Request, state: State
+    ) -> dict:
+        """Issue a short-lived MediaMTX read token to a verified admin."""
+        user_id = _require_admin(request, state.db)
+        return {
+            "token": auth_svc.create_stream_access_token(user_id),
+            "expires_in": auth_svc.stream_access_token_lifetime_seconds(),
+        }
 
     # ── Pi transmitter control (MQTT bridge) ─────────────────────────────
 

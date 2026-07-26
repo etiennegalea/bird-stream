@@ -34,7 +34,7 @@
   let streamCatalog = [];
   let availableStreams = [];
   let streamGroups = [];
-  let thumbnailGroups = [];
+  let thumbnailGroupStartPaths = new Set();
   let selectedStreamPath = null;
   let selectedStream = null;
   let catalogTimer = null;
@@ -57,30 +57,44 @@
   // Global stream toggles (admin-controlled, enforced for every viewer).
   let videoAllowed = true;
   let audioAllowed = false; // matches server default: audio is opt-in
+  let privateEnabled = true; // fail closed until the backend responds
+  let privacyKnown = false;
+  let streamAccessToken = null;
+  let streamAccessTokenExpiresAt = 0;
+  let activatingPlayback = false;
   let isStreamPanelOpen = false;
   let streamSettingsWs = null;
-  let activeDeviceId = null;
 
-  $: availableStreams = transmittedStreams(streamCatalog);
+  $: isAdmin = !!$auth?.user?.is_admin;
+  $: canViewStreams = privacyKnown && (!privateEnabled || isAdmin);
   $: streamGroups = groupStreamsByDevice(streamCatalog);
-  $: thumbnailGroups = streamGroups
-    .map(group => ({
-      ...group,
-      streams: group.streams.filter(
-        stream => stream.path !== selectedStreamPath),
-    }))
-    .filter(group => group.streams.length);
+  // Keep every player in this stable, device-grouped order. Switching the
+  // selected path then changes only CSS/controls; no WHEP player is remounted.
+  $: availableStreams = streamGroups.flatMap(group => group.streams);
+  $: thumbnailGroupStartPaths = new Set(
+    streamGroups
+      .map(group => group.streams.find(
+        stream => stream.path !== selectedStreamPath)?.path)
+      .filter(Boolean),
+  );
   $: selectedStream = availableStreams.find(
     stream => stream.path === selectedStreamPath);
-  $: activeDeviceId = selectedStream
-    ? `${selectedStream.pi_id} / ${selectedStream.label}`
-    : null;
   $: isConnected = !!playerStates[selectedStreamPath]?.connected;
   $: fps = playerStates[selectedStreamPath]?.fps || 0;
 
+  function viewerCanAccess() {
+    return privacyKnown && (!privateEnabled || isAdmin);
+  }
+
   async function fetchStreamCatalog({ reconnectIfChanged = true } = {}) {
+    if (!viewerCanAccess()) return;
+    if (privateEnabled && isAdmin && !(await ensureStreamAccessToken())) return;
     try {
-      const resp = await fetch(`${getApiBaseUrl()}/stream/catalog`);
+      const authState = get(auth);
+      const headers = authState?.token
+        ? { 'Authorization': `Bearer ${authState.token}` }
+        : {};
+      const resp = await fetch(`${getApiBaseUrl()}/stream/catalog`, { headers });
       if (!resp.ok) return;
       const data = await resp.json();
       const next = data.streams || [];
@@ -105,9 +119,96 @@
     }
   }
 
+  async function ensureStreamAccessToken() {
+    if (!privateEnabled) return true;
+    if (!isAdmin) return false;
+    if (
+      streamAccessToken
+      && streamAccessTokenExpiresAt > Date.now() + 60_000
+    ) {
+      return true;
+    }
+    const authState = get(auth);
+    if (!authState?.token) return false;
+    try {
+      const resp = await fetch(
+        `${getApiBaseUrl()}/admin/stream-access-token`,
+        {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${authState.token}` },
+        },
+      );
+      if (!resp.ok) return false;
+      const data = await resp.json();
+      streamAccessToken = data.token;
+      streamAccessTokenExpiresAt = Date.now()
+        + ((data.expires_in || 600) * 1000);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function stopPrivatePlayback() {
+    cleanup();
+    streamCatalog = [];
+    selectedStreamPath = null;
+    error = null;
+    streamAccessToken = null;
+    streamAccessTokenExpiresAt = 0;
+  }
+
+  async function activatePlayback() {
+    if (!viewerCanAccess() || activatingPlayback) return;
+    activatingPlayback = true;
+    try {
+      if (privateEnabled && !(await ensureStreamAccessToken())) {
+        error = 'The stream is not currently available.';
+        return;
+      }
+      await fetchStreamCatalog({ reconnectIfChanged: false });
+      enterQueue();
+    } finally {
+      activatingPlayback = false;
+    }
+  }
+
+  function applyStreamSettings(data) {
+    const wasViewable = privacyKnown && (!privateEnabled || isAdmin);
+    videoAllowed = data.video_enabled;
+    audioAllowed = data.audio_enabled;
+    privateEnabled = !!data.private_enabled;
+    privacyKnown = true;
+    const isViewable = !privateEnabled || isAdmin;
+
+    if (!isViewable) {
+      stopPrivatePlayback();
+    } else if (!wasViewable) {
+      void activatePlayback();
+    } else if (privateEnabled && isAdmin) {
+      void ensureStreamAccessToken();
+    }
+  }
+
+  async function fetchStreamSettings() {
+    try {
+      const resp = await fetch(`${getApiBaseUrl()}/stream/settings`);
+      if (!resp.ok) return;
+      applyStreamSettings(await resp.json());
+    } catch (_) {
+      // Remain fail-closed until settings can be loaded.
+    }
+  }
+
   function selectStream(path) {
     if (!path || path === selectedStreamPath) return;
     selectedStreamPath = path;
+  }
+
+  function selectStreamFromKeyboard(event, path) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    selectStream(path);
   }
 
   function handlePlayerState(event) {
@@ -124,9 +225,7 @@
   function setupStreamSettingsWs() {
     const ws = new WebSocket(`${getApiBaseUrl(true)}/stream-settings`);
     ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      videoAllowed = data.video_enabled;
-      audioAllowed = data.audio_enabled;
+      applyStreamSettings(JSON.parse(event.data));
     };
     ws.onclose = () => setTimeout(setupStreamSettingsWs, 5000);
     streamSettingsWs = ws;
@@ -177,8 +276,12 @@
     };
   }
 
-  function reconnect() {
+  async function reconnect() {
     cleanup();
+    if (privateEnabled && !(await ensureStreamAccessToken())) {
+      error = 'The stream is not currently available.';
+      return;
+    }
     enterQueue();
   }
 
@@ -250,9 +353,11 @@
 
     setupPeerCountWs();
     setupStreamSettingsWs();
-    await fetchStreamCatalog({ reconnectIfChanged: false });
+    await fetchStreamSettings();
+    if (viewerCanAccess()) {
+      await activatePlayback();
+    }
     catalogTimer = setInterval(fetchStreamCatalog, 5000);
-    enterQueue();
 
     return () => {
       cleanup();
@@ -316,7 +421,11 @@
   <div class="main-content" class:chat-hidden={!isChatVisible}>
     <div class="stream-section">
       <div class="stream-viewport">
-        {#if queuePosition !== null}
+        {#if !privacyKnown || !canViewStreams}
+          <div class="stream-waiting">
+            The stream is not currently available.
+          </div>
+        {:else if queuePosition !== null}
           <div class="queue-display">
             <p class="queue-label">Stream is full</p>
             <p class="queue-position">#{queuePosition}</p>
@@ -328,55 +437,44 @@
             <button class="reconnect-btn" on:click={reconnect}>Reconnect</button>
           </div>
         {:else if playbackReady && selectedStream}
-          <div class="main-stream">
-            <StreamPlayer
-              stream={selectedStream}
-              {streamBase}
-              enableHlsFallback={ENABLE_HLS_FALLBACK}
-              isMain={true}
-              {audioAllowed}
-              on:state={handlePlayerState}
-            />
-            {#if activeDeviceId}
-              <div class="device-id-badge" title="Transmitter feeding this stream">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                  <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
-                </svg>
-                {activeDeviceId}
+          <div class="multi-stream-stage">
+            {#each availableStreams as camera (camera.path)}
+              {@const isMainStream = camera.path === selectedStreamPath}
+              <!-- The same keyed element changes between a passive main
+                   player and a keyboard-selectable thumbnail to avoid
+                   remounting/reconnecting its WHEP session. -->
+              <!-- svelte-ignore a11y-no-noninteractive-tabindex -->
+              <div
+                class="stream-tile"
+                class:main-stream={isMainStream}
+                class:stream-thumbnail={!isMainStream}
+                class:thumbnail-device-start={
+                  !isMainStream && thumbnailGroupStartPaths.has(camera.path)}
+                role={isMainStream ? undefined : 'button'}
+                tabindex={isMainStream ? undefined : 0}
+                aria-label={isMainStream
+                  ? undefined
+                  : `Show ${camera.label} from ${camera.pi_id} as main stream`}
+                title={isMainStream ? undefined : 'Show as main stream'}
+                on:click={() => !isMainStream && selectStream(camera.path)}
+                on:keydown={(event) => {
+                  if (!isMainStream) {
+                    selectStreamFromKeyboard(event, camera.path);
+                  }
+                }}
+              >
+                <StreamPlayer
+                  stream={camera}
+                  {streamBase}
+                  enableHlsFallback={ENABLE_HLS_FALLBACK}
+                  isMain={isMainStream}
+                  audioAllowed={isMainStream && audioAllowed}
+                  accessToken={privateEnabled ? streamAccessToken : null}
+                  on:state={handlePlayerState}
+                />
               </div>
-            {/if}
+            {/each}
           </div>
-
-          {#if thumbnailGroups.length}
-            <div class="thumbnail-tray" aria-label="Other live camera streams">
-              {#each thumbnailGroups as group (group.pi_id)}
-                <section class="thumbnail-device-group" aria-label={`Streams from ${group.pi_id}`}>
-                  <h3>{group.pi_id}</h3>
-                  <div class="thumbnail-row">
-                    {#each group.streams as camera (camera.path)}
-                      <button
-                        type="button"
-                        class="stream-thumbnail"
-                        on:click={() => selectStream(camera.path)}
-                        aria-label={`Show ${camera.label} from ${camera.pi_id} as main stream`}
-                        title={`Show ${camera.label} as main stream`}
-                      >
-                        <StreamPlayer
-                          stream={camera}
-                          {streamBase}
-                          enableHlsFallback={ENABLE_HLS_FALLBACK}
-                          isMain={false}
-                          audioAllowed={false}
-                          on:state={handlePlayerState}
-                        />
-                        <span class="thumbnail-label">{camera.label}</span>
-                      </button>
-                    {/each}
-                  </div>
-                </section>
-              {/each}
-            </div>
-          {/if}
 
           {#if !videoAllowed}
             <div class="video-disabled-overlay">
@@ -393,20 +491,24 @@
       </div>
 
       <div class="stream-info">
-        <div class="viewer-count">
-          <img src="/viewers_icon.svg" alt="viewers" />
-          <span>{viewerCount}</span>
-          <div class="info-container">
-            <span class="label">FPS</span>
-            <span class="value">{fps}</span>
+        {#if canViewStreams}
+          <div class="viewer-count">
+            <img src="/viewers_icon.svg" alt="viewers" />
+            <span>{viewerCount}</span>
+            <div class="info-container">
+              <span class="label">FPS</span>
+              <span class="value">{fps}</span>
+            </div>
           </div>
-        </div>
+        {/if}
         <div class="weather-info">
           <Weather onCityChange={(name) => city = name} />
         </div>
-        <div class="connection-status">
-          {isConnected ? '🟢' : '🔴'}
-        </div>
+        {#if canViewStreams}
+          <div class="connection-status">
+            {isConnected ? '🟢' : '🔴'}
+          </div>
+        {/if}
       </div>
     </div>
 
@@ -424,6 +526,7 @@
         {#if isStreamPanelOpen}
           <StreamPanel
             on:close={() => isStreamPanelOpen = false}
+            on:settingschange={(event) => applyStreamSettings(event.detail)}
           />
         {/if}
       </div>
@@ -641,27 +744,6 @@
     border-radius: 50%;
     background: #d63a1f;
   }
-
-  /* Transmitter id badge — shown on the viewport while the stream panel is
-     open so you can tell which device is feeding the stream. */
-  .device-id-badge {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    z-index: 4;
-    display: flex;
-    align-items: center;
-    gap: 0.3rem;
-    padding: 3px 8px;
-    background: rgba(17, 17, 17, 0.72);
-    color: #fff;
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    border-radius: 6px;
-    pointer-events: none;
-  }
-  .device-id-badge svg { color: #E87530; }
 
   /* Video block: opaque overlay on the stream viewport (audio keeps playing). */
   .video-disabled-overlay {

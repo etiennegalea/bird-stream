@@ -65,6 +65,7 @@ class TestReadAuth(unittest.TestCase):
         os.environ.pop("MEDIAMTX_REQUIRE_READ_AUTH", None)
         mc.stream_settings.video_enabled = True
         mc.stream_settings.audio_enabled = True
+        mc.stream_settings.private_enabled = False
 
     def test_anonymous_read_allowed_by_default(self):
         self.assertIsNone(auth({"action": "read", "path": "birdcam",
@@ -87,6 +88,43 @@ class TestReadAuth(unittest.TestCase):
                                     "query": "jwt=good"}))
             with self.assertRaises(HTTPException):
                 auth({"action": "read", "protocol": "webrtc", "query": "jwt=bad"})
+
+    def test_private_read_requires_admin_stream_token(self):
+        mc.stream_settings.private_enabled = True
+        with mock.patch.object(
+            mc.auth_svc,
+            "decode_stream_access_token",
+            side_effect=lambda token: (
+                {"sub": "1", "scope": "stream:read:admin"}
+                if token == "admin-stream-token"
+                else None
+            ),
+        ):
+            self.assertIsNone(auth({
+                "action": "read",
+                "protocol": "webrtc",
+                "token": "admin-stream-token",
+            }))
+            with self.assertRaises(HTTPException):
+                auth({
+                    "action": "read",
+                    "protocol": "webrtc",
+                    "query": "",
+                })
+
+    def test_private_read_rejects_regular_account_jwt(self):
+        mc.stream_settings.private_enabled = True
+        with mock.patch.object(
+            mc.auth_svc, "decode_jwt", return_value={"sub": "1"}
+        ), mock.patch.object(
+            mc.auth_svc, "decode_stream_access_token", return_value=None
+        ):
+            with self.assertRaises(HTTPException):
+                auth({
+                    "action": "read",
+                    "protocol": "webrtc",
+                    "query": "jwt=regular-account-token",
+                })
 
     def test_read_denied_while_stream_fully_blocked(self):
         mc.stream_settings.video_enabled = False

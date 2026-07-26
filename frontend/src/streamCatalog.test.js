@@ -21,6 +21,16 @@ test('builds per-camera WHEP and HLS URLs', () => {
   });
 });
 
+test('adds an encoded short-lived access token to both playback URLs', () => {
+  assert.deepEqual(
+    streamUrls('https://stream.example', 'birdcam', 'signed token+value'),
+    {
+      whep: 'https://stream.example/birdcam/whep?jwt=signed%20token%2Bvalue',
+      hls: 'https://stream.example/hls/birdcam/index.m3u8?jwt=signed%20token%2Bvalue',
+    },
+  );
+});
+
 test('chooses the first transmitted stream and keeps a client-side swap', () => {
   assert.equal(chooseMainStreamPath(streams), 'birdcam');
   assert.equal(

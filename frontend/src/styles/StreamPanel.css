@@ -109,6 +109,7 @@
   line-height: 1.5;
 }
 .stream-state.off { color: #dc2626; background: #fef2f2; }
+.stream-state.private { color: #92400e; background: #fffbeb; }
 
 /* Toggle switch (same as the old popover) */
 .stream-toggle {
@@ -150,11 +151,45 @@
   padding: 0.55rem 0.7rem;
 }
 
+.device-card.collapsed {
+  padding-bottom: 0.5rem;
+}
+
+.device-summary {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.device-summary:focus-visible {
+  outline: 2px solid rgba(179, 86, 16, 0.55);
+  outline-offset: 4px;
+  border-radius: 3px;
+}
+
 .device-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 0.5rem;
+}
+
+.device-chevron {
+  color: #aaa;
+  font-size: 1rem;
+  line-height: 0.8;
+  transform: rotate(90deg);
+  transition: transform 0.15s ease;
+}
+
+.device-card.collapsed .device-chevron {
+  transform: rotate(0);
 }
 
 .device-name {
@@ -182,12 +217,40 @@
 .device-meta {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.25rem 0.7rem;
   margin-top: 0.3rem;
   font-size: 0.66rem;
   color: #888;
 }
-.device-seen { color: #b5b5b5; }
+
+.device-summary .device-meta {
+  width: 100%;
+}
+
+.device-temperature {
+  color: #888;
+  font-weight: 700;
+}
+
+.device-temperature.hot {
+  color: #ca8a04;
+}
+
+.device-temperature.warning {
+  color: #dc2626;
+}
+
+.device-seen {
+  margin-left: auto;
+  color: #b5b5b5;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.device-details {
+  min-width: 0;
+}
 
 .device-error {
   margin: 0.35rem 0 0;

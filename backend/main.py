@@ -33,6 +33,7 @@ from services.auth_service import seed_admin_user
 from services.detection_service import DetectionService, detection_enabled
 from services.mqtt_service import mqtt_devices
 from services.queue_service import QueueService
+from services.stream_settings_service import stream_settings
 from services.video_service import create_local_tracks
 from services.weather_service import fetch_weather_periodically
 from services.webrtc_service import pcs_manager
@@ -49,6 +50,7 @@ async def lifespan(app: Litestar):
     logger.info("Application is starting up...")
     app.state.db = SessionLocal
     app.state.queue_service = QueueService(pcs_manager)
+    stream_settings.load(SessionLocal)
 
     # Legacy aiortc delivery path. Viewers now use WHEP/HLS served by
     # MediaMTX; keep this off unless reviving the old player.

@@ -112,6 +112,7 @@ def ensure_auth_service():
         pass
     svc = types.ModuleType("services.auth_service")
     svc.decode_jwt = lambda token: None
+    svc.decode_stream_access_token = lambda token: None
     import services as services_pkg
     services_pkg.auth_service = svc
     sys.modules["services.auth_service"] = svc

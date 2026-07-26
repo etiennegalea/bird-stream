@@ -75,3 +75,14 @@ class BirdDetection(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+
+class StreamConfiguration(TimestampMixin, Base):
+    """Singleton row for stream settings that must survive backend restarts."""
+
+    __tablename__ = "stream_configuration"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    private_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )

@@ -91,6 +91,7 @@ The critical `.env` values are:
 | `WEBRTC_PUBLIC_HOSTS` | Public IP **+** LAN IP, comma-separated, advertised to WebRTC viewers. Update when your ISP rotates your IP! Never a Cloudflare-proxied domain. |
 | `MEDIAMTX_PUBLISH_USER` / `MEDIAMTX_PUBLISH_PASSWORD` | SRT publish credentials — must match the Pi's `config.yaml` |
 | `JWT_SECRET_KEY`, `ADMIN_*`, `POSTGRES_*`, `DATABASE_URL` | Auth + database secrets |
+| `STREAM_ACCESS_TOKEN_MINUTES` | Lifetime of the narrow MediaMTX read token used when admin-only viewing is enabled |
 | `VITE_HLS_FALLBACK` | HLS fallback on/off (build-time: rebuild frontend after changing) |
 | `INSTALL_DETECTION` / `DETECTION_ENABLED` | Bird detection (see below) |
 
@@ -169,6 +170,11 @@ An admin is seeded from `ADMIN_*` env on first boot. To add/promote later:
 ```bash
 docker exec stream-backend python scripts/create_admin.py admin:somepassword
 ```
+
+The admin stream panel includes an **Admin-only viewing** switch. Its state is
+stored in Postgres and survives restarts. When enabled, public viewers see only
+“The stream is not currently available”; admin browsers receive a short-lived
+MediaMTX read token automatically. Chat remains public.
 
 ## Raspberry Pi setup
 

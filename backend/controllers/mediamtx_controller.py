@@ -4,13 +4,15 @@ MediaMTX (authMethod: http) POSTs here for every publish/read attempt.
 2xx = allow, anything else = deny.
 
 Payload (MediaMTX v1.x):
-    {"user": "", "password": "", "ip": "", "action": "publish|read|api|...",
-     "path": "", "protocol": "srt|webrtc|hls|...", "id": "", "query": ""}
+    {"user": "", "password": "", "token": "", "ip": "",
+     "action": "publish|read|api|...", "path": "",
+     "protocol": "srt|webrtc|hls|...", "id": "", "query": ""}
 
 Env:
     MEDIAMTX_PUBLISH_USER / MEDIAMTX_PUBLISH_PASSWORD  — SRT publish creds (the Pi)
-    MEDIAMTX_REQUIRE_READ_AUTH — "true" to require a valid JWT (?jwt=... in the
-    WHEP/HLS URL query) for viewers; default allows anonymous reads.
+    MEDIAMTX_REQUIRE_READ_AUTH — "true" to require a valid account JWT
+    (?jwt=...) for viewers while the stream is public; default allows anonymous
+    reads. Private mode always requires a short-lived admin stream token.
 """
 
 import logging
@@ -42,13 +44,23 @@ def _check_publish(user: str, password: str) -> bool:
     return user == expected_user and password == expected_pass
 
 
-def _check_read(query: str) -> bool:
-    if not _require_read_auth():
+def _check_read(
+    query: str,
+    *,
+    bearer_token: str | None = None,
+    admin_only: bool = False,
+) -> bool:
+    if not admin_only and not _require_read_auth():
         return True
-    token = (parse_qs(query or "").get("jwt") or [None])[0]
+    token = bearer_token or (parse_qs(query or "").get("jwt") or [None])[0]
     if not token:
         return False
-    return auth_svc.decode_jwt(token) is not None
+    if admin_only:
+        return auth_svc.decode_stream_access_token(token) is not None
+    return (
+        auth_svc.decode_jwt(token) is not None
+        or auth_svc.decode_stream_access_token(token) is not None
+    )
 
 
 async def authenticate_request(data: dict) -> None:
@@ -79,7 +91,11 @@ async def authenticate_request(data: dict) -> None:
         if stream_settings.fully_blocked():
             logger.warning(f"Deny read (stream disabled by admin) path={path} proto={protocol} ip={ip}")
             raise HTTPException(status_code=401, detail="Stream disabled by admin")
-        if _check_read(data.get("query") or ""):
+        if _check_read(
+            data.get("query") or "",
+            bearer_token=data.get("token") or None,
+            admin_only=stream_settings.private_enabled,
+        ):
             logger.debug(f"Allow read path={path} proto={protocol} ip={ip}")
             return
         logger.warning(f"Deny read path={path} proto={protocol} ip={ip}")

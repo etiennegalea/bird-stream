@@ -9,8 +9,12 @@ import asyncio
 import logging
 
 from litestar import WebSocket, get, websocket
+from litestar.connection import Request
+from litestar.datastructures import State
 from litestar.exceptions import WebSocketDisconnect
 
+import services.auth_service as auth_svc
+from models.orm import User
 from services.mqtt_service import mqtt_devices
 from services.stream_settings_service import stream_settings
 
@@ -24,9 +28,29 @@ async def get_stream_settings() -> dict:
     return stream_settings.snapshot()
 
 
+def _request_is_admin(request: Request, db_factory) -> bool:
+    header = request.headers.get("authorization", "")
+    if not header.startswith("Bearer "):
+        return False
+    payload = auth_svc.decode_jwt(header[7:])
+    if not payload:
+        return False
+    try:
+        user_id = int(payload["sub"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    with db_factory() as session:
+        user = session.get(User, user_id)
+        return bool(user and user.is_admin)
+
+
 @get("/stream/catalog")
-async def get_stream_catalog() -> dict:
+async def get_stream_catalog(request: Request, state: State) -> dict:
     """Enabled camera streams reported by all connected Pi transmitters."""
+    if stream_settings.private_enabled and not _request_is_admin(
+        request, state.db
+    ):
+        return {"streams": []}
     return {"streams": mqtt_devices.stream_catalog()}
 
 

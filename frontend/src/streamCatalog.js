@@ -21,11 +21,14 @@ export function groupStreamsByDevice(streams) {
   return [...groups.values()];
 }
 
-export function streamUrls(base, path) {
+export function streamUrls(base, path, accessToken = null) {
   if (!path) throw new Error('A stream path is required');
   const encoded = encodeURIComponent(path);
+  const query = accessToken
+    ? `?jwt=${encodeURIComponent(accessToken)}`
+    : '';
   return {
-    whep: `${base}/${encoded}/whep`,
-    hls: `${base}/hls/${encoded}/index.m3u8`,
+    whep: `${base}/${encoded}/whep${query}`,
+    hls: `${base}/hls/${encoded}/index.m3u8${query}`,
   };
 }

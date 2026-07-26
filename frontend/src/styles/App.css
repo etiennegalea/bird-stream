@@ -145,53 +145,27 @@ html, body {
   background: #0b0b0b;
 }
 
+.multi-stream-stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-end;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px;
+}
+
+.stream-tile {
+  overflow: hidden;
+  background: #111;
+}
+
 .main-stream {
   position: absolute;
   inset: 0;
-}
-
-.thumbnail-tray {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  z-index: 7;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
-  max-width: calc(100% - 24px);
-  max-height: calc(100% - 70px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
-}
-
-.thumbnail-device-group {
-  max-width: 100%;
-  padding: 5px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 7px;
-  background: rgba(12, 12, 12, 0.76);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.32);
-  backdrop-filter: blur(5px);
-}
-
-.thumbnail-device-group h3 {
-  margin: 0 0 4px;
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 0.58rem;
-  line-height: 1;
-  letter-spacing: 0.08em;
-  text-align: right;
-  text-transform: uppercase;
-}
-
-.thumbnail-row {
-  display: flex;
-  justify-content: flex-end;
-  gap: 6px;
-  max-width: 100%;
-  overflow-x: auto;
+  z-index: 1;
 }
 
 .stream-thumbnail {
@@ -199,45 +173,20 @@ html, body {
   flex: 0 0 224px;
   width: 224px;
   height: 126px;
-  overflow: hidden;
-  padding: 0;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  border-radius: 5px;
-  background: #111;
+  z-index: 7;
+  border: 0;
+  border-radius: 3px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
   cursor: pointer;
-  transition:
-    border-color 0.15s ease,
-    transform 0.15s ease,
-    box-shadow 0.15s ease;
 }
 
-.stream-thumbnail:hover,
+.stream-thumbnail.thumbnail-device-start {
+  margin-inline-start: 8px;
+}
+
 .stream-thumbnail:focus-visible {
-  z-index: 1;
-  border-color: #E87530;
-  outline: none;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-  transform: translateY(-2px);
-}
-
-.thumbnail-label {
-  position: absolute;
-  right: 5px;
-  bottom: 5px;
-  left: 5px;
-  overflow: hidden;
-  padding: 3px 6px;
-  border-radius: 3px;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.72);
-  font-size: 0.62rem;
-  font-weight: 700;
-  line-height: 1.2;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  pointer-events: none;
+  outline: 2px solid #E87530;
+  outline-offset: -2px;
 }
 
 .stream-waiting {
@@ -418,16 +367,9 @@ html, body {
     max-height: 42dvh;
   }
 
-  .thumbnail-tray {
-    right: 6px;
-    bottom: 6px;
-    max-width: calc(100% - 12px);
-    max-height: calc(100% - 42px);
+  .multi-stream-stage {
+    padding: 6px;
     gap: 4px;
-  }
-
-  .thumbnail-device-group {
-    padding: 3px;
   }
 
   .stream-thumbnail {

@@ -7,6 +7,10 @@ restart or a settings reset.
 
 import unittest
 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from models.orm import Base
 from services.stream_settings_service import StreamSettingsService
 
 
@@ -18,6 +22,10 @@ class TestStreamSettingsDefaults(unittest.TestCase):
     def test_video_enabled_by_default(self):
         svc = StreamSettingsService()
         self.assertTrue(svc.video_enabled)
+
+    def test_public_by_default(self):
+        svc = StreamSettingsService()
+        self.assertFalse(svc.private_enabled)
 
     def test_reset_turns_audio_back_off(self):
         svc = StreamSettingsService()
@@ -38,7 +46,25 @@ class TestStreamSettingsDefaults(unittest.TestCase):
 
     def test_snapshot_reflects_defaults(self):
         self.assertEqual(StreamSettingsService().snapshot(),
-                         {"video_enabled": True, "audio_enabled": False})
+                         {
+                             "video_enabled": True,
+                             "audio_enabled": False,
+                             "private_enabled": False,
+                         })
+
+    def test_private_setting_survives_a_service_reload(self):
+        engine = create_engine("sqlite://")
+        Base.metadata.create_all(engine)
+        db_factory = sessionmaker(bind=engine)
+
+        svc = StreamSettingsService()
+        svc.load(db_factory)
+        svc.update(private_enabled=True, db_factory=db_factory)
+
+        reloaded = StreamSettingsService()
+        reloaded.load(db_factory)
+        self.assertTrue(reloaded.private_enabled)
+        engine.dispose()
 
 
 if __name__ == "__main__":

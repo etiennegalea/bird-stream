@@ -17,12 +17,13 @@ from controllers.chat_controller import chat_endpoint, chat_service
 from controllers.health_controller import health_check
 from controllers.peer_count_controller import peer_count_endpoint
 from controllers.stream_settings_controller import (
+    get_stream_catalog,
     get_stream_settings,
     stream_settings_endpoint,
 )
 from controllers.weather_controller import weather_endpoint
 from controllers.webrtc_controller import WebRTCController
-from models.orm import Base, ChatMessage, User
+from models.orm import Base, ChatMessage, StreamConfiguration, User
 from services.auth_service import create_jwt
 from services.stream_settings_service import stream_settings
 
@@ -78,6 +79,7 @@ def litestar_app(db_factory):
             AdminController,
             chat_endpoint,
             peer_count_endpoint,
+            get_stream_catalog,
             get_stream_settings,
             stream_settings_endpoint,
         ],
@@ -171,5 +173,6 @@ def isolate(db_factory):
     stream_settings.reset()
     with db_factory() as session:
         session.execute(delete(ChatMessage))
+        session.execute(delete(StreamConfiguration))
         session.execute(delete(User))
         session.commit()

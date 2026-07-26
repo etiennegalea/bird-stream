@@ -16,6 +16,7 @@ logger = logging.getLogger("auth_service")
 _JWT_SECRET = os.environ.get("JWT_SECRET_KEY", "change-me-in-production")
 _JWT_ALGORITHM = "HS256"
 _JWT_EXPIRY_DAYS = int(os.environ.get("JWT_EXPIRY_DAYS", "7"))
+_STREAM_ACCESS_MINUTES = int(os.environ.get("STREAM_ACCESS_TOKEN_MINUTES", "10"))
 _PBKDF2_ITERATIONS = 260_000
 _EMAIL_VERIFY_HOURS = 24
 _PASSWORD_RESET_HOURS = 1
@@ -66,6 +67,28 @@ def decode_jwt(token: str) -> dict | None:
         return None
     except jwt.InvalidTokenError:
         return None
+
+
+def create_stream_access_token(user_id: int) -> str:
+    """Mint a narrow, short-lived token suitable for a MediaMTX URL query."""
+    payload = {
+        "sub": str(user_id),
+        "scope": "stream:read:admin",
+        "exp": datetime.now(timezone.utc)
+        + timedelta(minutes=_STREAM_ACCESS_MINUTES),
+    }
+    return jwt.encode(payload, _JWT_SECRET, algorithm=_JWT_ALGORITHM)
+
+
+def decode_stream_access_token(token: str) -> dict | None:
+    payload = decode_jwt(token)
+    if not payload or payload.get("scope") != "stream:read:admin":
+        return None
+    return payload
+
+
+def stream_access_token_lifetime_seconds() -> int:
+    return _STREAM_ACCESS_MINUTES * 60
 
 
 # ── auth operations ───────────────────────────────────────────────────────────

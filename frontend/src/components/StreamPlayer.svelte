@@ -9,6 +9,7 @@
   export let enableHlsFallback = false;
   export let isMain = false;
   export let audioAllowed = false;
+  export let accessToken = null;
 
   const dispatch = createEventDispatcher();
 
@@ -24,6 +25,14 @@
 
   $: if (videoEl && (!isMain || !audioAllowed) && !videoEl.muted) {
     videoEl.muted = true;
+  }
+  // The component remains mounted when promoted between thumbnail and main
+  // view. Move the lightweight FPS sampler with it without reconnecting media.
+  $: if (connected && isMain && peerConnection && !statsInterval) {
+    startStats();
+  }
+  $: if ((!connected || !isMain) && statsInterval) {
+    stopStats();
   }
 
   function report(patch = {}) {
@@ -110,13 +119,26 @@
     const onPlaying = () => markConnected();
 
     if (videoEl?.canPlayType('application/vnd.apple.mpegurl')) {
-      videoEl.src = urls.hls;
+      // Native HLS does not expose request headers. Use the short-lived query
+      // token only for this fallback; WHEP and hls.js keep it out of URLs.
+      videoEl.src = streamUrls(
+        streamBase,
+        stream.path,
+        accessToken,
+      ).hls;
       videoEl.addEventListener('playing', onPlaying, { once: true });
       videoEl.play?.().catch(() => {});
       return;
     }
     if (Hls.isSupported()) {
-      hls = new Hls({ lowLatencyMode: true });
+      hls = new Hls({
+        lowLatencyMode: true,
+        xhrSetup(xhr, url) {
+          if (!accessToken) return;
+          xhr.open('GET', url, true);
+          xhr.setRequestHeader('Authorization', `Bearer ${accessToken}`);
+        },
+      });
       hls.loadSource(urls.hls);
       hls.attachMedia(videoEl);
       videoEl.addEventListener('playing', onPlaying, { once: true });
@@ -176,11 +198,19 @@
       await waitForIceGathering(pc);
       if (destroyed || pc !== peerConnection) return;
 
-      const response = await fetch(streamUrls(streamBase, stream.path).whep, {
+      const response = await fetch(
+        streamUrls(streamBase, stream.path).whep,
+        {
         method: 'POST',
-        headers: { 'Content-Type': 'application/sdp' },
+        headers: {
+          'Content-Type': 'application/sdp',
+          ...(accessToken
+            ? { 'Authorization': `Bearer ${accessToken}` }
+            : {}),
+        },
         body: pc.localDescription.sdp,
-      });
+        },
+      );
       if (!response.ok) {
         throw new Error(`WHEP request failed (${response.status})`);
       }
