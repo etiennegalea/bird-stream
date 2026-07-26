@@ -36,8 +36,21 @@ main {
   border-bottom: 1px solid #2b392e;
 }
 
+.configurator-brand {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.configurator-brand img {
+  width: 38px;
+  height: 38px;
+  filter: invert(88%) sepia(18%) saturate(599%) hue-rotate(63deg) brightness(96%);
+}
+
 .eyebrow {
-  margin: 0 0 12px;
+  margin: 0;
   color: #9fc59c;
   font: 600 0.72rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
   letter-spacing: 0.18em;
@@ -302,6 +315,53 @@ label {
   font: 0.67rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+.reference-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #a7c9a4;
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: #526d52;
+  text-underline-offset: 3px;
+}
+
+.reference-link:hover {
+  color: #d2edcf;
+  background: transparent;
+}
+
+.chain-button {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  margin-top: 12px;
+  padding: 6px;
+  place-items: center;
+  border: 1px solid #536b56;
+  border-radius: 50%;
+  background: #111a13;
+  color: #8da38b;
+}
+
+.chain-button svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.chain-button.active {
+  border-color: #8fc08b;
+  background: #29402b;
+  color: #d2edcf;
+  box-shadow: 0 0 0 2px rgba(143, 192, 139, 0.14);
+}
+
 .relation-card p {
   margin: 0;
   color: #6f7c72;
@@ -346,10 +406,26 @@ label {
   background: #111a13;
 }
 
-.match-hints p {
+.match-hint {
   margin: 3px 0;
   color: #a8c0a6;
   font: 0.7rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.field-relation-status {
+  display: inline-block;
+  margin-left: 10px;
+}
+
+.match-hint .chain-button {
+  margin-left: 6px;
+  margin-top: 0;
+  vertical-align: middle;
+}
+
+.field.linked-field {
+  outline: 2px solid #759672;
+  outline-offset: 5px;
 }
 
 .architecture-editor {

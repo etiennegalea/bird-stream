@@ -18,6 +18,7 @@
   let username = '';
   let password = '';
   let confirmPassword = '';
+  let showPassword = false;
   let error = '';
   let info = '';
   let loading = false;
@@ -50,6 +51,7 @@
     username = '';
     password = '';
     confirmPassword = '';
+    showPassword = false;
     view = newView;
   }
 
@@ -140,7 +142,19 @@
       {#if error}<p class="error">{error}</p>{/if}
       <form on:submit|preventDefault={handleLogin}>
         <label>Email or username<input type="text" bind:value={loginIdentifier} required autocomplete="username" /></label>
-        <label>Password<input type="password" bind:value={password} required autocomplete="current-password" /></label>
+        <label>
+          Password
+          <span class="password-field">
+            <input type={showPassword ? 'text' : 'password'} value={password} on:input={(event) => password = event.currentTarget.value} required autocomplete="current-password" />
+            <button
+              type="button"
+              class="password-toggle"
+              on:click={() => showPassword = !showPassword}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              aria-pressed={showPassword}
+            >{showPassword ? 'Hide' : 'Show'}</button>
+          </span>
+        </label>
         <button type="submit" class="primary-btn" disabled={loading}>{loading ? 'Logging in…' : 'Log in'}</button>
       </form>
       <div class="auth-links">
@@ -157,8 +171,20 @@
         <form on:submit|preventDefault={handleSignup}>
           <label>Email<input type="email" bind:value={email} required autocomplete="email" /></label>
           <label>Username<input type="text" bind:value={username} required minlength="2" maxlength="50" autocomplete="username" /></label>
-          <label>Password<input type="password" bind:value={password} required minlength="8" autocomplete="new-password" /></label>
-          <label>Confirm password<input type="password" bind:value={confirmPassword} required minlength="8" autocomplete="new-password" /></label>
+          <label>
+            Password
+            <span class="password-field">
+              <input type={showPassword ? 'text' : 'password'} value={password} on:input={(event) => password = event.currentTarget.value} required minlength="8" autocomplete="new-password" />
+              <button
+                type="button"
+                class="password-toggle"
+                on:click={() => showPassword = !showPassword}
+                aria-label={showPassword ? 'Hide passwords' : 'Show passwords'}
+                aria-pressed={showPassword}
+              >{showPassword ? 'Hide' : 'Show'}</button>
+            </span>
+          </label>
+          <label>Confirm password<input type={showPassword ? 'text' : 'password'} value={confirmPassword} on:input={(event) => confirmPassword = event.currentTarget.value} required minlength="8" autocomplete="new-password" /></label>
           <button type="submit" class="primary-btn" disabled={loading}>{loading ? 'Creating…' : 'Create account'}</button>
         </form>
       {/if}
@@ -186,8 +212,20 @@
       {#if error}<p class="error">{error}</p>{/if}
       {#if !info}
         <form on:submit|preventDefault={handleReset}>
-          <label>New password<input type="password" bind:value={password} required minlength="8" autocomplete="new-password" /></label>
-          <label>Confirm password<input type="password" bind:value={confirmPassword} required minlength="8" autocomplete="new-password" /></label>
+          <label>
+            New password
+            <span class="password-field">
+              <input type={showPassword ? 'text' : 'password'} value={password} on:input={(event) => password = event.currentTarget.value} required minlength="8" autocomplete="new-password" />
+              <button
+                type="button"
+                class="password-toggle"
+                on:click={() => showPassword = !showPassword}
+                aria-label={showPassword ? 'Hide passwords' : 'Show passwords'}
+                aria-pressed={showPassword}
+              >{showPassword ? 'Hide' : 'Show'}</button>
+            </span>
+          </label>
+          <label>Confirm password<input type={showPassword ? 'text' : 'password'} value={confirmPassword} on:input={(event) => confirmPassword = event.currentTarget.value} required minlength="8" autocomplete="new-password" /></label>
           <button type="submit" class="primary-btn" disabled={loading}>{loading ? 'Saving…' : 'Set password'}</button>
         </form>
       {/if}
@@ -262,6 +300,38 @@
     transition: border-color 0.15s;
   }
   input:focus { border-color: #E87530; background: #fff; }
+
+  .password-field {
+    position: relative;
+    display: flex;
+  }
+
+  .password-field input {
+    width: 100%;
+    padding-right: 3.75rem;
+    box-sizing: border-box;
+  }
+
+  .password-toggle {
+    position: absolute;
+    top: 50%;
+    right: 0.65rem;
+    transform: translateY(-50%);
+    padding: 0.2rem;
+    background: none;
+    border: none;
+    color: #B35610;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .password-toggle:hover { color: #8A3C06; }
+  .password-toggle:focus-visible {
+    outline: 2px solid #E87530;
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
 
   .primary-btn {
     margin-top: 0.25rem;

@@ -60,7 +60,7 @@ Environment and YAML files are merged by key/path. Other templates are edited
 as complete text files. All processing happens in the browser; there are no
 network requests and no persistence such as cookies or local storage.
 
-After loading a project, the **Cross-file consistency** panel displays:
+After loading a project, the separate **Cross-file consistency** page displays:
 
 - **MATCH**, **MISMATCH**, or **MISSING VALUE** for values that must be
   identical;

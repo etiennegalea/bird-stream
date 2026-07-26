@@ -5,12 +5,15 @@
   import StreamPanel from './components/StreamPanel.svelte';
   import Auth from './components/Auth.svelte';
   import ChatRoom from './components/ChatRoom.svelte';
+  import StreamPlayer from './components/StreamPlayer.svelte';
   import UserSettings from './components/UserSettings.svelte';
   import Weather from './components/Weather.svelte';
-  import LoadingCircleDots from './components/LoadingCircleDots.svelte';
-  import Hls from 'hls.js';
   import { auth } from './stores/auth.js';
-  import { chooseStreamPath, streamUrls } from './streamCatalog.js';
+  import {
+    availableStreams as transmittedStreams,
+    chooseMainStreamPath,
+    groupStreamsByDevice,
+  } from './streamCatalog.js';
   import { getApiBaseUrl } from './utils.js';
 
   // Stream endpoints (MediaMTX via traefik, same-origin). Override for local
@@ -29,16 +32,16 @@
   let fps = 0;
   let city = '...';
   let streamCatalog = [];
+  let availableStreams = [];
+  let streamGroups = [];
+  let thumbnailGroups = [];
   let selectedStreamPath = null;
   let selectedStream = null;
   let catalogTimer = null;
+  let playbackReady = false;
+  let playerStates = {};
 
-  let videoEl;
-  let peerConnection = null;
-  let hls = null;
   let peerCountWs = null;
-  let statsInterval = null;
-  let statsState = null;
 
   let queuePosition = null;
   let queueWs = null;
@@ -58,18 +61,22 @@
   let streamSettingsWs = null;
   let activeDeviceId = null;
 
-  $: selectedStream = streamCatalog.find(s => s.path === selectedStreamPath);
+  $: availableStreams = transmittedStreams(streamCatalog);
+  $: streamGroups = groupStreamsByDevice(streamCatalog);
+  $: thumbnailGroups = streamGroups
+    .map(group => ({
+      ...group,
+      streams: group.streams.filter(
+        stream => stream.path !== selectedStreamPath),
+    }))
+    .filter(group => group.streams.length);
+  $: selectedStream = availableStreams.find(
+    stream => stream.path === selectedStreamPath);
   $: activeDeviceId = selectedStream
     ? `${selectedStream.pi_id} / ${selectedStream.label}`
     : null;
-
-  function whepUrl() {
-    return streamUrls(streamBase, selectedStreamPath).whep;
-  }
-
-  function hlsUrl() {
-    return streamUrls(streamBase, selectedStreamPath).hls;
-  }
+  $: isConnected = !!playerStates[selectedStreamPath]?.connected;
+  $: fps = playerStates[selectedStreamPath]?.fps || 0;
 
   async function fetchStreamCatalog({ reconnectIfChanged = true } = {}) {
     try {
@@ -79,21 +86,19 @@
       const next = data.streams || [];
       const previousPath = selectedStreamPath;
       streamCatalog = next;
-      selectedStreamPath = chooseStreamPath(
-        next,
-        previousPath,
-        localStorage.getItem('birdstream_camera_path'),
+      selectedStreamPath = chooseMainStreamPath(next, previousPath);
+      const activePaths = new Set(
+        transmittedStreams(next).map(stream => stream.path));
+      playerStates = Object.fromEntries(
+        Object.entries(playerStates)
+          .filter(([path]) => activePaths.has(path)),
       );
-      if (selectedStreamPath) {
-        localStorage.setItem('birdstream_camera_path', selectedStreamPath);
-      }
-      if (reconnectIfChanged && selectedStreamPath !== previousPath) {
-        if (selectedStreamPath) {
-          enterQueue();
-        } else {
-          cleanup();
-          error = 'No enabled camera stream is currently available.';
-        }
+      if (!selectedStreamPath) {
+        playbackReady = false;
+        error = 'No enabled camera stream is currently available.';
+      } else {
+        error = null;
+        if (reconnectIfChanged && !playbackReady && !queueWs) enterQueue();
       }
     } catch (_) {
       // Retain the last catalog during brief API/MQTT interruptions.
@@ -103,8 +108,11 @@
   function selectStream(path) {
     if (!path || path === selectedStreamPath) return;
     selectedStreamPath = path;
-    localStorage.setItem('birdstream_camera_path', path);
-    enterQueue();
+  }
+
+  function handlePlayerState(event) {
+    const state = event.detail;
+    playerStates = { ...playerStates, [state.path]: state };
   }
 
   function handleWindowClick(e) {
@@ -119,51 +127,9 @@
       const data = JSON.parse(event.data);
       videoAllowed = data.video_enabled;
       audioAllowed = data.audio_enabled;
-      enforceAudioBlock();
     };
     ws.onclose = () => setTimeout(setupStreamSettingsWs, 5000);
     streamSettingsWs = ws;
-  }
-
-  // Audio block: force-mute the player and keep it muted.
-  function enforceAudioBlock() {
-    if (!audioAllowed && videoEl && !videoEl.muted) {
-      videoEl.muted = true;
-    }
-  }
-
-  function handleVolumeChange() {
-    enforceAudioBlock();
-  }
-
-  function startFpsTracking() {
-    if (statsInterval) clearInterval(statsInterval);
-    statsState = null;
-    statsInterval = setInterval(async () => {
-      if (!peerConnection) return;
-      try {
-        const stats = await peerConnection.getStats();
-        stats.forEach(report => {
-          if (report.type === 'inbound-rtp' && report.kind === 'video') {
-            if (statsState) {
-              const framesDelta = report.framesReceived - statsState.lastFramesReceived;
-              const timeDelta = report.timestamp - statsState.lastTimestamp;
-              fps = Math.round((framesDelta / timeDelta) * 1000);
-            }
-            statsState = { lastFramesReceived: report.framesReceived, lastTimestamp: report.timestamp };
-          }
-        });
-      } catch (err) {
-        console.error('Error getting WebRTC stats:', err);
-      }
-    }, 1000);
-  }
-
-  function stopFpsTracking() {
-    if (statsInterval) {
-      clearInterval(statsInterval);
-      statsInterval = null;
-    }
   }
 
   function setupPeerCountWs() {
@@ -175,39 +141,21 @@
     peerCountWs = ws;
   }
 
-  function getPeerId() {
-    const key = 'birb_peer_id';
-    let id = localStorage.getItem(key);
-    if (!id) {
-      id = 'client_' + Math.random().toString(36).substring(2, 15);
-      localStorage.setItem(key, id);
-    }
-    return id;
-  }
-
   function cleanup() {
-    stopFpsTracking();
-    if (peerConnection) {
-      peerConnection.close();
-      peerConnection = null;
-    }
-    if (hls) {
-      hls.destroy();
-      hls = null;
-    }
-    if (videoEl) {
-      videoEl.srcObject = null;
-      videoEl.removeAttribute('src');
-    }
     if (queueWs) {
+      queueWs.onclose = null;
       queueWs.close();
       queueWs = null;
     }
     queuePosition = null;
+    playbackReady = false;
+    playerStates = {};
   }
 
   function enterQueue() {
-    cleanup();
+    if (!selectedStreamPath || queueWs) return;
+    playbackReady = false;
+    error = null;
     const ws = new WebSocket(`${getApiBaseUrl(true)}/queue`);
     queueWs = ws;
 
@@ -217,7 +165,7 @@
         queuePosition = null;
         ws.close();
         queueWs = null;
-        startStream();
+        playbackReady = true;
       } else if (data.type === 'queued') {
         queuePosition = data.position;
       }
@@ -229,123 +177,8 @@
     };
   }
 
-  async function startStream() {
-    cleanup();
-    error = null;
-    if (!selectedStreamPath) {
-      error = 'No enabled camera stream is currently available.';
-      return;
-    }
-    try {
-      await startWhep();
-    } catch (err) {
-      console.warn('WHEP failed:', err);
-      if (ENABLE_HLS_FALLBACK) {
-        startHls();
-      } else {
-        error = `WHEP failed: ${err?.message || err}`;
-      }
-    }
-  }
-
-  function waitForIceGathering(pc, timeoutMs = 2000) {
-    // Non-trickle WHEP: send the offer once candidates are gathered (or after
-    // a short timeout — STUN-only gathering is fast).
-    return new Promise((resolve) => {
-      if (pc.iceGatheringState === 'complete') return resolve();
-      const timer = setTimeout(resolve, timeoutMs);
-      pc.addEventListener('icegatheringstatechange', () => {
-        if (pc.iceGatheringState === 'complete') {
-          clearTimeout(timer);
-          resolve();
-        }
-      });
-    });
-  }
-
-  async function startWhep() {
-    const pc = new RTCPeerConnection({
-      iceServers: [{ urls: ['stun:stun.l.google.com:19302'] }],
-      bundlePolicy: 'max-bundle'
-    });
-
-    pc.addTransceiver('video', { direction: 'recvonly' });
-    pc.addTransceiver('audio', { direction: 'recvonly' });
-
-    pc.ontrack = (event) => {
-      if (videoEl && event.streams[0]) {
-        videoEl.srcObject = event.streams[0];
-      }
-    };
-
-    pc.onconnectionstatechange = () => {
-      switch (pc.connectionState) {
-        case 'connected':
-          isConnected = true;
-          startFpsTracking();
-          break;
-        case 'disconnected':
-        case 'failed':
-          stopFpsTracking();
-          if (isConnected) {
-            isConnected = false;
-            error = 'Connection lost. Please refresh to try again.';
-          } else if (ENABLE_HLS_FALLBACK) {
-            // Never got media over WebRTC (UDP likely blocked) -> try HLS.
-            cleanup();
-            startHls();
-          } else {
-            error = 'WHEP: WebRTC connection failed (ICE) — media path unreachable.';
-          }
-          break;
-      }
-    };
-
-    peerConnection = pc;
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    await waitForIceGathering(pc);
-
-    const response = await fetch(whepUrl(), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/sdp' },
-      body: pc.localDescription.sdp
-    });
-    if (!response.ok) throw new Error(`WHEP request failed (${response.status})`);
-
-    const answerSdp = await response.text();
-    await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
-  }
-
-  function startHls() {
-    error = null;
-    const onPlaying = () => { isConnected = true; };
-    if (videoEl && videoEl.canPlayType('application/vnd.apple.mpegurl')) {
-      // Native HLS (Safari/iOS)
-      videoEl.src = hlsUrl();
-      videoEl.addEventListener('playing', onPlaying, { once: true });
-      videoEl.play?.().catch(() => {});
-    } else if (Hls.isSupported()) {
-      hls = new Hls({ lowLatencyMode: true });
-      hls.loadSource(hlsUrl());
-      hls.attachMedia(videoEl);
-      videoEl.addEventListener('playing', onPlaying, { once: true });
-      hls.on(Hls.Events.ERROR, (_e, data) => {
-        if (data.fatal) {
-          isConnected = false;
-          error = 'Failed to connect to camera stream. Please refresh to try again.';
-        }
-      });
-    } else {
-      error = 'Your browser cannot play this stream.';
-    }
-  }
-
   function reconnect() {
-    // Full restart: cleanup() + re-enter the viewer queue, which starts the
-    // stream again (WHEP, then HLS fallback). Clears any prior error first.
-    error = null;
+    cleanup();
     enterQueue();
   }
 
@@ -483,14 +316,6 @@
   <div class="main-content" class:chat-hidden={!isChatVisible}>
     <div class="stream-section">
       <div class="stream-viewport">
-        {#if activeDeviceId}
-          <div class="device-id-badge" title="Transmitter feeding this stream">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
-            </svg>
-            {activeDeviceId}
-          </div>
-        {/if}
         {#if queuePosition !== null}
           <div class="queue-display">
             <p class="queue-label">Stream is full</p>
@@ -502,22 +327,57 @@
             <p class="error-text">{error}</p>
             <button class="reconnect-btn" on:click={reconnect}>Reconnect</button>
           </div>
-        {:else}
-          {#if !isConnected}
-            <LoadingCircleDots />
+        {:else if playbackReady && selectedStream}
+          <div class="main-stream">
+            <StreamPlayer
+              stream={selectedStream}
+              {streamBase}
+              enableHlsFallback={ENABLE_HLS_FALLBACK}
+              isMain={true}
+              {audioAllowed}
+              on:state={handlePlayerState}
+            />
+            {#if activeDeviceId}
+              <div class="device-id-badge" title="Transmitter feeding this stream">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+                </svg>
+                {activeDeviceId}
+              </div>
+            {/if}
+          </div>
+
+          {#if thumbnailGroups.length}
+            <div class="thumbnail-tray" aria-label="Other live camera streams">
+              {#each thumbnailGroups as group (group.pi_id)}
+                <section class="thumbnail-device-group" aria-label={`Streams from ${group.pi_id}`}>
+                  <h3>{group.pi_id}</h3>
+                  <div class="thumbnail-row">
+                    {#each group.streams as camera (camera.path)}
+                      <button
+                        type="button"
+                        class="stream-thumbnail"
+                        on:click={() => selectStream(camera.path)}
+                        aria-label={`Show ${camera.label} from ${camera.pi_id} as main stream`}
+                        title={`Show ${camera.label} as main stream`}
+                      >
+                        <StreamPlayer
+                          stream={camera}
+                          {streamBase}
+                          enableHlsFallback={ENABLE_HLS_FALLBACK}
+                          isMain={false}
+                          audioAllowed={false}
+                          on:state={handlePlayerState}
+                        />
+                        <span class="thumbnail-label">{camera.label}</span>
+                      </button>
+                    {/each}
+                  </div>
+                </section>
+              {/each}
+            </div>
           {/if}
-          <video
-            bind:this={videoEl}
-            controls
-            autoplay
-            muted
-            playsinline
-            class="stream-viewport"
-            class:audio-blocked={!audioAllowed}
-            on:volumechange={handleVolumeChange}
-          >
-            <track kind="captions" label="Captions" />
-          </video>
+
           {#if !videoAllowed}
             <div class="video-disabled-overlay">
               <img src="/birb-no-bg.png" alt="Birb" class="video-disabled-img" />
@@ -525,6 +385,10 @@
               <p class="video-disabled-sub">The camera stream has been turned off by an admin.</p>
             </div>
           {/if}
+        {:else}
+          <div class="stream-waiting">
+            Waiting for a transmitted camera stream…
+          </div>
         {/if}
       </div>
 
@@ -537,22 +401,6 @@
             <span class="value">{fps}</span>
           </div>
         </div>
-        {#if streamCatalog.length > 1}
-          <label class="camera-picker">
-            <span>Camera</span>
-            <select
-              value={selectedStreamPath || ''}
-              on:change={(e) => selectStream(e.target.value)}
-              aria-label="Select camera stream"
-            >
-              {#each streamCatalog as camera (camera.path)}
-                <option value={camera.path} disabled={!camera.available}>
-                  {camera.label} · {camera.pi_id}{camera.available ? '' : ' (offline)'}
-                </option>
-              {/each}
-            </select>
-          </label>
-        {/if}
         <div class="weather-info">
           <Weather onCityChange={(name) => city = name} />
         </div>
@@ -827,7 +675,7 @@
     border-radius: 8px;
     color: #fff;
     gap: 0.25rem;
-    z-index: 3;
+    z-index: 10;
   }
 
   .video-disabled-img {
@@ -849,10 +697,4 @@
     color: #888;
   }
 
-  /* Audio block: hide the volume controls (WebKit/Blink); forced mute covers the rest. */
-  video.audio-blocked::-webkit-media-controls-volume-slider,
-  video.audio-blocked::-webkit-media-controls-mute-button,
-  video.audio-blocked::-webkit-media-controls-volume-control-container {
-    display: none !important;
-  }
 </style>

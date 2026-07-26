@@ -218,7 +218,10 @@ automatically. Configured entries are overrides, not an allowlist; use
 The first detected camera keeps the `birdcam` path; additional cameras publish
 as `birdcam-<pi-id>-<camera-id>`. Their enabled state is persisted in
 `config.yaml`, and enabled live cameras appear automatically in the public
-camera picker. For stable names and labels, use `/dev/v4l/by-id/...` entries:
+multi-stream player. The first available configured stream is the main view;
+the remaining live streams are grouped by Pi in a bottom-right thumbnail tray.
+Selecting a thumbnail swaps it with the main view in that browser only. For
+stable names and labels, use `/dev/v4l/by-id/...` entries:
 
 ```yaml
 camera:

@@ -25,6 +25,7 @@ const state = {
   view: "overview",
   selectedPiTarget: null,
   newPiFormOpen: false,
+  linkedRelationshipIds: new Set(),
 };
 
 const statusNode = document.querySelector("#status");
@@ -81,6 +82,7 @@ function initializeLoadedDocuments(documents) {
   state.view = "overview";
   state.selectedPiTarget = piModels()[0]?.targetPath ?? null;
   state.newPiFormOpen = false;
+  state.linkedRelationshipIds.clear();
 }
 
 async function walkDirectory(handle, prefix = "", files = new Map()) {
@@ -240,6 +242,13 @@ function showOverview(openNewPiForm = false) {
   render();
 }
 
+function showConsistency() {
+  state.view = "consistency";
+  state.activeIndex = -1;
+  state.newPiFormOpen = false;
+  render();
+}
+
 function selectDocument(model) {
   const index = state.documents.indexOf(model);
   if (index < 0) return;
@@ -282,6 +291,14 @@ function renderTabs() {
   });
   overview.classList.toggle("active", state.view === "overview");
   tabsNode.append(overview);
+
+  const consistency = makeButton(
+    "Cross-file consistency",
+    "tab consistency-tab",
+    showConsistency,
+  );
+  consistency.classList.toggle("active", state.view === "consistency");
+  tabsNode.append(consistency);
 
   appendTabGroup(
     "PROXMOX SERVER",
@@ -347,16 +364,9 @@ function relationshipStatus(relationship) {
     return { tone: "missing", label: "MISSING VALUE" };
   }
   if (comparison === "match") {
-    return {
-      tone: "match",
-      label: relationship.kind === "recommended"
-        ? "RECOMMENDED MATCH"
-        : "MATCH",
-    };
+    return { tone: "match", label: "SAME" };
   }
-  return relationship.kind === "recommended"
-    ? { tone: "review", label: "REVIEW" }
-    : { tone: "mismatch", label: "MISMATCH" };
+  return { tone: "mismatch", label: "DIFFERENT" };
 }
 
 function referenceLabel(reference) {
@@ -374,15 +384,114 @@ function relationshipsForField(model, field) {
   ));
 }
 
+function fieldInputId(model, field) {
+  return `field-${state.documents.indexOf(model)}-${field.lineIndex ?? 0}`;
+}
+
+function openReference(reference) {
+  const located = findReferencedField(reference);
+  if (!located) return;
+  selectDocument(located.model);
+  requestAnimationFrame(() => {
+    const input = document.getElementById(fieldInputId(located.model, located.field));
+    input?.focus();
+    input?.scrollIntoView({ behavior: "smooth", block: "center" });
+    input?.closest(".field")?.classList.add("linked-field");
+  });
+}
+
+function makeReferenceControl(reference) {
+  if (!findReferencedField(reference)) {
+    const text = document.createElement("span");
+    text.textContent = referenceLabel(reference);
+    return text;
+  }
+  const button = makeButton(referenceLabel(reference), "reference-link", () => {
+    openReference(reference);
+  });
+  button.title = `Open ${referenceLabel(reference)}`;
+  return button;
+}
+
+function synchronizeRelationship(relationship, preferredReference = null) {
+  const located = relationship.refs
+    .map((reference) => ({ reference, field: findReferencedField(reference) }))
+    .filter((item) => item.field);
+  const preferred = located.find(
+    (item) => item.reference === preferredReference,
+  )?.field;
+  const source = preferred
+    ? preferred
+    : located.map((item) => item.field).find((item) => item.field.value);
+  if (!source) return;
+  located.forEach(({ field }) => {
+    field.field.value = source.field.value;
+    const input = document.getElementById(fieldInputId(field.model, field.field));
+    if (input) input.value = source.field.value;
+  });
+}
+
+function chainIcon() {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute(
+    "d",
+    "M10.6 13.4a1 1 0 0 0 1.4 0l2.8-2.8a3 3 0 1 0-4.2-4.2L9 8m5.6 2.6a1 1 0 0 0-1.4 0l-2.8 2.8a3 3 0 1 0 4.2 4.2L16 16",
+  );
+  svg.append(path);
+  return svg;
+}
+
+function refreshChainButtons(relationship) {
+  const linked = state.linkedRelationshipIds.has(relationship.id);
+  document.querySelectorAll(
+    `[data-chain-relationship="${relationship.id}"]`,
+  ).forEach((button) => {
+    button.classList.toggle("active", linked);
+    button.setAttribute("aria-pressed", String(linked));
+    button.title = linked
+      ? `Unlink ${relationship.title}`
+      : `Link ${relationship.title}`;
+  });
+}
+
+function makeChainButton(relationship, preferredReference = null) {
+  const button = makeButton("", "chain-button", () => {
+    const linked = state.linkedRelationshipIds.has(relationship.id);
+    if (linked) {
+      state.linkedRelationshipIds.delete(relationship.id);
+      setStatus(`${relationship.title} is no longer linked.`, "success");
+    } else {
+      state.linkedRelationshipIds.add(relationship.id);
+      synchronizeRelationship(relationship, preferredReference);
+      setStatus(`${relationship.title} is linked and will stay synchronized.`, "success");
+      refreshRelationshipStatuses();
+    }
+    refreshChainButtons(relationship);
+  });
+  button.dataset.chainRelationship = relationship.id;
+  button.setAttribute("aria-label", `Toggle link for ${relationship.title}`);
+  button.append(chainIcon());
+  const linked = state.linkedRelationshipIds.has(relationship.id);
+  button.classList.toggle("active", linked);
+  button.setAttribute("aria-pressed", String(linked));
+  button.title = linked
+    ? `Unlink ${relationship.title}`
+    : `Link ${relationship.title}`;
+  return button;
+}
+
 function refreshRelationshipStatuses() {
   CONFIG_RELATIONSHIPS.forEach((relationship) => {
     const status = relationshipStatus(relationship);
-    const node = document.querySelector(
+    document.querySelectorAll(
       `[data-relationship-status="${relationship.id}"]`,
-    );
-    if (!node) return;
-    node.textContent = status.label;
-    node.dataset.tone = status.tone;
+    ).forEach((node) => {
+      node.textContent = status.label;
+      node.dataset.tone = status.tone;
+    });
   });
 }
 
@@ -422,17 +531,25 @@ function renderConsistencyMap() {
     const refs = document.createElement("ul");
     relationship.refs.forEach((reference) => {
       const item = document.createElement("li");
-      item.textContent = referenceLabel(reference);
+      item.append(makeReferenceControl(reference));
       refs.append(item);
     });
 
     const note = document.createElement("p");
     note.textContent = relationship.note;
     card.append(cardHeading, refs, note);
+    if (["exact", "recommended"].includes(relationship.kind)) {
+      card.append(makeChainButton(relationship));
+    }
     grid.append(card);
   });
   section.append(grid);
   return section;
+}
+
+function renderConsistencyPage() {
+  editorNode.classList.remove("architecture-editor");
+  editorNode.replaceChildren(renderConsistencyMap());
 }
 
 function renderField(model, field) {
@@ -443,7 +560,7 @@ function renderField(model, field) {
   heading.className = "field-heading";
   const label = document.createElement("label");
   label.textContent = field.path === "__content__" ? "File content" : field.path;
-  label.htmlFor = `field-${state.activeIndex}-${field.lineIndex ?? 0}`;
+  label.htmlFor = fieldInputId(model, field);
   heading.append(label);
   heading.append(makeButton("Use template default", "subtle", () => {
     field.value = field.templateValue;
@@ -463,13 +580,13 @@ function renderField(model, field) {
     const hints = document.createElement("div");
     hints.className = "match-hints";
     relationships.forEach((relationship) => {
-      const hint = document.createElement("p");
+      const hint = document.createElement("div");
+      hint.className = "match-hint";
       const otherReferences = relationship.refs
         .filter((reference) => !(
           referenceTargetsModel(reference, model)
           && reference.path === field.path
-        ))
-        .map(referenceLabel);
+        ));
       const prefixes = {
         exact: "Must match",
         recommended: "Recommended to match",
@@ -478,9 +595,27 @@ function renderField(model, field) {
         dependency: "Depends on",
         override: "Overrides",
       };
-      hint.textContent = `${prefixes[relationship.kind] ?? "Related to"}: ${
-        otherReferences.join(" · ")
-      }`;
+      const prefix = document.createElement("span");
+      prefix.textContent = `${prefixes[relationship.kind] ?? "Related to"}: `;
+      hint.append(prefix);
+      otherReferences.forEach((reference, index) => {
+        if (index) hint.append(document.createTextNode(" · "));
+        hint.append(makeReferenceControl(reference));
+      });
+      if (["exact", "recommended"].includes(relationship.kind)) {
+        const status = relationshipStatus(relationship);
+        const badge = document.createElement("span");
+        badge.className = "relation-status field-relation-status";
+        badge.dataset.relationshipStatus = relationship.id;
+        badge.dataset.tone = status.tone;
+        badge.textContent = status.label;
+        hint.append(badge);
+        const currentReference = relationship.refs.find(
+          (reference) => referenceTargetsModel(reference, model)
+            && reference.path === field.path,
+        );
+        hint.append(makeChainButton(relationship, currentReference));
+      }
       hints.append(hint);
     });
     wrapper.append(hints);
@@ -498,6 +633,18 @@ function renderField(model, field) {
   input.spellcheck = false;
   input.addEventListener("input", () => {
     field.value = input.value;
+    relationships
+      .filter((relationship) => (
+        ["exact", "recommended"].includes(relationship.kind)
+        && state.linkedRelationshipIds.has(relationship.id)
+      ))
+      .forEach((relationship) => {
+        const currentReference = relationship.refs.find(
+          (reference) => referenceTargetsModel(reference, model)
+            && reference.path === field.path,
+        );
+        synchronizeRelationship(relationship, currentReference);
+      });
     refreshPreview(model);
     refreshRelationshipStatuses();
   });
@@ -547,7 +694,6 @@ function renderEditor() {
   );
   header.append(defaults);
   editorNode.append(header);
-  editorNode.append(renderConsistencyMap());
 
   const form = document.createElement("div");
   form.className = "fields";
@@ -794,6 +940,7 @@ function render() {
   }
   renderTabs();
   if (state.view === "overview") renderArchitecture();
+  else if (state.view === "consistency") renderConsistencyPage();
   else renderEditor();
 }
 

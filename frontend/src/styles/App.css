@@ -142,21 +142,115 @@ html, body {
   overflow: hidden;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   position: relative;
+  background: #0b0b0b;
+}
+
+.main-stream {
+  position: absolute;
+  inset: 0;
+}
+
+.thumbnail-tray {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: calc(100% - 24px);
+  max-height: calc(100% - 70px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.thumbnail-device-group {
+  max-width: 100%;
+  padding: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 7px;
+  background: rgba(12, 12, 12, 0.76);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(5px);
+}
+
+.thumbnail-device-group h3 {
+  margin: 0 0 4px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.58rem;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.thumbnail-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.stream-thumbnail {
+  position: relative;
+  flex: 0 0 224px;
+  width: 224px;
+  height: 126px;
+  overflow: hidden;
+  padding: 0;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 5px;
+  background: #111;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
   cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
-video.stream-viewport {
-  display: block;
-  object-fit: contain;
+.stream-thumbnail:hover,
+.stream-thumbnail:focus-visible {
+  z-index: 1;
+  border-color: #E87530;
+  outline: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  transform: translateY(-2px);
 }
 
-.stream-viewport:hover .fullscreen-hint {
-  opacity: 1;
+.thumbnail-label {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  left: 5px;
+  overflow: hidden;
+  padding: 3px 6px;
+  border-radius: 3px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.72);
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
-.stream-image {
-  width: 100%;
-  display: block;
+.stream-waiting {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  color: #aaa;
+  background: #111;
+  font-size: 0.85rem;
+  text-align: center;
 }
 
 /* Fullscreen styles */
@@ -218,24 +312,6 @@ video.stream-viewport {
   height: 15px;
   margin-right: 5px;
   margin-bottom: -4px;
-}
-
-.camera-picker {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: #777;
-  font-weight: 600;
-}
-
-.camera-picker select {
-  max-width: 210px;
-  border: 1px solid #ddd;
-  border-radius: 5px;
-  background: #fff;
-  color: #333;
-  font: inherit;
-  padding: 0.2rem 0.35rem;
 }
 
 .info-container {
@@ -338,7 +414,26 @@ video.stream-viewport {
   .stream-viewport {
     flex: none;
     height: auto;
+    aspect-ratio: 16 / 9;
     max-height: 42dvh;
+  }
+
+  .thumbnail-tray {
+    right: 6px;
+    bottom: 6px;
+    max-width: calc(100% - 12px);
+    max-height: calc(100% - 42px);
+    gap: 4px;
+  }
+
+  .thumbnail-device-group {
+    padding: 3px;
+  }
+
+  .stream-thumbnail {
+    flex-basis: 144px;
+    width: 144px;
+    height: 81px;
   }
 
   /* Chat, admin, and stream panels all share the same cell and behave
