@@ -39,10 +39,23 @@ LOG_PATH = os.environ.get("BIRDSTREAM_LOG", os.path.join(AGENT_DIR, "agent.log")
 
 _LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 _handlers = [logging.StreamHandler()]
+
+
+class _AgentFileFilter(logging.Filter):
+    """Keep the persistent log terse, except for the streaming audit entry."""
+
+    def filter(self, record):
+        return (
+            record.levelno >= logging.WARNING
+            or getattr(record, "store_in_agent_log", False)
+        )
+
+
 try:
-    _handlers.append(
-        RotatingFileHandler(LOG_PATH, maxBytes=2_000_000, backupCount=5)
-    )
+    _file_handler = RotatingFileHandler(
+        LOG_PATH, maxBytes=2_000_000, backupCount=5)
+    _file_handler.addFilter(_AgentFileFilter())
+    _handlers.append(_file_handler)
 except OSError as _e:  # read-only fs / permissions — fall back to console only
     print(f"Could not open log file {LOG_PATH}: {_e}", file=sys.stderr)
 
@@ -213,6 +226,7 @@ class CameraAgent:
         # one independent FFmpeg/SRT publisher per detected camera.
         self.streams: dict[str, dict] = {}
         self._capture_devices: set[str] = set()
+        self._logged_streaming_ids: set[tuple[str, str]] = set()
         self.lock = threading.Lock()
 
         # Auto-recovery state
@@ -425,7 +439,23 @@ class CameraAgent:
         try:
             self.client.publish(self.topic_status, json.dumps(payload),
                                 qos=1, retain=True)
-            logger.info(f"Published status: {status}")
+            if status == "streaming":
+                logged_ids = getattr(self, "_logged_streaming_ids", set())
+                for stream in stream_items:
+                    if stream["status"] != "streaming":
+                        continue
+                    stream_id = stream["path"]
+                    key = (self.pi_id, stream_id)
+                    if key in logged_ids:
+                        continue
+                    logger.info(
+                        "published status: streaming | stream_id=%s | device_id=%s",
+                        stream_id,
+                        self.pi_id,
+                        extra={"store_in_agent_log": True},
+                    )
+                    logged_ids.add(key)
+                self._logged_streaming_ids = logged_ids
         except Exception as e:
             logger.error(f"Failed to publish status: {e}")
 

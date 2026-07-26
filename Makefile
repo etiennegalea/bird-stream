@@ -1,6 +1,6 @@
 UNAME := $(shell uname -s)
 
-.PHONY: up down build logs dev-backend dev-frontend migrate test-backend cli
+.PHONY: up down build logs dev-backend dev-frontend migrate test-backend test-configurator cli configurator
 
 # Run backend locally (uses macOS camera automatically via AVFoundation)
 dev-backend:
@@ -41,7 +41,16 @@ logs:
 test-backend:
 	cd backend && uv run pytest tests/ -v $(ARGS)
 
+# Test configuration parsing and template merging.
+test-configurator:
+	node --test tools/configurator/core.test.mjs
+
 # Typer CLI — wraps all commands above with --help support.
 # Usage: make cli ARGS="up --detach"  or  make cli ARGS="--help"
 cli:
 	uv run --project backend python cli.py $(ARGS)
+
+# Local, offline configuration editor. Open http://localhost:8099 and select
+# this repository when prompted. Generated files remain gitignored.
+configurator:
+	python3 -m http.server 8099 --bind 127.0.0.1 --directory tools/configurator

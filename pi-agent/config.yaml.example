@@ -21,18 +21,18 @@ camera:
                               # the legacy "birdcam" path even after unplugging
   devices: []                 # optional stable per-camera overrides; prefer
                               # /dev/v4l/by-id paths, for example:
-  # devices:
-  #   - id: "feeder"
-  #     label: "Feeder camera"
-  #     device: "/dev/v4l/by-id/usb-Example_Camera-video-index0"
-  #     enabled: true
-  #   - id: "nest"
-  #     label: "Nest camera"
-  #     device: "/dev/v4l/by-id/usb-Other_Camera-video-index0"
-  #     enabled: false
-  #     width: 1920            # optional per-camera overrides
-  #     height: 1080
-  #     bitrate: "2500k"
+  devices:
+    - id: "feeder"
+      label: "Feeder camera"
+      device: "/dev/v4l/by-id/usb-Example_Camera-video-index0"
+      enabled: true
+    - id: "nest"
+      label: "Nest camera"
+      device: "/dev/v4l/by-id/usb-Other_Camera-video-index0"
+      enabled: false
+      width: 1920            # optional per-camera overrides
+      height: 1080
+      bitrate: "2500k"
   # Legacy/default settings shared by every detected camera:
   device: "/dev/video0"
   width: 1280

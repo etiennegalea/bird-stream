@@ -59,10 +59,24 @@ Raspberry Pi: Raspberry Pi OS, a USB camera (MJPEG-capable) with mic, LAN access
 
 ```bash
 git clone https://github.com/etiennegalea/bird-stream.git && cd bird-stream
-cp .env.template .env
+make configurator
 ```
 
-Edit `.env` — everything is controlled from this one file. The critical values:
+Open `http://localhost:8099`, choose the cloned project folder, then configure
+and save `.env` and `mediamtx/mediamtx.yml`. The tool discovers every tracked
+`.example` and `.template`, loads matching existing generated files, and leaves
+values empty when the matching key is absent. It runs entirely in your browser;
+no configuration or secret is uploaded.
+
+You can also create the two server files manually:
+
+```bash
+cp .env.template .env
+cp mediamtx/mediamtx.yml.example mediamtx/mediamtx.yml
+```
+
+Generated files are gitignored; templates contain no deployment secrets.
+The critical `.env` values are:
 
 | Variable | What it does |
 |----------|--------------|
@@ -72,17 +86,64 @@ Edit `.env` — everything is controlled from this one file. The critical values
 | `VITE_HLS_FALLBACK` | HLS fallback on/off (build-time: rebuild frontend after changing) |
 | `INSTALL_DETECTION` / `DETECTION_ENABLED` | Bird detection (see below) |
 
-### 2. Start the stack
+### Configuration values that must agree
+
+The configurator shows these relationships beside each field and in its
+**Cross-file consistency** panel.
+
+| Server / `.env` value | Matching value | Rule |
+|---|---|---|
+| `MEDIAMTX_PUBLISH_USER` | Pi `stream.srt.username` | Must be identical on every Pi |
+| `MEDIAMTX_PUBLISH_PASSWORD` | Pi `stream.srt.password` | Must be identical on every Pi |
+| `MEDIAMTX_PATH` | Pi `stream.srt.path` | Must be identical for the primary path |
+| `MQTT_USERNAME` / `MQTT_PASSWORD` | Mosquitto `backend` password-file entry | Must be the same credentials |
+| `POSTGRES_*` | user/password/database embedded in `DATABASE_URL` | URL must be derived from the same values |
+| `MEDIAMTX_API_URL` port | MediaMTX `apiAddress` | `:9997` corresponds to `http://mediamtx:9997` |
+| `DETECTION_RTSP_BASE_URL` port | MediaMTX `rtspAddress` | `:8554` corresponds to `rtsp://mediamtx:8554` |
+| `VITE_HLS_FALLBACK=true` | MediaMTX `hls: yes` | HLS must be enabled when fallback is enabled |
+| `WEBRTC_PUBLIC_HOSTS` | MediaMTX advertised hosts | `.env` overrides `webrtcAdditionalHosts`; keep YAML empty |
+| `APP_URL` | Cloudflare published application URL | Must use the same public HTTPS origin |
+
+On each Pi:
+
+| Pi value | Matching value | Rule |
+|---|---|---|
+| `mqtt.username` / `mqtt.password` | That Pi's Mosquitto password-file entry | Must be the same credentials |
+| `mqtt.host` | `stream.srt.host` | Both normally use the Proxmox LAN address |
+| `stream.srt.port` | MediaMTX `srtAddress` | `8890` corresponds to `:8890` |
+| `device.id` | `mqtt.username` | Recommended to be identical for easier auditing |
+
+Some related host values must deliberately differ:
+
+- backend `MQTT_HOST` is `mosquitto`, the Docker service name;
+- Pi `mqtt.host` and `stream.srt.host` use the Proxmox LAN IP/DNS name;
+- backend MediaMTX URLs use `mediamtx`, the Docker service name;
+- `WEBRTC_PUBLIC_HOSTS` contains the raw public/DNS-only address plus the
+  Proxmox LAN address—not the Cloudflare-proxied application hostname.
+
+If a real credential was committed before these files became ignored, removing
+the file from the current revision does not erase Git history. Rotate that
+credential immediately and rewrite repository history if the repository was
+shared.
+
+### 2. Create MQTT users
+
+The broker intentionally refuses to start until its password file exists.
+Create the backend user and one unique user per Pi. Passwords are prompted
+interactively and do not appear in shell history:
+
+```bash
+./scripts/mosquitto-user.sh backend
+./scripts/mosquitto-user.sh pi-01
+```
+
+Use the backend password as `MQTT_PASSWORD` in `.env`. Put each Pi user's
+password in that Pi's `pi-agent/config.yaml`.
+
+### 3. Start the stack
 
 ```bash
 docker compose up -d --build
-```
-
-### 3. Create MQTT users (once)
-
-```bash
-docker exec mosquitto mosquitto_passwd -b /mosquitto/config/passwd pi-01 <mqtt-password>
-docker restart mosquitto
 ```
 
 ### 4. Cloudflare tunnel
@@ -182,8 +243,7 @@ detection to one camera.
 `DETECTION_MODEL` defaults to `yolo11n.pt`. On first use, its weights are
 downloaded into the persistent `detection_models` Docker volume mounted at
 `DETECTION_MODEL_DIR=/var/lib/birdstream/models`, so container rebuilds do not
-download the model again. Keep this directory writable by the backend's
-non-root container user.
+download the model again.
 
 ## Verifying the pipeline
 
@@ -208,6 +268,8 @@ make dev-backend      # local backend via uv
 make dev-frontend     # vite dev server (set VITE_API_URL/VITE_STREAM_URL in .env)
 make migrate          # alembic migrations
 make test-backend     # pytest (ARGS=tests/unit/ or ARGS="-k name")
+make test-configurator
+make configurator     # local config builder at http://localhost:8099
 ```
 
 ## Troubleshooting
@@ -223,3 +285,13 @@ make test-backend     # pytest (ARGS=tests/unit/ or ARGS="-k name")
 **Frontend flag changes (VITE_*) have no effect.** They're baked at build time: `docker compose build frontend && docker compose up -d frontend`, then hard-refresh (the old bundle is cached).
 
 **Slow backend builds / `Building numpy` in the log.** A pinned dependency has no wheels for the image's Python version and is compiling from source — bump the pin and `uv lock`.
+
+**Mosquitto says `Unable to open .../passwd`.** The broker cannot accept users
+until its password database exists. Run `./scripts/mosquitto-user.sh backend`
+and then add one user per Pi. Do not use `docker exec` for initial creation:
+there is no running broker container to execute inside.
+
+**Detection reports `Connection refused` to `mediamtx:8554`.** Check
+`docker compose ps mediamtx` and `docker compose logs mediamtx`. Make sure
+`mediamtx/mediamtx.yml` exists (generate it with `make configurator` or copy
+the example), then recreate it with `docker compose up -d mediamtx backend`.

@@ -57,6 +57,22 @@ class TestDeepMerge(unittest.TestCase):
         self.assertEqual(agent.deep_merge({"a": 1}, {"b": 2}), {"a": 1, "b": 2})
 
 
+class TestAgentFileFilter(unittest.TestCase):
+    def test_keeps_only_warnings_errors_and_marked_streaming_status(self):
+        file_filter = agent._AgentFileFilter()
+        info = agent.logging.LogRecord(
+            "test", agent.logging.INFO, __file__, 1, "ordinary info", (), None)
+        streaming = agent.logging.LogRecord(
+            "test", agent.logging.INFO, __file__, 1, "streaming", (), None)
+        streaming.store_in_agent_log = True
+        warning = agent.logging.LogRecord(
+            "test", agent.logging.WARNING, __file__, 1, "warning", (), None)
+
+        self.assertFalse(file_filter.filter(info))
+        self.assertTrue(file_filter.filter(streaming))
+        self.assertTrue(file_filter.filter(warning))
+
+
 class TestDrawtextFilter(unittest.TestCase):
     def test_default_format_uses_noarg_localtime(self):
         vf = make_agent()._drawtext_filter()
@@ -292,6 +308,35 @@ class TestStreamDetailsAndActions(unittest.TestCase):
         self.assertEqual(len(payload["streams"]), 2)
         self.assertEqual(payload["streams"][0]["path"], "birdcam")
         self.assertFalse(payload["streams"][1]["enabled"])
+
+    def test_streaming_status_is_logged_once_with_stream_and_device_ids(self):
+        a = make_agent()
+        a.pi_id = "pi-01"
+        a.streams = {
+            "cam-1": {
+                "process": mock.Mock(poll=lambda: None),
+                "status": "streaming",
+            },
+        }
+        a.discover_cameras = lambda: [
+            {"id": "cam-1", "label": "Camera 1", "device": "/dev/video0",
+             "enabled": True, "path": "birdcam"},
+        ]
+        a._window_bounds = lambda: None
+        a._in_window = lambda: True
+        a.client = mock.Mock()
+        a.topic_status = "camera/pi-01/status"
+
+        with mock.patch.object(agent.logger, "info") as log_info:
+            a.publish_status()
+            a.publish_status()
+
+        log_info.assert_called_once_with(
+            "published status: streaming | stream_id=%s | device_id=%s",
+            "birdcam",
+            "pi-01",
+            extra={"store_in_agent_log": True},
+        )
 
     def test_disable_camera_is_persisted_and_stopped(self):
         a = make_agent()

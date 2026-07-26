@@ -144,6 +144,12 @@ coturn/certs/
 
 # Pi agent per-device config (copy from config.yaml.example)
 pi-agent/config.yaml
+pi-agent/birdstream-agent.service
+
+# Generated configuration (templates remain tracked)
+mediamtx/mediamtx.yml
+frontend/nginx.default.conf
+configurator-output/
 
 # Mosquitto runtime
 mosquitto/data/

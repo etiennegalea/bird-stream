@@ -150,7 +150,14 @@ services:
       # Loopback-only: NOT reachable from the LAN or internet.
       - "127.0.0.1:8554:8554/tcp"
     volumes:
-      - ./mediamtx/mediamtx.yml:/mediamtx.yml:ro
+      - type: bind
+        source: ./mediamtx/mediamtx.yml
+        target: /mediamtx.yml
+        read_only: true
+        # Fail clearly when configuration has not been generated. Short bind
+        # syntax otherwise creates a directory at the missing source path.
+        bind:
+          create_host_path: false
     environment:
       # Overrides webrtcAdditionalHosts in mediamtx.yml. Comma-separated:
       # public IP (or grey-cloud DNS name) + LAN IP. Set in .env.

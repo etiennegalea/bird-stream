@@ -1,0 +1,48 @@
+# MediaMTX — media plane for Birdstream.
+# Copy/generate this file as mediamtx.yml. The generated file is gitignored.
+# SRT in from the Pi → WHEP (WebRTC) + HLS out to browsers, no transcoding.
+
+logLevel: info
+
+# Control API — internal Docker network only.
+api: yes
+apiAddress: :9997
+
+# All publish/read requests are authorized by the backend.
+authMethod: http
+authHTTPAddress: http://backend:8051/mediamtx/auth
+
+# Internal RTSP feed used by the backend detection worker.
+rtsp: yes
+rtspAddress: :8554
+rtspTransports: [tcp]
+
+rtmp: no
+
+# SRT ingest from Raspberry Pi transmitters.
+srt: yes
+srtAddress: :8890
+
+# WebRTC / WHEP output. MTX_WEBRTCADDITIONALHOSTS from .env overrides
+# webrtcAdditionalHosts at runtime, keeping public/LAN addresses out of Git.
+webrtc: yes
+webrtcAddress: :8889
+webrtcLocalUDPAddress: :8189
+webrtcIPsFromInterfaces: yes
+webrtcAdditionalHosts: []
+webrtcICEServers2:
+  - url: stun:stun.l.google.com:19302
+
+# HLS remains available at MediaMTX; frontend fallback is controlled separately
+# by VITE_HLS_FALLBACK.
+hls: yes
+hlsAddress: :8888
+hlsVariant: lowLatency
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+
+paths:
+  # First camera uses birdcam; additional cameras use
+  # birdcam-<pi-id>-<camera-id>.
+  "~^birdcam(-[A-Za-z0-9_-]+)*$":
+    source: publisher
