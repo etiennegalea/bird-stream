@@ -17,13 +17,13 @@ log() {
   printf '\033[1;32m[install]\033[0m %s\n' "$*"
 }
 
-# ── system packages ──────────────────────────────────────────────────────
+# -- system packages ------------------------------------------------------
 log "Installing system packages (ffmpeg, v4l-utils, fonts, git, curl)..."
 sudo apt-get update -qq
 sudo apt-get install -y -qq ffmpeg v4l-utils fonts-dejavu-core git curl
 sudo usermod -aG video,audio "$RUN_USER"
 
-# ── uv ───────────────────────────────────────────────────────────────────
+# -- uv -------------------------------------------------------------------
 if ! command -v uv >/dev/null 2>&1; then
   if [ -x "$HOME/.local/bin/uv" ]; then
     export PATH="$HOME/.local/bin:$PATH"
@@ -35,7 +35,7 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 log "Using uv $(uv --version | awk '{print $2}')"
 
-# ── python venv (managed by uv) ──────────────────────────────────────────
+# -- python venv (managed by uv) ------------------------------------------
 if [ ! -d "$AGENT_DIR/.venv" ]; then
   log "Creating virtualenv with uv..."
   uv venv "$AGENT_DIR/.venv"
@@ -43,7 +43,8 @@ fi
 log "Installing pinned Python dependencies with uv..."
 uv pip install -q --python "$AGENT_DIR/.venv/bin/python" -r "$AGENT_DIR/requirements.txt"
 
-# ── config ───────────────────────────────────────────────────────────────
+# -- config ---------------------------------------------------------------
+
 if [ ! -f "$AGENT_DIR/config.yaml" ]; then
   log "Creating config.yaml from example — EDIT IT before relying on the stream."
   cp "$AGENT_DIR/config.yaml.example" "$AGENT_DIR/config.yaml"
@@ -51,13 +52,15 @@ else
   log "config.yaml exists, leaving it untouched."
 fi
 
-# ── systemd unit (templated from actual clone path + user) ───────────────
+# -- systemd unit (templated from actual clone path + user) ---------------
+
 log "Installing systemd unit for user '$RUN_USER' at $AGENT_DIR..."
 sed -e "s|@USER@|$RUN_USER|g" -e "s|@WORKDIR@|$AGENT_DIR|g" \
   "$AGENT_DIR/${SERVICE_NAME}.service.template" \
   | sudo tee "/etc/systemd/system/${SERVICE_NAME}.service" >/dev/null
 
-# ── optional sudoers rule for remote reboot ──────────────────────────────
+# -- optional sudoers rule for remote reboot ------------------------------
+
 if [ "$ALLOW_REBOOT" -eq 1 ]; then
   log "Adding sudoers rule for remote reboot..."
   echo "$RUN_USER ALL=(root) NOPASSWD: /usr/sbin/reboot, /sbin/reboot" \
@@ -65,7 +68,8 @@ if [ "$ALLOW_REBOOT" -eq 1 ]; then
   sudo chmod 440 /etc/sudoers.d/birdstream-agent
 fi
 
-# ── enable + (re)start ───────────────────────────────────────────────────
+# -- enable + (re)start ---------------------------------------------------
+
 sudo systemctl daemon-reload
 sudo systemctl enable "$SERVICE_NAME" >/dev/null
 if systemctl is-active --quiet "$SERVICE_NAME"; then

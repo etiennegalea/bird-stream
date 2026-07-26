@@ -248,7 +248,9 @@ With `auto_start: true` (default) the Pi streams on boot. Control it over MQTT
 `set_camera_enabled`, `set_camera`, `set_controls`, `get_config`, `update`, and
 `reboot`. Status heartbeats contain a `streams[]` entry for every attached
 camera. The admin stream panel exposes the same per-camera status, enable,
-start, and stop controls. See `pi-agent/README.md` for payload examples.
+start, and stop controls. A manual start overrides a current scheduled resting
+period without disabling the schedule; normal schedule control resumes at the
+next active window. See `pi-agent/README.md` for payload examples.
 
 ## Bird detection (optional)
 

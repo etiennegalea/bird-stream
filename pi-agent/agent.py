@@ -250,6 +250,11 @@ class CameraAgent:
         # Auto-recovery state
         self.should_stream = False      # True while streaming is desired
         self.last_start_params = {}     # params to reuse on auto-restart
+        # A manual MQTT start outside the broadcast window remains active
+        # until the schedule next enters its normal active window. The
+        # schedule itself stays enabled, so its following close boundary
+        # resumes normal automatic control.
+        self._manual_schedule_override = False
 
         # Cached IP-geolocation for the sunrise/sunset schedule
         self._geo = None                # (lat, lon), False (failed), or None
@@ -600,11 +605,29 @@ class CameraAgent:
         cmd += ["-f", "mpegts", url]
         return cmd
 
-    def start_stream(self, params: dict):
-        """Start one camera (`camera_id`) or every enabled detected camera."""
+    def start_stream(self, params: dict, override_schedule: bool = False):
+        """Start one camera (`camera_id`) or every enabled detected camera.
+
+        ``override_schedule`` is reserved for an explicit operator command.
+        When invoked outside the active window it temporarily bypasses the
+        schedule without changing or persisting the configured schedule.
+        """
         if params:
             self.last_start_params = params
-        if not self._in_window():
+        in_window = self._in_window()
+        if override_schedule:
+            self._manual_schedule_override = bool(
+                (self.config.get("schedule") or {}).get("enabled")
+                and not in_window
+            )
+            if self._manual_schedule_override:
+                logger.info(
+                    "Manual start overriding the current resting period; "
+                    "scheduled control resumes at the next active window"
+                )
+        schedule_override = getattr(
+            self, "_manual_schedule_override", False)
+        if not in_window and not schedule_override:
             logger.info("Outside broadcast window — resting (stream not started)")
             self.stop_stream(manual=True)
             self.publish_status("idle")
@@ -699,6 +722,7 @@ class CameraAgent:
     def stop_stream(self, manual: bool = False, camera_id: str | None = None):
         if manual and camera_id is None:
             self.should_stream = False
+            self._manual_schedule_override = False
         ids = [camera_id] if camera_id else list(self.streams)
         for current_id in ids:
             self._stop_camera(current_id, clear_intent=manual)
@@ -805,7 +829,11 @@ class CameraAgent:
             if camera_id not in detected:
                 self._stop_camera(camera_id, clear_intent=True)
                 del self.streams[camera_id]
-        if self.should_stream and self._in_window():
+        schedule_allows_streaming = (
+            self._in_window()
+            or getattr(self, "_manual_schedule_override", False)
+        )
+        if self.should_stream and schedule_allows_streaming:
             for camera in detected.values():
                 if camera["enabled"] and camera["id"] not in self.streams:
                     self._start_camera(camera, {})
@@ -882,14 +910,23 @@ class CameraAgent:
 
     def _apply_schedule(self):
         """Enforce the broadcast window: stream while inside it, rest (idle)
-        while outside. No-op when scheduling is disabled."""
+        while outside. A manual start outside the window is preserved until
+        the schedule next enters its active window, after which normal
+        scheduled control resumes. No-op when scheduling is disabled."""
         if not (self.config.get("schedule") or {}).get("enabled"):
             return
-        if self._in_window():
+        in_window = self._in_window()
+        if in_window:
+            if getattr(self, "_manual_schedule_override", False):
+                logger.info(
+                    "Schedule window open — manual start override cleared")
+                self._manual_schedule_override = False
             if not self._is_streaming():
                 logger.info("Schedule window open — starting stream")
                 self.start_stream({})
         else:
+            if getattr(self, "_manual_schedule_override", False):
+                return
             if self._is_streaming() or self.should_stream:
                 logger.info("Schedule window closed — resting (stream stopped)")
                 self.stop_stream(manual=True)
@@ -936,6 +973,9 @@ class CameraAgent:
             "enabled": enabled, "mode": mode, "start": start, "end": end,
             "latitude": lat, "longitude": lon,
         }
+        # An explicit schedule change supersedes any previous one-off manual
+        # start override and is applied immediately below.
+        self._manual_schedule_override = False
         self._geo = None  # re-resolve location on next check
         self._save_config()
         self.publish_reply(
@@ -1129,7 +1169,8 @@ class CameraAgent:
             return
         action = payload.get("action")
         handlers = {
-            "start": lambda: self.start_stream(payload),
+            "start": lambda: self.start_stream(
+                payload, override_schedule=True),
             "stop": lambda: (
                 self.stop_stream(
                     manual=True, camera_id=payload.get("camera_id")),

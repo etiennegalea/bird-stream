@@ -41,10 +41,7 @@ if [ "$password" != "$confirmation" ]; then
     exit 2
 fi
 
-script_dir=$(CDPATH= cd "$(dirname "$0")" && pwd)
-project_dir=$(dirname "$script_dir")
-
-printf %s "$password" | docker compose --project-directory "$project_dir" exec -T backend \
+printf %s "$password" | docker exec -i stream-backend \
     python -c '
 import asyncio
 import sys

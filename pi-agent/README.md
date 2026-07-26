@@ -48,6 +48,12 @@ Publish JSON to `camera/<id>/control`. Optional `request_id` is echoed in replie
 {"action": "reboot"}                         // needs install.sh --allow-reboot
 ```
 
+An explicit `start` is an operator override: it starts immediately even when
+the Pi is currently resting outside its scheduled broadcast window. The
+configured schedule is not changed or disabled. Automatic schedule control
+resumes when the next active window begins, and the stream stops at that
+window's normal closing time. A device-level `stop` cancels the override.
+
 ## Multiple webcams
 
 Run `ls -l /dev/v4l/by-id/` to find stable names. With

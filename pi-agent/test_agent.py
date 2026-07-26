@@ -539,6 +539,88 @@ class TestScheduleWindow(unittest.TestCase):
             self.assertTrue(a._in_window())
 
 
+class TestManualScheduleOverride(unittest.TestCase):
+    def _agent(self):
+        a = make_agent(**{
+            "schedule.enabled": True,
+            "schedule.mode": "fixed",
+            "schedule.start": "06:00",
+            "schedule.end": "20:00",
+        })
+        a.streams = {}
+        a.should_stream = False
+        a.last_start_params = {}
+        a._manual_schedule_override = False
+        a.publish_status = mock.Mock()
+        return a
+
+    def test_operator_start_bypasses_current_resting_period(self):
+        a = self._agent()
+        camera = {
+            "id": "primary", "label": "Primary", "device": "/dev/video0",
+            "enabled": True, "path": "birdcam", "index": 0,
+        }
+        a.discover_cameras = mock.Mock(return_value=[camera])
+        a._start_camera = mock.Mock()
+
+        with mock.patch.object(agent.time, "localtime", return_value=_at(23)):
+            a.start_stream({}, override_schedule=True)
+
+        self.assertTrue(a._manual_schedule_override)
+        self.assertTrue(a.should_stream)
+        a._start_camera.assert_called_once_with(camera, {})
+
+    def test_automatic_start_still_rests_outside_window(self):
+        a = self._agent()
+        a.discover_cameras = mock.Mock()
+        a.stop_stream = mock.Mock()
+
+        with mock.patch.object(agent.time, "localtime", return_value=_at(23)):
+            a.start_stream({})
+
+        a.discover_cameras.assert_not_called()
+        a.stop_stream.assert_called_once_with(manual=True)
+        a.publish_status.assert_called_once_with("idle")
+
+    def test_override_survives_resting_checks_then_schedule_resumes(self):
+        a = self._agent()
+        a._manual_schedule_override = True
+        a.should_stream = True
+        a._is_streaming = mock.Mock(return_value=True)
+        a.stop_stream = mock.Mock()
+
+        # Repeated scheduler checks during the current resting period must not
+        # immediately undo the operator's start command.
+        with mock.patch.object(agent.time, "localtime", return_value=_at(23)):
+            a._apply_schedule()
+        a.stop_stream.assert_not_called()
+        self.assertTrue(a._manual_schedule_override)
+
+        # Entering the next active window hands control back to the schedule.
+        with mock.patch.object(agent.time, "localtime", return_value=_at(6)):
+            a._apply_schedule()
+        self.assertFalse(a._manual_schedule_override)
+
+        # The following scheduled close stops the stream normally.
+        with mock.patch.object(agent.time, "localtime", return_value=_at(20)):
+            a._apply_schedule()
+        a.stop_stream.assert_called_once_with(manual=True)
+
+    def test_mqtt_start_is_marked_as_an_operator_override(self):
+        a = self._agent()
+        a.start_stream = mock.Mock()
+        payload = {"action": "start", "camera_id": "primary"}
+        message = mock.Mock(
+            topic="camera/pi-01/control",
+            payload=json.dumps(payload).encode("utf-8"),
+        )
+
+        a.on_message(None, None, message)
+
+        a.start_stream.assert_called_once_with(
+            payload, override_schedule=True)
+
+
 class TestSunSchedule(unittest.TestCase):
     def _agent(self):
         # Explicit lat/lon avoids any network geolocation. London, Jan 1
