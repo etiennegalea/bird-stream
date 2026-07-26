@@ -45,7 +45,7 @@ export const getApiBaseUrl = (ws = false) => {
     ? (window.location.protocol === 'https:' ? 'wss' : 'ws')
     : (window.location.protocol === 'https:' ? 'https' : 'http');
 
-  // Default: same-origin /api, proxied by nginx to the backend. The API then
+  // Default: same-origin /api, routed by Traefik to the backend. The API then
   // inherits the page's TLS automatically. VITE_API_URL remains as an
   // explicit override (e.g. "localhost:8051" for vite dev against a bare
   // backend, or a dedicated api.<domain>).

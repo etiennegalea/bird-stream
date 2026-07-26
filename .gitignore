@@ -150,6 +150,7 @@ pi-agent/birdstream-agent.service
 mediamtx/mediamtx.yml
 frontend/nginx.default.conf
 configurator-output/
+pi-configs/
 
 # Mosquitto runtime
 mosquitto/data/

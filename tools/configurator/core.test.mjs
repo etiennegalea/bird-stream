@@ -7,8 +7,12 @@ const {
   CONFIG_RELATIONSHIPS,
   compareRelationshipValues,
   documentKind,
+  isPiConfigTarget,
+  isValidPiId,
   mergeTemplate,
   parseYaml,
+  piConfigTarget,
+  readTextSource,
   renderDocument,
   targetPathForTemplate,
 } = require("./core.js");
@@ -95,4 +99,27 @@ test("declares unique cross-file relationship identifiers", () => {
       && relationship.kind === "exact"
       && relationship.sensitive,
   ));
+});
+
+test("creates safe per-device Pi configuration targets", () => {
+  assert.equal(isValidPiId("pi-02"), true);
+  assert.equal(isValidPiId("../escape"), false);
+  assert.equal(piConfigTarget("garden_pi-2"), "pi-configs/garden_pi-2/config.yaml");
+  assert.equal(isPiConfigTarget("pi-configs/garden_pi-2/config.yaml"), true);
+  assert.equal(isPiConfigTarget("pi-configs/../../config.yaml"), false);
+  assert.throws(() => piConfigTarget("../escape"), /Invalid Raspberry Pi/);
+});
+
+test("reads both browser File objects and writable file handles", async () => {
+  assert.equal(
+    await readTextSource({ text: async () => "download-only" }),
+    "download-only",
+  );
+  assert.equal(
+    await readTextSource({
+      getFile: async () => ({ text: async () => "write-access" }),
+    }),
+    "write-access",
+  );
+  await assert.rejects(() => readTextSource({}), /Unsupported configuration/);
 });

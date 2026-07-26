@@ -62,11 +62,17 @@ git clone https://github.com/etiennegalea/bird-stream.git && cd bird-stream
 make configurator
 ```
 
-Open `http://localhost:8099`, choose the cloned project folder, then configure
-and save `.env` and `mediamtx/mediamtx.yml`. The tool discovers every tracked
-`.example` and `.template`, loads matching existing generated files, and leaves
-values empty when the matching key is absent. It runs entirely in your browser;
-no configuration or secret is uploaded.
+Open `http://localhost:8099` and choose the cloned project folder. The
+configurator presents a deployment map: select the Proxmox server to edit
+server settings, select a Raspberry Pi to edit that transmitter, or use the
+**+** beside the Pi fleet to create another device. Server services and all
+template-backed files remain available in the sidebar.
+
+The tool discovers every tracked `.example` and `.template`, loads matching
+existing generated files, and leaves values empty when the matching key is
+absent. New transmitters are generated at
+`pi-configs/<device-id>/config.yaml`. It runs entirely in your browser; no
+configuration or secret is uploaded.
 
 You can also create the two server files manually:
 
@@ -75,7 +81,9 @@ cp .env.template .env
 cp mediamtx/mediamtx.yml.example mediamtx/mediamtx.yml
 ```
 
-Generated files are gitignored; templates contain no deployment secrets.
+Generated files, including the complete `pi-configs/` directory, are
+gitignored; templates contain no deployment secrets. The consistency panel
+compares shared server settings against the currently selected Pi.
 The critical `.env` values are:
 
 | Variable | What it does |
@@ -163,6 +171,17 @@ docker exec stream-backend python scripts/create_admin.py admin:somepassword
 ```
 
 ## Raspberry Pi setup
+
+For the first transmitter, configure `pi-agent/config.yaml` directly. For
+additional transmitters, use the configurator's **+** action and copy the
+generated file to the corresponding Pi:
+
+```bash
+scp pi-configs/pi-02/config.yaml \
+  pi@<pi-host>:~/apps/bird-stream/pi-agent/config.yaml
+```
+
+Then install or update the agent on that Pi:
 
 ```bash
 git clone https://github.com/etiennegalea/bird-stream.git ~/apps/bird-stream

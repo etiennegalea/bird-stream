@@ -1,5 +1,6 @@
 ((global) => {
 const TEMPLATE_SUFFIXES = [".example", ".template"];
+const PI_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
 const CONFIG_RELATIONSHIPS = Object.freeze([
   {
@@ -199,6 +200,19 @@ function documentKind(targetPath) {
   if (name === ".env" || name.endsWith(".env")) return "env";
   if (name.endsWith(".yml") || name.endsWith(".yaml")) return "yaml";
   return "text";
+}
+
+function isValidPiId(value) {
+  return PI_ID_PATTERN.test(String(value ?? ""));
+}
+
+function piConfigTarget(piId) {
+  if (!isValidPiId(piId)) throw new Error("Invalid Raspberry Pi device ID");
+  return `pi-configs/${piId}/config.yaml`;
+}
+
+function isPiConfigTarget(path) {
+  return /^pi-configs\/[A-Za-z0-9_-]{1,64}\/config\.yaml$/.test(path);
 }
 
 function isSensitiveKey(key) {
@@ -428,11 +442,22 @@ function compareRelationshipValues(values) {
     : "mismatch";
 }
 
+async function readTextSource(source) {
+  if (typeof source?.text === "function") return source.text();
+  if (typeof source?.getFile === "function") {
+    return (await source.getFile()).text();
+  }
+  throw new TypeError("Unsupported configuration file source");
+}
+
 const api = Object.freeze({
   CONFIG_RELATIONSHIPS,
   targetPathForTemplate,
   isTemplatePath,
   documentKind,
+  isValidPiId,
+  piConfigTarget,
+  isPiConfigTarget,
   isSensitiveKey,
   parseEnv,
   parseYaml,
@@ -441,6 +466,7 @@ const api = Object.freeze({
   renderDocument,
   normalizeConfigValue,
   compareRelationshipValues,
+  readTextSource,
 });
 
 global.BirdstreamConfiguratorCore = api;
