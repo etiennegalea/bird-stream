@@ -212,15 +212,17 @@ stream:
     password: "<srt-password>"    # = MEDIAMTX_PUBLISH_PASSWORD
 ```
 
-Every V4L2 capture device is enabled automatically. The first detected camera
-keeps the `birdcam` path; additional cameras publish as
-`birdcam-<pi-id>-<camera-id>`. Their enabled state is persisted in
+With `camera.auto_detect: true`, every V4L2 capture device is enabled
+automatically. Configured entries are overrides, not an allowlist; use
+`auto_detect: false` when only explicitly configured cameras should appear.
+The first detected camera keeps the `birdcam` path; additional cameras publish
+as `birdcam-<pi-id>-<camera-id>`. Their enabled state is persisted in
 `config.yaml`, and enabled live cameras appear automatically in the public
 camera picker. For stable names and labels, use `/dev/v4l/by-id/...` entries:
 
 ```yaml
 camera:
-  auto_detect: true
+  auto_detect: false             # restrict this Pi to the entries below
   enabled_by_default: true
   devices:
     - id: feeder

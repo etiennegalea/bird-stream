@@ -109,6 +109,15 @@ class TestSrtUrl(unittest.TestCase):
             a._srt_url("h", 8890, "birdcam-pi-01-cam-2"),
         )
 
+    def test_logged_command_redacts_srt_password(self):
+        rendered = agent.redact_command_secrets([
+            "ffmpeg",
+            "srt://server:8890?mode=caller&streamid="
+            "publish:birdcam:picam:super-secret",
+        ])
+        self.assertNotIn("super-secret", rendered)
+        self.assertIn("publish:birdcam:picam:***", rendered)
+
 
 class TestCameraDiscovery(unittest.TestCase):
     def _agent(self):
@@ -179,6 +188,64 @@ class TestCameraDiscovery(unittest.TestCase):
         self.assertEqual(camera["label"], "Nest camera")
         self.assertFalse(camera["enabled"])
         self.assertEqual(camera["bitrate"], "2500k")
+
+    def test_querycap_rejects_metadata_node_even_when_parent_can_capture(self):
+        a = self._agent()
+        querycap = """
+Driver Info:
+        Capabilities      : 0x84a00001
+                Video Capture
+                Metadata Capture
+                Streaming
+        Device Caps      : 0x04a00000
+                Metadata Capture
+                Streaming
+"""
+        with mock.patch.object(agent.os.path, "exists", return_value=True), \
+                mock.patch.object(agent.os.path, "realpath",
+                                  return_value="/dev/video18"), \
+                mock.patch.object(agent.shutil, "which",
+                                  return_value="/usr/bin/v4l2-ctl"), \
+                mock.patch.object(agent.subprocess, "run",
+                                  return_value=mock.Mock(
+                                      returncode=0, stdout=querycap, stderr="")):
+            self.assertFalse(a._is_capture_device("/dev/video18"))
+
+    def test_querycap_accepts_single_and_multiplanar_capture_nodes(self):
+        for flags in ("0x04200001", "0x04201000"):
+            with self.subTest(flags=flags):
+                a = self._agent()
+                querycap = f"Device Caps : {flags}\n"
+                with mock.patch.object(agent.os.path, "exists",
+                                       return_value=True), \
+                        mock.patch.object(agent.os.path, "realpath",
+                                          return_value="/dev/video0"), \
+                        mock.patch.object(agent.shutil, "which",
+                                          return_value="/usr/bin/v4l2-ctl"), \
+                        mock.patch.object(agent.subprocess, "run",
+                                          return_value=mock.Mock(
+                                              returncode=0,
+                                              stdout=querycap,
+                                              stderr="")):
+                    self.assertTrue(a._is_capture_device("/dev/video0"))
+
+    def test_explicit_device_list_is_an_allowlist_when_auto_detect_is_off(self):
+        a = self._agent()
+        a.config["camera"]["auto_detect"] = False
+        a.config["camera"]["devices"] = [
+            {"id": "first", "device": "/dev/video0", "enabled": True},
+            {"id": "second", "device": "/dev/video2", "enabled": True},
+        ]
+        with mock.patch.object(agent.glob, "glob") as glob_mock, \
+                mock.patch.object(a, "_is_capture_device", return_value=True), \
+                mock.patch.object(agent.os.path, "realpath",
+                                  side_effect=lambda path: path):
+            cameras = a.discover_cameras()
+        glob_mock.assert_not_called()
+        self.assertEqual(
+            [camera["device"] for camera in cameras],
+            ["/dev/video0", "/dev/video2"],
+        )
 
 
 class LinuxCmdMixin:

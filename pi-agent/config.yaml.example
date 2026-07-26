@@ -15,13 +15,13 @@ mqtt:
     ca_cert: null             # e.g. /etc/birdstream/ca.crt
 
 camera:
-  auto_detect: true           # stream every V4L2 capture device automatically
+  auto_detect: true           # true also discovers unlisted capture devices;
+                              # false uses only the devices list below
   enabled_by_default: true    # newly attached cameras start automatically
   primary_id: null            # filled automatically; keeps the first camera on
                               # the legacy "birdcam" path even after unplugging
-  devices: []                 # optional stable per-camera overrides; prefer
-                              # /dev/v4l/by-id paths, for example:
-  devices:
+  devices:                    # stable per-camera overrides / allowlist when
+                              # auto_detect is false; prefer /dev/v4l/by-id:
     - id: "feeder"
       label: "Feeder camera"
       device: "/dev/v4l/by-id/usb-Example_Camera-video-index0"

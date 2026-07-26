@@ -52,6 +52,9 @@ Publish JSON to `camera/<id>/control`. Optional `request_id` is echoed in replie
 
 Run `ls -l /dev/v4l/by-id/` to find stable names. With
 `camera.auto_detect: true`, every capture-capable webcam is enabled by default.
+Configured `camera.devices` entries override matching devices but do not limit
+automatic discovery. Set `camera.auto_detect: false` to make `camera.devices`
+an explicit allowlist.
 The first registered camera publishes to `birdcam`; subsequent cameras use
 `birdcam-<pi-id>-<camera-id>`. The first camera identity is persisted as
 `camera.primary_id`, so unplugging it does not make another camera steal the
@@ -62,7 +65,7 @@ quality settings, or keep one disabled:
 
 ```yaml
 camera:
-  auto_detect: true
+  auto_detect: false          # only the two configured cameras below
   enabled_by_default: true
   devices:
     - id: feeder

@@ -68,6 +68,9 @@ logger = logging.getLogger("pi_camera_agent")
 # cameras; an operator can retry it from the admin panel.
 STREAM_RESTART_DELAY = 5     # seconds to wait before an auto-restart attempt
 STREAM_MAX_RESTARTS = 5      # consecutive failures before exiting for systemd
+V4L2_CAP_VIDEO_CAPTURE = 0x00000001
+V4L2_CAP_VIDEO_CAPTURE_MPLANE = 0x00001000
+V4L2_CAPABILITY_CACHE_SECONDS = 60
 
 DEFAULT_CONFIG = {
     "device": {"id": "pi-01"},
@@ -201,6 +204,21 @@ def deep_merge(base: dict, override: dict) -> dict:
     return out
 
 
+def redact_command_secrets(command: list[str]) -> str:
+    """Render a process command without exposing SRT stream credentials."""
+    safe = []
+    marker = "streamid=publish:"
+    for argument in command:
+        if isinstance(argument, str) and argument.startswith("srt://") \
+                and marker in argument:
+            prefix, stream_id = argument.split(marker, 1)
+            fields = stream_id.split(":", 2)
+            if len(fields) == 3:
+                argument = f"{prefix}{marker}{':'.join(fields[:2])}:***"
+        safe.append(argument)
+    return " ".join(safe)
+
+
 def get_cpu_temp():
     try:
         path = "/sys/class/thermal/thermal_zone0/temp"
@@ -265,30 +283,63 @@ class CameraAgent:
         return slug or fallback
 
     def _is_capture_device(self, device: str) -> bool:
-        """Reject metadata-only V4L2 nodes exposed by some USB webcams."""
+        """Accept only V4L2 nodes whose device capabilities include capture.
+
+        Raspberry Pi media drivers expose codec, ISP and metadata nodes under
+        the same /dev/video* namespace as webcams. Querying the current video
+        format is not sufficient to distinguish all of them; VIDIOC_QUERYCAP
+        (reported by ``v4l2-ctl --info``) is authoritative.
+        """
         if not os.path.exists(device):
             return False
         real = os.path.realpath(device)
-        known = getattr(self, "_capture_devices", set())
-        if real in known:
-            return True
+        now = time.monotonic()
+        cache = getattr(self, "_capture_device_cache", {})
+        cached = cache.get(real)
+        if cached and cached["expires_at"] > now:
+            return cached["is_capture"]
+
         ctl = shutil.which("v4l2-ctl")
         if not ctl:
-            known.add(real)
-            self._capture_devices = known
-            return True
+            if not getattr(self, "_warned_missing_v4l2_ctl", False):
+                logger.warning(
+                    "v4l2-ctl is unavailable; automatic camera discovery "
+                    "cannot safely distinguish capture and helper nodes")
+                self._warned_missing_v4l2_ctl = True
+            return False
+
         try:
             result = subprocess.run(
-                [ctl, "-d", device, "--get-fmt-video"],
+                [ctl, "-d", device, "--info"],
                 capture_output=True, text=True, timeout=3,
+                env={**os.environ, "LC_ALL": "C"},
             )
-            if result.returncode == 0:
-                known.add(real)
-                self._capture_devices = known
-                return True
-            return False
+            output = f"{result.stdout}\n{result.stderr}"
+            # When V4L2_CAP_DEVICE_CAPS is present, "Device Caps" describes
+            # this specific node. The broader "Capabilities" block can include
+            # capture support belonging to another node in the same device.
+            match = re.search(
+                r"(?mi)^\s*Device Caps\s*:\s*0x([0-9a-f]+)", output)
+            if not match:
+                match = re.search(
+                    r"(?mi)^\s*Capabilities\s*:\s*0x([0-9a-f]+)", output)
+            flags = int(match.group(1), 16) if match else 0
+            is_capture = (
+                result.returncode == 0
+                and bool(flags & (
+                    V4L2_CAP_VIDEO_CAPTURE
+                    | V4L2_CAP_VIDEO_CAPTURE_MPLANE
+                ))
+            )
         except (OSError, subprocess.TimeoutExpired):
-            return False
+            is_capture = False
+
+        cache[real] = {
+            "is_capture": is_capture,
+            "expires_at": now + V4L2_CAPABILITY_CACHE_SECONDS,
+        }
+        self._capture_device_cache = cache
+        return is_capture
 
     def discover_cameras(self) -> list[dict]:
         """Return deterministic camera specs and MediaMTX paths.
@@ -608,7 +659,8 @@ class CameraAgent:
             host, port, width, height, fps, bitrate, camera["device"], use_hw,
             path=camera["path"], audio_enabled=audio_enabled,
         )
-        logger.info("[%s] Running: %s", camera_id, " ".join(cmd))
+        logger.info("[%s] Running: %s", camera_id,
+                    redact_command_secrets(cmd))
         try:
             process = subprocess.Popen(
                 cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True
