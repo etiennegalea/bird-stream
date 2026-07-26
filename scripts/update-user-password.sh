@@ -1,29 +1,48 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
-if [[ $# -ne 1 ]]; then
+usage() {
     echo "Usage: $0 <username>" >&2
+    echo "Prompts securely for a new Bird Stream password." >&2
+}
+
+if [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+    usage
+    exit 0
+fi
+
+if [ "$#" -ne 1 ]; then
+    usage
     exit 2
 fi
 
 username=$1
 
-read -r -s -p "New password for '$username': " password
-echo
-read -r -s -p "Confirm new password: " confirmation
-echo
+restore_echo() {
+    stty echo < /dev/tty 2>/dev/null || true
+}
 
-if [[ ${#password} -lt 8 ]]; then
+trap restore_echo 0 1 2 15
+printf "New password for '%s': " "$username" > /dev/tty
+stty -echo < /dev/tty
+IFS= read -r password < /dev/tty
+printf '\nConfirm new password: ' > /dev/tty
+IFS= read -r confirmation < /dev/tty
+restore_echo
+trap - 0 1 2 15
+printf '\n' > /dev/tty
+
+if [ "${#password}" -lt 8 ]; then
     echo "Password must be at least 8 characters." >&2
     exit 2
 fi
-if [[ $password != "$confirmation" ]]; then
+if [ "$password" != "$confirmation" ]; then
     echo "Passwords do not match." >&2
     exit 2
 fi
 
-script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-project_dir=$(dirname -- "$script_dir")
+script_dir=$(CDPATH= cd "$(dirname "$0")" && pwd)
+project_dir=$(dirname "$script_dir")
 
 printf %s "$password" | docker compose --project-directory "$project_dir" exec -T backend \
     python -c '

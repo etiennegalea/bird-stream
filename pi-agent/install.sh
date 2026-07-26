@@ -1,19 +1,21 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # Birdstream Pi agent installer — idempotent; re-run after `git pull` to upgrade.
 #
 #   git clone <repo> && cd <repo>/pi-agent && ./install.sh
 #
 # Flags:
 #   --allow-reboot   add a sudoers rule so the MQTT 'reboot' action works
-set -euo pipefail
+set -eu
 
-SERVICE_NAME="birdstream-agent"
-AGENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RUN_USER="${SUDO_USER:-$(whoami)}"
-ALLOW_REBOOT=false
-[[ "${1:-}" == "--allow-reboot" ]] && ALLOW_REBOOT=true
+SERVICE_NAME=birdstream-agent
+AGENT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
+RUN_USER=${SUDO_USER:-$(whoami)}
+ALLOW_REBOOT=0
+[ "${1:-}" = "--allow-reboot" ] && ALLOW_REBOOT=1
 
-log() { echo -e "\033[1;32m[install]\033[0m $*"; }
+log() {
+  printf '\033[1;32m[install]\033[0m %s\n' "$*"
+}
 
 # ── system packages ──────────────────────────────────────────────────────
 log "Installing system packages (ffmpeg, v4l-utils, fonts, git, curl)..."
@@ -23,7 +25,7 @@ sudo usermod -aG video,audio "$RUN_USER"
 
 # ── uv ───────────────────────────────────────────────────────────────────
 if ! command -v uv >/dev/null 2>&1; then
-  if [[ -x "$HOME/.local/bin/uv" ]]; then
+  if [ -x "$HOME/.local/bin/uv" ]; then
     export PATH="$HOME/.local/bin:$PATH"
   else
     log "Installing uv..."
@@ -34,7 +36,7 @@ fi
 log "Using uv $(uv --version | awk '{print $2}')"
 
 # ── python venv (managed by uv) ──────────────────────────────────────────
-if [[ ! -d "$AGENT_DIR/.venv" ]]; then
+if [ ! -d "$AGENT_DIR/.venv" ]; then
   log "Creating virtualenv with uv..."
   uv venv "$AGENT_DIR/.venv"
 fi
@@ -42,7 +44,7 @@ log "Installing pinned Python dependencies with uv..."
 uv pip install -q --python "$AGENT_DIR/.venv/bin/python" -r "$AGENT_DIR/requirements.txt"
 
 # ── config ───────────────────────────────────────────────────────────────
-if [[ ! -f "$AGENT_DIR/config.yaml" ]]; then
+if [ ! -f "$AGENT_DIR/config.yaml" ]; then
   log "Creating config.yaml from example — EDIT IT before relying on the stream."
   cp "$AGENT_DIR/config.yaml.example" "$AGENT_DIR/config.yaml"
 else
@@ -56,7 +58,7 @@ sed -e "s|@USER@|$RUN_USER|g" -e "s|@WORKDIR@|$AGENT_DIR|g" \
   | sudo tee "/etc/systemd/system/${SERVICE_NAME}.service" >/dev/null
 
 # ── optional sudoers rule for remote reboot ──────────────────────────────
-if $ALLOW_REBOOT; then
+if [ "$ALLOW_REBOOT" -eq 1 ]; then
   log "Adding sudoers rule for remote reboot..."
   echo "$RUN_USER ALL=(root) NOPASSWD: /usr/sbin/reboot, /sbin/reboot" \
     | sudo tee /etc/sudoers.d/birdstream-agent >/dev/null

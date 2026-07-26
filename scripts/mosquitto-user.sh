@@ -15,8 +15,8 @@ case "$username" in
         ;;
 esac
 
-script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-project_dir=$(dirname -- "$script_dir")
+script_dir=$(CDPATH= cd "$(dirname "$0")" && pwd)
+project_dir=$(dirname "$script_dir")
 password_file="$project_dir/mosquitto/config/passwd"
 
 cd "$project_dir"
