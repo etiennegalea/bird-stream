@@ -16,7 +16,30 @@ logger = logging.getLogger("peer_count_controller")
 
 MEDIAMTX_API_URL = os.environ.get("MEDIAMTX_API_URL", "http://mediamtx:9997")
 MEDIAMTX_PATH = os.environ.get("MEDIAMTX_PATH", "birdcam")
-POLL_INTERVAL = float(os.environ.get("PEER_COUNT_POLL_SECONDS", "3"))
+
+
+def poll_interval_from_env() -> float:
+    """Return a safe poll interval even when a generated env value is blank."""
+    raw_value = os.environ.get("PEER_COUNT_POLL_SECONDS", "").strip()
+    if not raw_value:
+        return 3.0
+    try:
+        interval = float(raw_value)
+    except ValueError:
+        logger.warning(
+            "Invalid PEER_COUNT_POLL_SECONDS=%r; using 3 seconds",
+            raw_value,
+        )
+        return 3.0
+    if interval <= 0:
+        logger.warning(
+            "PEER_COUNT_POLL_SECONDS must be positive; using 3 seconds"
+        )
+        return 3.0
+    return interval
+
+
+POLL_INTERVAL = poll_interval_from_env()
 
 
 async def get_viewer_count(session: aiohttp.ClientSession) -> int:

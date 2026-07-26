@@ -1,14 +1,19 @@
 """Unit tests for the MediaMTX-backed viewer count."""
 
 import asyncio
+import os
 import unittest
+from unittest import mock
 
 from tests.unit._stubs import ensure_aiohttp, ensure_litestar
 
 ensure_litestar()
 ensure_aiohttp()
 
-from controllers.peer_count_controller import get_viewer_count  # noqa: E402
+from controllers.peer_count_controller import (  # noqa: E402
+    get_viewer_count,
+    poll_interval_from_env,
+)
 
 
 class FakeResponse:
@@ -79,6 +84,27 @@ class TestGetViewerCount(unittest.TestCase):
     def test_zero_on_malformed_body(self):
         self.assertEqual(
             count(FakeSession(FakeResponse(200, raise_on_json=True))), 0)
+
+
+class TestPollIntervalConfiguration(unittest.TestCase):
+    def test_blank_value_uses_default(self):
+        with mock.patch.dict(
+            os.environ, {"PEER_COUNT_POLL_SECONDS": ""}, clear=False
+        ):
+            self.assertEqual(poll_interval_from_env(), 3.0)
+
+    def test_invalid_or_non_positive_value_uses_default(self):
+        for value in ("invalid", "0", "-2"):
+            with self.subTest(value=value), mock.patch.dict(
+                os.environ, {"PEER_COUNT_POLL_SECONDS": value}, clear=False
+            ):
+                self.assertEqual(poll_interval_from_env(), 3.0)
+
+    def test_valid_value_is_parsed(self):
+        with mock.patch.dict(
+            os.environ, {"PEER_COUNT_POLL_SECONDS": "1.5"}, clear=False
+        ):
+            self.assertEqual(poll_interval_from_env(), 1.5)
 
 
 if __name__ == "__main__":
