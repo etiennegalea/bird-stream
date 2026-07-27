@@ -23,6 +23,11 @@
   --muted: #a4a9ae;
   --border: #34393e;
   --border-strong: #4a5056;
+  background: var(--page);
+}
+
+:root[data-theme='dark'] body {
+  background: var(--page);
 }
 
 body {

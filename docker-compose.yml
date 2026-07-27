@@ -45,7 +45,7 @@ services:
         - VITE_API_URL=${VITE_API_URL:-}
         - VITE_NODE_ENV=${VITE_NODE_ENV:-production}
         # Build-time flag: rebuild the frontend after changing it in .env
-        - VITE_HLS_FALLBACK=${VITE_HLS_FALLBACK:-true}
+        - VITE_HLS_FALLBACK=${VITE_HLS_FALLBACK:-false}
     container_name: stream-frontend
     ports:
       - "8050:80" # direct LAN access; public traffic comes through traefik

@@ -92,7 +92,7 @@ The critical `.env` values are:
 | `MEDIAMTX_PUBLISH_USER` / `MEDIAMTX_PUBLISH_PASSWORD` | SRT publish credentials — must match the Pi's `config.yaml` |
 | `JWT_SECRET_KEY`, `ADMIN_*`, `POSTGRES_*`, `DATABASE_URL` | Auth + database secrets |
 | `STREAM_ACCESS_TOKEN_MINUTES` | Lifetime of the narrow MediaMTX read token used when admin-only viewing is enabled |
-| `VITE_HLS_FALLBACK` | HLS fallback on/off (build-time: rebuild frontend after changing) |
+| `VITE_HLS_FALLBACK` | Opt-in HLS fallback (`true` enables it at build time; default `false`). Rebuild the frontend after changing it. |
 | `INSTALL_DETECTION` / `DETECTION_ENABLED` | Bird detection (see below) |
 
 ### Configuration values that must agree

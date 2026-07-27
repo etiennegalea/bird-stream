@@ -28,7 +28,7 @@
   // HLS fallback when WebRTC/WHEP can't connect (e.g. UDP-blocked networks).
   // Controlled from .env via VITE_HLS_FALLBACK — baked in at BUILD time, so
   // changing it requires: docker compose build frontend.
-  const ENABLE_HLS_FALLBACK = import.meta.env.VITE_HLS_FALLBACK !== 'false';
+  const ENABLE_HLS_FALLBACK = import.meta.env.VITE_HLS_FALLBACK === 'true';
 
   let isConnected = false;
   let error = null;

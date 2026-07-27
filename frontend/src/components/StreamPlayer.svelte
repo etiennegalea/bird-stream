@@ -17,6 +17,7 @@
   let peerConnection = null;
   let hls = null;
   let statsInterval = null;
+  let connectionTimer = null;
   let statsState = null;
   let destroyed = false;
   let connected = false;
@@ -94,6 +95,8 @@
   }
 
   function closeMedia() {
+    if (connectionTimer) clearTimeout(connectionTimer);
+    connectionTimer = null;
     stopStats();
     if (peerConnection) peerConnection.close();
     peerConnection = null;
@@ -108,6 +111,8 @@
 
   function markConnected() {
     if (destroyed) return;
+    if (connectionTimer) clearTimeout(connectionTimer);
+    connectionTimer = null;
     connected = true;
     error = null;
     startStats();
@@ -157,6 +162,13 @@
     report();
   }
 
+  function fallBackToHls() {
+    if (destroyed || connected || fallbackStarted) return;
+    peerConnection?.close();
+    peerConnection = null;
+    startHls();
+  }
+
   async function connect() {
     closeMedia();
     fallbackStarted = false;
@@ -170,6 +182,9 @@
         bundlePolicy: 'max-bundle',
       });
       peerConnection = pc;
+      if (enableHlsFallback) {
+        connectionTimer = setTimeout(fallBackToHls, 10_000);
+      }
       pc.addTransceiver('video', { direction: 'recvonly' });
       pc.addTransceiver('audio', { direction: 'recvonly' });
 
@@ -188,9 +203,7 @@
           connected = false;
           stopStats();
           if (enableHlsFallback && !fallbackStarted) {
-            pc.close();
-            peerConnection = null;
-            startHls();
+            fallBackToHls();
           } else {
             error = 'Connection lost';
             report();
