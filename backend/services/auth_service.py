@@ -367,6 +367,24 @@ async def change_user_password(
         return True, ""
 
 
+async def delete_user_account(
+    db_factory: sessionmaker,
+    user_id: int,
+    current_password: str,
+) -> tuple[bool, str]:
+    """Permanently delete an account after verifying its current password."""
+    with db_factory() as session:
+        user = session.get(User, user_id)
+        if not user:
+            return False, "User not found"
+        if not await verify_password(current_password, user.hashed_password):
+            return False, "Current password is incorrect"
+
+        session.delete(user)
+        session.commit()
+        return True, ""
+
+
 async def reset_password(
     db_factory: sessionmaker,
     token: str,

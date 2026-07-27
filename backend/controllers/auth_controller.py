@@ -1,7 +1,7 @@
 import logging
 import re
 
-from litestar import Controller, get, patch, post
+from litestar import Controller, delete, get, patch, post
 from litestar.connection import Request
 from litestar.datastructures import State
 from litestar.exceptions import HTTPException
@@ -9,6 +9,7 @@ from litestar.exceptions import HTTPException
 import services.auth_service as auth_svc
 from models.datastructures import (
     ChangePasswordRequest,
+    DeleteAccountRequest,
     ForgotPasswordRequest,
     LoginRequest,
     RegisterRequest,
@@ -121,6 +122,17 @@ class AuthController(Controller):
         if not success:
             raise HTTPException(status_code=400, detail=error)
         return {"message": "Password changed successfully."}
+
+    @delete("/account")
+    async def delete_account(self, request: Request, data: DeleteAccountRequest, state: State) -> dict:
+        user_id = _require_auth(request)
+        success, error = await auth_svc.delete_user_account(
+            state.db, user_id, data.current_password
+        )
+        if not success:
+            status_code = 404 if error == "User not found" else 400
+            raise HTTPException(status_code=status_code, detail=error)
+        return {"message": "Account deleted successfully."}
 
     @get("/profile/public/{username:str}")
     async def get_public_profile(self, username: str, state: State) -> dict:

@@ -131,6 +131,52 @@
 .error { margin: 0 0 1rem; color: #dc2626; font-size: .88rem; }
 .success { margin: 0 0 1rem; color: #16a34a; font-size: .88rem; }
 
+.danger-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  background: color-mix(in srgb, #dc2626 6%, var(--surface, #fff));
+  border: 1px solid color-mix(in srgb, #dc2626 38%, var(--border, #ddd));
+  border-radius: 10px;
+}
+.danger-zone h4 { margin: 0 0 .3rem; color: #b91c1c; font-size: .95rem; }
+.danger-zone p { margin: 0; color: var(--muted, #666); font-size: .8rem; line-height: 1.45; }
+.delete-account-form { display: flex; flex-direction: column; gap: .8rem; }
+.delete-account-form label {
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+  color: var(--muted, #666);
+  font-size: .82rem;
+}
+.delete-account-form input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: .6rem .75rem;
+  color: var(--text, #333);
+  background: var(--input, #fafafa);
+  border: 1px solid var(--border-strong, #ccc);
+  border-radius: 8px;
+  outline: none;
+  font: inherit;
+}
+.delete-account-form input:focus { border-color: #dc2626; }
+.danger-actions { display: flex; justify-content: flex-end; gap: .6rem; }
+.danger-btn, .secondary-btn {
+  padding: .65rem .85rem;
+  border-radius: 8px;
+  font: inherit;
+  font-size: .82rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.danger-btn { color: #fff; background: #dc2626; border: 1px solid #dc2626; }
+.danger-btn:hover:not(:disabled) { background: #b91c1c; border-color: #b91c1c; }
+.secondary-btn { color: var(--text, #333); background: var(--surface, #fff); border: 1px solid var(--border-strong, #ccc); }
+.secondary-btn:hover:not(:disabled) { background: var(--surface-muted, #f7f7f7); }
+.danger-btn:disabled, .secondary-btn:disabled { opacity: .55; cursor: default; }
+
 .empty-settings { display: flex; flex-direction: column; gap: .4rem; padding: 2rem; color: var(--muted, #777); background: var(--surface-muted, #f7f7f7); border-radius: 10px; text-align: center; }
 .empty-settings strong { color: var(--text, #333); }
 .appearance-group { margin: 0 0 1.75rem; padding: 0; border: 0; }
@@ -165,4 +211,6 @@
   .settings-menu button { flex: 0 0 auto; width: auto; white-space: nowrap; }
   .settings-content { padding: 1.25rem 1rem 2rem; overflow-y: auto; -webkit-overflow-scrolling: touch; }
   .mode-grid { grid-template-columns: 1fr; }
+  .danger-actions { flex-direction: column-reverse; }
+  .danger-actions button { width: 100%; }
 }

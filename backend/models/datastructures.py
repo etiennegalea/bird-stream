@@ -53,6 +53,10 @@ class ChangePasswordRequest(BaseStruct):
     new_password: str
 
 
+class DeleteAccountRequest(BaseStruct):
+    current_password: str
+
+
 # Chat WebSocket messages
 class ChatMessageData(BaseStruct):
     type: str  # "message" | "system" | "history"

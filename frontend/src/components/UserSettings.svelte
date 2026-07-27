@@ -27,6 +27,8 @@
   let currentPassword = '';
   let newPassword = '';
   let confirmPassword = '';
+  let showDeleteConfirmation = false;
+  let deletePassword = '';
   let message = '';
   let error = '';
   let loading = false;
@@ -167,6 +169,38 @@
     }
   }
 
+  function cancelDeleteAccount() {
+    showDeleteConfirmation = false;
+    deletePassword = '';
+    error = '';
+  }
+
+  async function deleteAccount() {
+    error = '';
+    message = '';
+    loading = true;
+    try {
+      const resp = await fetch(`${getApiBaseUrl()}/auth/account`, {
+        method: 'DELETE',
+        headers: authHeader(),
+        body: JSON.stringify({ current_password: deletePassword }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        error = data.detail || 'Could not delete your account.';
+        return;
+      }
+
+      auth.logout();
+      dispatch('close');
+      window.location.reload();
+    } catch {
+      error = 'Network error. Please try again.';
+    } finally {
+      loading = false;
+    }
+  }
+
   function updateAppearance(patch) {
     appearance = { ...appearance, ...patch };
     saveAppearance(appearance);
@@ -249,6 +283,37 @@
               {loading ? 'Saving…' : 'Change password'}
             </button>
           </form>
+          <div class="divider"><span>Danger zone</span></div>
+          <section class="danger-zone" aria-labelledby="delete-account-title">
+            <div>
+              <h4 id="delete-account-title">Delete account</h4>
+              <p>Permanently remove your profile and sign-in details. This cannot be undone.</p>
+            </div>
+            {#if showDeleteConfirmation}
+              <form class="delete-account-form" on:submit|preventDefault={deleteAccount}>
+                <label>Enter your current password to confirm
+                  <input
+                    type="password"
+                    bind:value={deletePassword}
+                    required
+                    autocomplete="current-password"
+                  />
+                </label>
+                <div class="danger-actions">
+                  <button class="secondary-btn" type="button" disabled={loading} on:click={cancelDeleteAccount}>
+                    Cancel
+                  </button>
+                  <button class="danger-btn" type="submit" disabled={loading || !deletePassword}>
+                    {loading ? 'Deleting…' : 'Permanently delete account'}
+                  </button>
+                </div>
+              </form>
+            {:else}
+              <button class="danger-btn" type="button" on:click={() => { showDeleteConfirmation = true; error = ''; message = ''; }}>
+                Delete account
+              </button>
+            {/if}
+          </section>
         {:else if activeSection === 'options'}
           <div class="empty-settings">
             <strong>More options are coming later.</strong>
