@@ -31,6 +31,7 @@ from controllers.webrtc_controller import WebRTCController
 from db.session import SessionLocal
 from services.auth_service import seed_admin_user
 from services.detection_service import DetectionService, detection_enabled
+from services.email_service import send_bird_alerts
 from services.mqtt_service import mqtt_devices
 from services.queue_service import QueueService
 from services.stream_settings_service import stream_settings
@@ -70,7 +71,28 @@ async def lifespan(app: Litestar):
     mqtt_devices.start()  # Pi transmitter status/control bridge
 
     if detection_enabled():
-        app.state.detection_service = DetectionService()
+        event_loop = asyncio.get_running_loop()
+
+        def log_notification_result(completed):
+            error = completed.exception()
+            if error:
+                logger.error(
+                    "Unable to send bird notification emails",
+                    exc_info=(type(error), error, error.__traceback__),
+                )
+            else:
+                logger.info(
+                    "Sent %s bird notification email(s)", completed.result()
+                )
+
+        def notify_bird(snapshot_jpeg, _detections, detected_at):
+            future = asyncio.run_coroutine_threadsafe(
+                send_bird_alerts(SessionLocal, snapshot_jpeg, detected_at),
+                event_loop,
+            )
+            future.add_done_callback(log_notification_result)
+
+        app.state.detection_service = DetectionService(on_detection=notify_bird)
         app.state.detection_service.start()
     else:
         app.state.detection_service = None

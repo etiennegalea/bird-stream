@@ -1,9 +1,14 @@
 import logging
 import os
+from base64 import b64encode
+from datetime import datetime
 from html import escape
 from urllib.parse import urlencode
 
 import httpx
+from sqlalchemy import select
+
+from models.orm import User
 
 logger = logging.getLogger("email_service")
 
@@ -28,6 +33,8 @@ def render_email_template(
     action_label: str,
     action_url: str,
     note: str,
+    snapshot_data_url: str | None = None,
+    snapshot_alt: str = "Bird detected on the main camera",
 ) -> str:
     """Render the shared, email-client-safe Bird Stream layout.
 
@@ -48,6 +55,19 @@ def render_email_template(
         }.items()
     }
     logo_url = escape(f"{_APP_URL}/birb.png", quote=True)
+    snapshot_html = ""
+    if snapshot_data_url:
+        if not snapshot_data_url.startswith("data:image/jpeg;base64,"):
+            raise ValueError("Snapshot must be a base64-encoded JPEG data URL")
+        snapshot_html = f"""
+              <div style="margin:2px 0 26px;padding:8px;background:#edf3e8;border:1px solid #d8e4d2;border-radius:16px;">
+                <img src="{escape(snapshot_data_url, quote=True)}" width="500"
+                     alt="{escape(snapshot_alt, quote=True)}"
+                     style="display:block;width:100%;max-width:500px;height:auto;border-radius:10px;">
+                <p style="margin:8px 4px 2px;font-size:12px;line-height:18px;color:#718071;">
+                  Snapshot from the main camera
+                </p>
+              </div>"""
 
     return f"""<!doctype html>
 <html lang="en">
@@ -85,6 +105,7 @@ def render_email_template(
               </h1>
               <p style="margin:0 0 12px;font-size:17px;line-height:27px;color:#405848;">{values["greeting"]}</p>
               <p style="margin:0 0 26px;font-size:15px;line-height:25px;color:#617064;">{values["message"]}</p>
+              {snapshot_html}
               <table role="presentation" cellspacing="0" cellpadding="0" border="0">
                 <tr>
                   <td align="center" bgcolor="#52785f" style="border-radius:999px;">
@@ -102,7 +123,7 @@ def render_email_template(
             <td align="center" style="padding:20px 34px;background:#edf3e8;border-top:1px solid #dfe8d8;">
               <div style="font-size:18px;line-height:22px;color:#7fa06f;">&#10087;&nbsp; &#127811; &nbsp;&#10087;</div>
               <p style="margin:7px 0 0;font-size:12px;line-height:18px;color:#718071;">
-                Sent with a little birdsong from Bird Stream
+                Sent with a little birbsong from Birb Stream
               </p>
             </td>
           </tr>
@@ -114,7 +135,14 @@ def render_email_template(
 </html>"""
 
 
-async def _send(to_email: str, to_name: str, subject: str, html: str, text: str) -> bool:
+async def _send(
+    to_email: str,
+    to_name: str,
+    subject: str,
+    html: str,
+    text: str,
+    attachments: list[dict[str, str]] | None = None,
+) -> bool:
     if not _API_KEY or not _FROM_EMAIL:
         logger.warning("Brevo not configured (BREVO_API_KEY / BREVO_FROM_EMAIL missing)")
         return False
@@ -128,6 +156,7 @@ async def _send(to_email: str, to_name: str, subject: str, html: str, text: str)
                 "subject": subject,
                 "htmlContent": html,
                 "textContent": text,
+                **({"attachment": attachments} if attachments else {}),
             },
         )
     if resp.status_code == 201:
@@ -142,19 +171,19 @@ async def send_verification_email(to_email: str, username: str, token: str) -> b
     return await _send(
         to_email=to_email,
         to_name=username,
-        subject="Welcome to Bird Stream — verify your email",
+        subject="Welcome to Birb Stream — verify your email",
         html=render_email_template(
             preheader="One small step before you can settle in.",
             eyebrow="Welcome to the flock",
             title="Let’s make it official",
             greeting=f"Hi {username},",
-            message="Thanks for joining Bird Stream. Confirm your email address and you’ll be ready to watch, chat, and enjoy the view.",
+            message="Thanks for joining Birb Stream. Confirm your email address and you’ll be ready to watch, chat, and enjoy the view.",
             action_label="Verify my email",
             action_url=url,
             note="This link is available for 24 hours. If you didn’t create this account, you can safely ignore this email.",
         ),
         text=(
-            f"Welcome to Bird Stream, {username}!\n\n"
+            f"Welcome to Birb Stream, {username}!\n\n"
             f"Verify your email (link expires in 24 hours):\n{url}\n\n"
             "If you didn't create this account, you can safely ignore this email."
         ),
@@ -166,7 +195,7 @@ async def send_password_reset_email(to_email: str, username: str, token: str) ->
     return await _send(
         to_email=to_email,
         to_name=username,
-        subject="Reset your Bird Stream password",
+        subject="Reset your Birb Stream password",
         html=render_email_template(
             preheader="Your secure password reset link is inside.",
             eyebrow="A fresh start",
@@ -183,3 +212,63 @@ async def send_password_reset_email(to_email: str, username: str, token: str) ->
             f"If you didn't request this, ignore this email."
         ),
     )
+
+
+async def send_bird_alert_email(
+    to_email: str,
+    username: str,
+    snapshot_jpeg: bytes,
+    detected_at: str,
+) -> bool:
+    """Send a bird alert containing the exact JPEG frame that triggered it."""
+    encoded_snapshot = b64encode(snapshot_jpeg).decode("ascii")
+    snapshot_data_url = f"data:image/jpeg;base64,{encoded_snapshot}"
+    watch_url = _APP_URL
+    return await _send(
+        to_email=to_email,
+        to_name=username,
+        subject="Birb Visiting",
+        html=render_email_template(
+            preheader="A birb has appeared.",
+            eyebrow="Look who flew in",
+            title="Birb is here!",
+            greeting=f"Hi {username},",
+            message=f"Spotted a birb on the main camera at {detected_at}. Take a peek before birb flies away.",
+            action_label="Watch the live stream",
+            action_url=watch_url,
+            note="You’re receiving this because birb alerts are enabled in your account options. You can switch them off at any time.",
+            snapshot_data_url=snapshot_data_url,
+        ),
+        text=(
+            f"Hi {username},\n\n"
+            f"Spotted a birb at {detected_at}.\n"
+            f"Watch live: {watch_url}\n\n"
+            "You can turn off birb alerts in your account options."
+        ),
+        attachments=[{"content": encoded_snapshot, "name": "bird-sighting.jpg"}],
+    )
+
+
+async def send_bird_alerts(
+    db_factory,
+    snapshot_jpeg: bytes,
+    detected_at: str | None = None,
+) -> int:
+    """Notify every opted-in user. This is the detector integration boundary."""
+    detected_at = detected_at or datetime.now().astimezone().strftime("%d %B %Y at %H:%M")
+    with db_factory() as session:
+        recipients = list(
+            session.execute(
+                select(User.email, User.username).where(
+                    User.bird_notification_email.is_(True),
+                    User.is_verified.is_(True),
+                    User.is_blocked.is_(False),
+                )
+            ).all()
+        )
+
+    sent = 0
+    for email, username in recipients:
+        if await send_bird_alert_email(email, username, snapshot_jpeg, detected_at):
+            sent += 1
+    return sent

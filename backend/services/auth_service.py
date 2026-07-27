@@ -256,6 +256,7 @@ def _profile_dict(user: User) -> dict:
         "avatar": user.avatar,
         "is_admin": user.is_admin,
         "is_blocked": user.is_blocked,
+        "bird_notification_email": user.bird_notification_email,
     }
 
 
@@ -293,6 +294,7 @@ def update_user_profile(
     username: str | None,
     bio: str | None,
     avatar: str | None,
+    bird_notification_email: bool | None = None,
 ) -> tuple[dict | None, str]:
     """Returns (updated_profile, error). Passes None fields through unchanged."""
     with db_factory() as session:
@@ -325,6 +327,9 @@ def update_user_profile(
 
         if avatar is not None and (error := _set_avatar(user, avatar)):
             return None, error
+
+        if bird_notification_email is not None:
+            user.bird_notification_email = bird_notification_email
 
         session.commit()
         return _profile_dict(user), ""

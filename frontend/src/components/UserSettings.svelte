@@ -27,6 +27,7 @@
   let currentPassword = '';
   let newPassword = '';
   let confirmPassword = '';
+  let birdNotificationEmail = false;
   let showDeleteConfirmation = false;
   let deletePassword = '';
   let message = '';
@@ -49,6 +50,7 @@
         username = data.username ?? username;
         bio = data.bio ?? '';
         avatarDataUrl = data.avatar ?? null;
+        birdNotificationEmail = data.bird_notification_email ?? false;
       }
     } catch {
       error = 'Could not load your settings.';
@@ -106,11 +108,13 @@
       username = data.username;
       bio = data.bio ?? '';
       avatarDataUrl = data.avatar ?? null;
+      birdNotificationEmail = data.bird_notification_email ?? false;
       auth.updateUser({
         email: data.email,
         username: data.username,
         avatar: data.avatar,
         bio: data.bio,
+        bird_notification_email: data.bird_notification_email,
       });
       message = successMessage;
       return true;
@@ -130,6 +134,13 @@
 
   async function saveAccount() {
     await updateProfile({ email, username }, 'Account details saved.');
+  }
+
+  async function saveNotificationPreference() {
+    await updateProfile(
+      { bird_notification_email: birdNotificationEmail },
+      'Notification preference saved.',
+    );
   }
 
   async function changePassword() {
@@ -315,10 +326,19 @@
             {/if}
           </section>
         {:else if activeSection === 'options'}
-          <div class="empty-settings">
-            <strong>More options are coming later.</strong>
-            <span>This section is ready for future preferences.</span>
-          </div>
+          <form class="settings-form" on:submit|preventDefault={saveNotificationPreference}>
+            <label class="preference-card">
+              <input type="checkbox" bind:checked={birdNotificationEmail} />
+              <span>
+                <strong>Email me when a bird is visible</strong>
+                <small>Receive a snapshot from the main camera when Bird Stream detects a bird.</small>
+              </span>
+            </label>
+            <p class="preference-note">Notifications are off by default. We’ll limit alerts so a visiting bird doesn’t fill your inbox.</p>
+            <button class="primary-btn" type="submit" disabled={loading}>
+              {loading ? 'Saving…' : 'Save notification preference'}
+            </button>
+          </form>
         {:else}
           <fieldset class="appearance-group">
             <legend>Colour mode</legend>

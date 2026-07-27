@@ -46,6 +46,7 @@ class UpdateProfileRequest(BaseStruct):
     username: str | None = None
     bio: str | None = None
     avatar: str | None = None  # full base64 data URL, e.g. "data:image/jpeg;base64,..."
+    bird_notification_email: bool | None = None
 
 
 class ChangePasswordRequest(BaseStruct):

@@ -107,7 +107,13 @@ class AuthController(Controller):
         if data.email is not None and not _EMAIL_RE.match(data.email.strip()):
             raise HTTPException(status_code=400, detail="Invalid email address")
         profile, error = auth_svc.update_user_profile(
-            state.db, user_id, data.email, data.username, data.bio, data.avatar
+            state.db,
+            user_id,
+            data.email,
+            data.username,
+            data.bio,
+            data.avatar,
+            data.bird_notification_email,
         )
         if error:
             raise HTTPException(status_code=400, detail=error)

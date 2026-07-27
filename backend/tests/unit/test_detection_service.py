@@ -198,3 +198,20 @@ class TestDetectionServiceConfig:
         svc = DetectionService()
         assert svc.get_latest()["detections"] == []
         assert svc.get_events() == []
+
+    def test_detection_callback_receives_jpeg_and_respects_cooldown(self, monkeypatch):
+        calls = []
+        monkeypatch.setenv("BIRD_NOTIFICATION_COOLDOWN_SECONDS", "900")
+        svc = DetectionService(
+            on_detection=lambda jpeg, detections, timestamp: calls.append(
+                (jpeg, detections, timestamp)
+            )
+        )
+        frame = np.zeros((20, 20, 3), dtype=np.uint8)
+        detections = [{"label": "bird", "confidence": 0.92}]
+
+        assert svc._notify_detection(frame, detections, "2026-07-27 21:00:00")
+        assert not svc._notify_detection(frame, detections, "2026-07-27 21:00:01")
+        assert len(calls) == 1
+        assert calls[0][0].startswith(b"\xff\xd8")
+        assert calls[0][1] == detections

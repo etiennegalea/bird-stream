@@ -75,7 +75,7 @@ class MotionGate:
 
 
 class DetectionService:
-    def __init__(self):
+    def __init__(self, on_detection=None):
         self.configured_stream_url = os.environ.get(
             "DETECTION_STREAM_URL", "auto").strip()
         self.stream_url = (
@@ -100,6 +100,9 @@ class DetectionService:
         self.sample_fps = float(os.environ.get("DETECTION_FPS", "2"))
         self.conf = float(os.environ.get("DETECTION_CONF", "0.4"))
         self.classes = _parse_classes(os.environ.get("DETECTION_CLASSES", "bird"))
+        self.notification_cooldown = float(
+            os.environ.get("BIRD_NOTIFICATION_COOLDOWN_SECONDS", "900")
+        )
         self.motion_gate_enabled = os.environ.get(
             "DETECTION_MOTION_GATE", "true").lower() == "true"
         min_area = float(os.environ.get("DETECTION_MOTION_MIN_AREA", "0.005"))
@@ -109,6 +112,8 @@ class DetectionService:
         self._stop = threading.Event()
         self._thread = None
         self._model = None
+        self._on_detection = on_detection
+        self._last_notification = 0.0
 
         # state exposed via the API
         self.running = False
@@ -304,10 +309,34 @@ class DetectionService:
                         self.events.append(entry)
                 if detections:
                     logger.info(f"Detected: {detections}")
+                    self._notify_detection(frame, detections, entry["timestamp"])
 
             cap.release()
 
         self.connected = False
+
+    def _notify_detection(self, frame, detections: list[dict], timestamp: str) -> bool:
+        """Hand the triggering frame to the email bridge, subject to cooldown."""
+        if self._on_detection is None:
+            return False
+        now = time.monotonic()
+        if now - self._last_notification < self.notification_cooldown:
+            return False
+
+        import cv2
+
+        encoded, buffer = cv2.imencode(".jpg", frame)
+        if not encoded:
+            logger.warning("Could not encode bird detection snapshot")
+            return False
+
+        self._last_notification = now
+        try:
+            self._on_detection(buffer.tobytes(), detections, timestamp)
+        except Exception:
+            logger.exception("Bird notification callback failed")
+            return False
+        return True
 
     # ── API accessors ─────────────────────────────────────────────────────
 
@@ -325,6 +354,7 @@ class DetectionService:
             "confidence_threshold": self.conf,
             "classes": sorted(self.classes),
             "motion_gate": self.motion_gate_enabled,
+            "notification_cooldown_seconds": self.notification_cooldown,
             "frames_seen": self.frames_seen,
             "frames_inferred": self.frames_inferred,
             "last_frame_ts": self.last_frame_ts,

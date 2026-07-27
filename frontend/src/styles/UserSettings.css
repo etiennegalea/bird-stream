@@ -131,6 +131,23 @@
 .error { margin: 0 0 1rem; color: #dc2626; font-size: .88rem; }
 .success { margin: 0 0 1rem; color: #16a34a; font-size: .88rem; }
 
+.preference-card {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: .75rem !important;
+  padding: 1rem;
+  background: var(--surface-muted, #f7f7f7);
+  border: 1px solid var(--border, #ddd);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.preference-card input { width: 18px; height: 18px; margin: .1rem 0 0; accent-color: var(--accent, #B35610); }
+.preference-card span { display: flex; flex-direction: column; gap: .3rem; }
+.preference-card strong { color: var(--text-strong, #222); font-size: .9rem; }
+.preference-card small { color: var(--muted, #666); font-size: .78rem; line-height: 1.45; }
+.preference-note { margin: 0; color: var(--muted, #777); font-size: .75rem; line-height: 1.45; }
+
 .danger-zone {
   display: flex;
   flex-direction: column;
