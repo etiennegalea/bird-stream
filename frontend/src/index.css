@@ -37,12 +37,191 @@ body {
 }
 
 :root[data-theme='dark'] .app-container,
-:root[data-theme='dark'] .chat-room,
+:root[data-theme='dark'] .chat-container,
 :root[data-theme='dark'] .admin-drawer,
 :root[data-theme='dark'] .stream-drawer,
 :root[data-theme='dark'] .streams-panel {
   color: var(--text);
   background: var(--surface);
+}
+
+:root[data-theme='dark'] .chat-section,
+:root[data-theme='dark'] .admin-section,
+:root[data-theme='dark'] .stream-panel-section,
+:root[data-theme='dark'] .streams-panel-section {
+  background: var(--surface);
+  border-color: var(--border);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+}
+
+:root[data-theme='dark'] .stream-info {
+  color: var(--text);
+  background: var(--surface);
+  border-color: var(--border);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+}
+
+:root[data-theme='dark'] .chat-messages,
+:root[data-theme='dark'] .chat-bar,
+:root[data-theme='dark'] .admin-drawer-header,
+:root[data-theme='dark'] .admin-refresh-row,
+:root[data-theme='dark'] .stream-drawer-header,
+:root[data-theme='dark'] .panel-header {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+:root[data-theme='dark'] .read-only-notice,
+:root[data-theme='dark'] .chat-identity,
+:root[data-theme='dark'] .message-form,
+:root[data-theme='dark'] .admin-drawer-body,
+:root[data-theme='dark'] .stream-drawer-body,
+:root[data-theme='dark'] .stream-list {
+  background: var(--surface-muted);
+  border-color: var(--border);
+}
+
+:root[data-theme='dark'] .msg-text,
+:root[data-theme='dark'] .join-heading,
+:root[data-theme='dark'] .chat-identity strong,
+:root[data-theme='dark'] .admin-drawer-title,
+:root[data-theme='dark'] .admin-username,
+:root[data-theme='dark'] .admin-blocked-ip,
+:root[data-theme='dark'] .stream-drawer-title,
+:root[data-theme='dark'] .stream-row-label,
+:root[data-theme='dark'] .device-name,
+:root[data-theme='dark'] .sched-toggle,
+:root[data-theme='dark'] .sched-mode-opt,
+:root[data-theme='dark'] .camera-name,
+:root[data-theme='dark'] .stream-identity strong,
+:root[data-theme='dark'] .panel-header h2 {
+  color: var(--text);
+}
+
+:root[data-theme='dark'] .message.system,
+:root[data-theme='dark'] .participant-pill,
+:root[data-theme='dark'] .read-only-notice,
+:root[data-theme='dark'] .chat-identity,
+:root[data-theme='dark'] .join-identity,
+:root[data-theme='dark'] .admin-group-label,
+:root[data-theme='dark'] .admin-email,
+:root[data-theme='dark'] .admin-ip,
+:root[data-theme='dark'] .admin-empty,
+:root[data-theme='dark'] .admin-refresh-label,
+:root[data-theme='dark'] .stream-group-label,
+:root[data-theme='dark'] .device-meta,
+:root[data-theme='dark'] .device-temperature,
+:root[data-theme='dark'] .device-seen,
+:root[data-theme='dark'] .sched-hint,
+:root[data-theme='dark'] .stream-muted,
+:root[data-theme='dark'] .camera-path,
+:root[data-theme='dark'] .camera-enabled-toggle,
+:root[data-theme='dark'] .panel-header p,
+:root[data-theme='dark'] .empty-state,
+:root[data-theme='dark'] .toggle-label {
+  color: var(--muted);
+}
+
+:root[data-theme='dark'] .detail-label,
+:root[data-theme='dark'] .weather-loading,
+:root[data-theme='dark'] .weather-error,
+:root[data-theme='dark'] .auth-card label,
+:root[data-theme='dark'] .auth-card .muted {
+  color: var(--muted);
+}
+
+:root[data-theme='dark'] .auth-card h2 {
+  color: var(--text-strong);
+}
+
+:root[data-theme='dark'] .participant-pill:hover,
+:root[data-theme='dark'] .admin-user-row:hover,
+:root[data-theme='dark'] .admin-close-btn:hover,
+:root[data-theme='dark'] .stream-close-btn:hover,
+:root[data-theme='dark'] .close-btn:hover,
+:root[data-theme='dark'] .admin-unblock-btn:hover {
+  color: var(--text);
+  background: #30353a;
+}
+
+:root[data-theme='dark'] .admin-count-badge,
+:root[data-theme='dark'] .admin-avatar-guest,
+:root[data-theme='dark'] .device-status {
+  color: var(--text);
+  background: #34393e;
+}
+
+:root[data-theme='dark'] .admin-divider,
+:root[data-theme='dark'] .device-schedule {
+  border-color: var(--border);
+  background-color: var(--border);
+}
+
+:root[data-theme='dark'] .device-card,
+:root[data-theme='dark'] .camera-card,
+:root[data-theme='dark'] .stream-card {
+  color: var(--text);
+  background: #202428;
+  border-color: var(--border);
+}
+
+:root[data-theme='dark'] .camera-card.disabled,
+:root[data-theme='dark'] .sched-time:disabled {
+  background: #191c1f;
+}
+
+:root[data-theme='dark'] .sched-time,
+:root[data-theme='dark'] .message-form input,
+:root[data-theme='dark'] .username-form input {
+  color: var(--text);
+  background: var(--input);
+  border-color: var(--border-strong);
+}
+
+:root[data-theme='dark'] .user-menu,
+:root[data-theme='dark'] .auth-card {
+  color: var(--text);
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+:root[data-theme='dark'] .menu-item {
+  color: var(--text);
+}
+
+:root[data-theme='dark'] .menu-divider,
+:root[data-theme='dark'] .auth-card input {
+  border-color: var(--border);
+}
+
+:root[data-theme='dark'] .auth-card input {
+  color: var(--text);
+  background: var(--input);
+}
+
+:root[data-theme='dark'] .auth-card input:focus {
+  color: var(--text);
+  background: #282d32;
+}
+
+.message-form button,
+.username-form button,
+.join-btn {
+  background-color: var(--accent) !important;
+}
+
+.sign-in-link,
+.cycle-btn,
+.link-btn,
+.password-toggle,
+.admin-drawer-title svg,
+.stream-drawer-title svg {
+  color: var(--accent) !important;
+}
+
+:root[data-theme='dark'] .notification-marker,
+:root[data-theme='dark'] .panel-change-marker {
+  border-color: var(--page);
 }
 
 :root[data-theme='dark'] .header h1,

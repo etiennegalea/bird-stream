@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'birb_appearance';
-const DEFAULTS = { mode: 'system', accent: '#B35610' };
+const DEFAULTS = { mode: 'light', accent: '#B35610' };
 
 export function readAppearance() {
   try {
