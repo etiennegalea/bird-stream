@@ -5,7 +5,7 @@ from models.orm import Base, User
 from services.auth_service import get_user_profile, update_user_profile
 
 
-def test_bird_notification_preference_defaults_off_and_can_be_enabled():
+def test_user_options_default_off_and_can_be_enabled():
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)
     db_factory = sessionmaker(bind=engine)
@@ -20,7 +20,9 @@ def test_bird_notification_preference_defaults_off_and_can_be_enabled():
         session.commit()
         user_id = user.id
 
-    assert get_user_profile(db_factory, user_id)["bird_notification_email"] is False
+    initial = get_user_profile(db_factory, user_id)
+    assert initial["bird_notification_email"] is False
+    assert initial["auto_join_chat"] is False
 
     profile, error = update_user_profile(
         db_factory,
@@ -30,8 +32,10 @@ def test_bird_notification_preference_defaults_off_and_can_be_enabled():
         bio=None,
         avatar=None,
         bird_notification_email=True,
+        auto_join_chat=True,
     )
 
     assert error == ""
     assert profile["bird_notification_email"] is True
+    assert profile["auto_join_chat"] is True
     engine.dispose()

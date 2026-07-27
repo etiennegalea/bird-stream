@@ -768,7 +768,14 @@
             window.location.reload();
             return;
           }
-          auth.updateUser({ username: data.username, avatar: data.avatar, bio: data.bio, is_admin: data.is_admin });
+          auth.updateUser({
+            username: data.username,
+            avatar: data.avatar,
+            bio: data.bio,
+            is_admin: data.is_admin,
+            bird_notification_email: data.bird_notification_email,
+            auto_join_chat: data.auto_join_chat,
+          });
         } else if (resp.status === 401) {
           auth.logout();
           window.location.reload();
@@ -1039,7 +1046,12 @@
     </div>
 
     <div class="chat-section" class:chat-hidden={!isChatVisible}>
-      <ChatRoom onNewMessage={handleNewMessage} {isChatVisible} onSignInClick={() => { authView = 'login'; }} />
+      <ChatRoom
+        onNewMessage={handleNewMessage}
+        {isChatVisible}
+        autoJoin={$auth?.user?.auto_join_chat ?? false}
+        onSignInClick={() => { authView = 'login'; }}
+      />
     </div>
 
     <div

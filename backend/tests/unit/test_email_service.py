@@ -65,10 +65,10 @@ async def test_bird_alert_embeds_and_attaches_snapshot(monkeypatch):
         "27 July 2026 at 21:00",
     )
 
-    assert "A bird is here!" in sent_payload["html"]
+    assert "Birb is here!" in sent_payload["html"]
     assert "data:image/jpeg;base64," in sent_payload["html"]
     assert sent_payload["attachments"][0]["name"] == "bird-sighting.jpg"
-    assert "snapshot is attached" in sent_payload["text"]
+    assert "turn off birb alerts" in sent_payload["text"]
 
 
 async def test_bird_alerts_only_send_to_eligible_opted_in_users(monkeypatch):

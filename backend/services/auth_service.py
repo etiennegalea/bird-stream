@@ -191,6 +191,8 @@ async def login_user(
             "bio": user.bio,
             "is_admin": user.is_admin,
             "is_blocked": user.is_blocked,
+            "bird_notification_email": user.bird_notification_email,
+            "auto_join_chat": user.auto_join_chat,
         }
         return token, user_dict, ""
 
@@ -257,6 +259,7 @@ def _profile_dict(user: User) -> dict:
         "is_admin": user.is_admin,
         "is_blocked": user.is_blocked,
         "bird_notification_email": user.bird_notification_email,
+        "auto_join_chat": user.auto_join_chat,
     }
 
 
@@ -295,6 +298,7 @@ def update_user_profile(
     bio: str | None,
     avatar: str | None,
     bird_notification_email: bool | None = None,
+    auto_join_chat: bool | None = None,
 ) -> tuple[dict | None, str]:
     """Returns (updated_profile, error). Passes None fields through unchanged."""
     with db_factory() as session:
@@ -330,6 +334,9 @@ def update_user_profile(
 
         if bird_notification_email is not None:
             user.bird_notification_email = bird_notification_email
+
+        if auto_join_chat is not None:
+            user.auto_join_chat = auto_join_chat
 
         session.commit()
         return _profile_dict(user), ""

@@ -28,6 +28,7 @@
   let newPassword = '';
   let confirmPassword = '';
   let birdNotificationEmail = false;
+  let autoJoinChat = false;
   let showDeleteConfirmation = false;
   let deletePassword = '';
   let message = '';
@@ -51,6 +52,7 @@
         bio = data.bio ?? '';
         avatarDataUrl = data.avatar ?? null;
         birdNotificationEmail = data.bird_notification_email ?? false;
+        autoJoinChat = data.auto_join_chat ?? false;
       }
     } catch {
       error = 'Could not load your settings.';
@@ -109,12 +111,14 @@
       bio = data.bio ?? '';
       avatarDataUrl = data.avatar ?? null;
       birdNotificationEmail = data.bird_notification_email ?? false;
+      autoJoinChat = data.auto_join_chat ?? false;
       auth.updateUser({
         email: data.email,
         username: data.username,
         avatar: data.avatar,
         bio: data.bio,
         bird_notification_email: data.bird_notification_email,
+        auto_join_chat: data.auto_join_chat,
       });
       message = successMessage;
       return true;
@@ -136,10 +140,13 @@
     await updateProfile({ email, username }, 'Account details saved.');
   }
 
-  async function saveNotificationPreference() {
+  async function saveOptions() {
     await updateProfile(
-      { bird_notification_email: birdNotificationEmail },
-      'Notification preference saved.',
+      {
+        bird_notification_email: birdNotificationEmail,
+        auto_join_chat: autoJoinChat,
+      },
+      'Options saved.',
     );
   }
 
@@ -326,7 +333,7 @@
             {/if}
           </section>
         {:else if activeSection === 'options'}
-          <form class="settings-form" on:submit|preventDefault={saveNotificationPreference}>
+          <form class="settings-form" on:submit|preventDefault={saveOptions}>
             <label class="preference-card">
               <input type="checkbox" bind:checked={birdNotificationEmail} />
               <span>
@@ -335,8 +342,15 @@
               </span>
             </label>
             <p class="preference-note">Notifications are off by default. We’ll limit alerts so a visiting bird doesn’t fill your inbox.</p>
+            <label class="preference-card">
+              <input type="checkbox" bind:checked={autoJoinChat} />
+              <span>
+                <strong>Automatically join chat</strong>
+                <small>Join the conversation with your account whenever you open Bird Stream while logged in.</small>
+              </span>
+            </label>
             <button class="primary-btn" type="submit" disabled={loading}>
-              {loading ? 'Saving…' : 'Save notification preference'}
+              {loading ? 'Saving…' : 'Save options'}
             </button>
           </form>
         {:else}

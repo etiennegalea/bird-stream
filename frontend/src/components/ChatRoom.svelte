@@ -9,6 +9,7 @@
   export let onNewMessage = () => {};
   export let isChatVisible = true;
   export let onSignInClick = () => {};
+  export let autoJoin = false;
 
   const authState = get(auth);
   const isLoggedIn = !!authState?.user?.username;
@@ -19,6 +20,7 @@
   let ws = null;
   let messagesEndEl;
   let hasJoined = false;
+  let autoJoinAttempted = false;
   let isCycling = false;
   let isSpinning = false;
 
@@ -173,6 +175,11 @@
       }
     }
   });
+
+  $: if (isLoggedIn && autoJoin && !hasJoined && !autoJoinAttempted) {
+    autoJoinAttempted = true;
+    joinChat();
+  }
 
   $: {
     // Track only these three; popup changes won't trigger scroll

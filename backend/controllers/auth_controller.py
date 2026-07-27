@@ -114,6 +114,7 @@ class AuthController(Controller):
             data.bio,
             data.avatar,
             data.bird_notification_email,
+            data.auto_join_chat,
         )
         if error:
             raise HTTPException(status_code=400, detail=error)
