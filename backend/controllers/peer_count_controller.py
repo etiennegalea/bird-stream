@@ -1,90 +1,89 @@
-"""Viewer count over WebSocket, sourced from the MediaMTX control API.
+"""Live viewer count.
 
-Viewers connect to MediaMTX (WHEP/HLS), not to this backend, so the count
-comes from polling /v3/paths/list and summing readers across all camera paths.
+Each browser already keeps this WebSocket open. It reports whether its selected
+player is connected, allowing us to count viewers rather than MediaMTX readers
+(which can include internal detection readers and multiple camera sessions).
 """
 
 import asyncio
+import json
 import logging
-import os
 
-import aiohttp
 from litestar import WebSocket, websocket
 from litestar.exceptions import WebSocketDisconnect
 
 logger = logging.getLogger("peer_count_controller")
 
-MEDIAMTX_API_URL = os.environ.get("MEDIAMTX_API_URL", "http://mediamtx:9997")
-MEDIAMTX_PATH = os.environ.get("MEDIAMTX_PATH", "birdcam")
+
+class ViewerRegistry:
+    def __init__(self) -> None:
+        self.connections: set[WebSocket] = set()
+        self.viewers: set[WebSocket] = set()
+
+    @property
+    def count(self) -> int:
+        return len(self.viewers)
+
+    def connect(self, socket: WebSocket) -> None:
+        self.connections.add(socket)
+
+    def set_viewing(self, socket: WebSocket, viewing: bool) -> bool:
+        before = self.count
+        if viewing:
+            self.viewers.add(socket)
+        else:
+            self.viewers.discard(socket)
+        return self.count != before
+
+    def disconnect(self, socket: WebSocket) -> bool:
+        before = self.count
+        self.connections.discard(socket)
+        self.viewers.discard(socket)
+        return self.count != before
 
 
-def poll_interval_from_env() -> float:
-    """Return a safe poll interval even when a generated env value is blank."""
-    raw_value = os.environ.get("PEER_COUNT_POLL_SECONDS", "").strip()
-    if not raw_value:
-        return 3.0
-    try:
-        interval = float(raw_value)
-    except ValueError:
-        logger.warning(
-            "Invalid PEER_COUNT_POLL_SECONDS=%r; using 3 seconds",
-            raw_value,
-        )
-        return 3.0
-    if interval <= 0:
-        logger.warning(
-            "PEER_COUNT_POLL_SECONDS must be positive; using 3 seconds"
-        )
-        return 3.0
-    return interval
+viewer_registry = ViewerRegistry()
 
 
-POLL_INTERVAL = poll_interval_from_env()
-
-
-async def get_viewer_count(session: aiohttp.ClientSession) -> int:
-    try:
-        async with session.get(
-            f"{MEDIAMTX_API_URL}/v3/paths/list",
-            timeout=aiohttp.ClientTimeout(total=2),
-        ) as resp:
-            if resp.status != 200:  # 404 = path not active (Pi offline)
-                return 0
-            data = await resp.json()
-            paths = data.get("items", [])
-            return sum(
-                len(path.get("readers", []))
-                for path in paths
-                if path.get("name") == MEDIAMTX_PATH
-                or path.get("name", "").startswith(f"{MEDIAMTX_PATH}-")
-            )
-    except Exception as e:
-        logger.debug(f"MediaMTX API poll failed: {e}")
-        return 0
+async def _broadcast_count() -> None:
+    if not viewer_registry.connections:
+        return
+    payload = {"count": viewer_registry.count}
+    sockets = list(viewer_registry.connections)
+    results = await asyncio.gather(
+        *(socket.send_json(payload) for socket in sockets),
+        return_exceptions=True,
+    )
+    stale = [
+        socket
+        for socket, result in zip(sockets, results)
+        if isinstance(result, Exception)
+    ]
+    for socket in stale:
+        viewer_registry.disconnect(socket)
 
 
 @websocket("/peer-count")
 async def peer_count_endpoint(socket: WebSocket) -> None:
     await socket.accept()
-    logger.info("New peer count WebSocket connection")
+    viewer_registry.connect(socket)
+    await socket.send_json({"count": viewer_registry.count})
+    logger.info("Viewer presence connected")
 
-    async def _send_loop() -> None:
-        last = None
-        async with aiohttp.ClientSession() as session:
-            while True:
-                count = await get_viewer_count(session)
-                if count != last:
-                    await socket.send_json({"count": count})
-                    last = count
-                await asyncio.sleep(POLL_INTERVAL)
-
-    send_task = asyncio.create_task(_send_loop())
     try:
-        await socket.receive_text()  # blocks until client disconnects
+        while True:
+            raw = await socket.receive_text()
+            try:
+                data = json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if viewer_registry.set_viewing(socket, data.get("viewing") is True):
+                await _broadcast_count()
     except WebSocketDisconnect:
-        logger.info("Peer count WebSocket disconnected")
-    except Exception as e:
-        logger.exception(f"Error in peer count WebSocket: {e}")
+        logger.info("Viewer presence disconnected")
+    except Exception as exc:
+        logger.debug("Viewer presence socket closed: %s", exc)
     finally:
-        send_task.cancel()
-        await asyncio.gather(send_task, return_exceptions=True)
+        changed = viewer_registry.disconnect(socket)
+        if changed:
+            await _broadcast_count()

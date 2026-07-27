@@ -578,6 +578,7 @@
   function handlePlayerState(event) {
     const state = event.detail;
     playerStates = { ...playerStates, [state.path]: state };
+    sendViewerPresence();
   }
 
   function handleWindowClick(e) {
@@ -597,11 +598,19 @@
 
   function setupPeerCountWs() {
     const ws = new WebSocket(`${getApiBaseUrl(true)}/peer-count`);
+    ws.onopen = sendViewerPresence;
     ws.onmessage = (event) => {
       viewerCount = JSON.parse(event.data).count;
     };
     ws.onclose = () => setTimeout(setupPeerCountWs, 5000);
     peerCountWs = ws;
+  }
+
+  function sendViewerPresence() {
+    if (peerCountWs?.readyState !== WebSocket.OPEN) return;
+    peerCountWs.send(JSON.stringify({
+      viewing: !!playerStates[selectedStreamPath]?.connected,
+    }));
   }
 
   function cleanup() {
@@ -613,6 +622,7 @@
     queuePosition = null;
     playbackReady = false;
     playerStates = {};
+    sendViewerPresence();
   }
 
   function enterQueue() {
@@ -1214,7 +1224,7 @@
   .avatar-anon {
     width: 20px;
     height: 20px;
-    color: #aaa;
+    color: #fff;
   }
 
   .user-menu {
@@ -1267,6 +1277,7 @@
     flex: 0 0 36px;
     padding: 8px 0;
     gap: 8px;
+    margin-left: 2px;
   }
 
   .admin-toggle-btn {
