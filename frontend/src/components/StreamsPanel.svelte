@@ -4,7 +4,7 @@
 
   export let streams = [];
   export let playerStates = {};
-  export let enabledPaths = new Set();
+  export let hiddenPaths = new Set();
 
   const dispatch = createEventDispatcher();
 
@@ -80,15 +80,16 @@
                 <label class="visibility-toggle">
                   <input
                     type="checkbox"
-                    checked={enabledPaths.has(stream.path)}
+                    checked={hiddenPaths.has(stream.path)}
+                    aria-label={`Hide ${stream.label} from the main viewport`}
                     on:change={() => dispatch('visibilitychange', {
                       path: stream.path,
-                      enabled: !enabledPaths.has(stream.path),
+                      hidden: !hiddenPaths.has(stream.path),
                     })}
                   />
                   <span class="toggle-track" aria-hidden="true"></span>
                   <span class="toggle-label">
-                    {enabledPaths.has(stream.path) ? 'Shown' : 'Hidden'}
+                    {hiddenPaths.has(stream.path) ? 'Hidden' : 'Visible'}
                   </span>
                 </label>
               </div>
@@ -280,7 +281,7 @@
   }
 
   .visibility-toggle input:checked + .toggle-track {
-    background: #B35610;
+    background: #777;
   }
 
   .visibility-toggle input:checked + .toggle-track::after {

@@ -3,6 +3,7 @@
   import { get } from 'svelte/store';
   import '../styles/ChatRoom.css';
   import { auth } from '../stores/auth.js';
+  import { formatChatTime } from '../chatTime.js';
   import { getApiBaseUrl, generateBirdUsername } from '../utils.js';
 
   export let onNewMessage = () => {};
@@ -90,8 +91,6 @@
         return;
       }
 
-      onNewMessage();
-
       if (data.type === 'message' && data.timestamp) {
         const messageDate = new Date(data.timestamp);
         const now = new Date();
@@ -110,6 +109,7 @@
         messages = data.messages.filter(msg => msg.type !== 'system');
       } else if (data.type === 'message') {
         messages = [...messages, data];
+        onNewMessage(data);
       } else if (data.type === 'system') {
         messages = [...messages, data];
       }
@@ -298,8 +298,8 @@
           </div>
           <div class="group-messages">
             {#each group.messages as msg, i (msg.timestamp)}
-              {@const timeStr = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              {@const prevTimeStr = i > 0 ? new Date(group.messages[i - 1].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null}
+              {@const timeStr = formatChatTime(msg.timestamp)}
+              {@const prevTimeStr = i > 0 ? formatChatTime(group.messages[i - 1].timestamp) : null}
               <div class="msg-row" class:gap-above={i > 0 && timeStr !== prevTimeStr}>
                 <span class="msg-time">{timeStr !== prevTimeStr ? timeStr : ''}</span>
                 <span class="msg-text">{msg.text}</span>
