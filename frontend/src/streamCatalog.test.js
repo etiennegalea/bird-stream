@@ -5,6 +5,7 @@ import {
   availableStreams,
   chooseMainStreamPath,
   groupStreamsByDevice,
+  secondaryStreams,
   streamUrls,
 } from './streamCatalog.js';
 
@@ -38,6 +39,13 @@ test('chooses the first transmitted stream and keeps a client-side swap', () => 
     'birdcam-pi-01-cam-2',
   );
   assert.equal(chooseMainStreamPath(streams, 'offline'), 'birdcam');
+});
+
+test('lists every available stream except the selected primary stream', () => {
+  assert.deepEqual(
+    secondaryStreams(streams, 'birdcam'),
+    [{ path: 'birdcam-pi-01-cam-2', available: true }],
+  );
 });
 
 test('groups simultaneous streams by transmitter without reordering them', () => {

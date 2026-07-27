@@ -133,6 +133,30 @@ html, body {
   opacity: 0;
 }
 
+.streams-panel-section {
+  position: relative;
+  flex: 0 0 350px;
+  min-height: 0;
+  overflow: hidden;
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    flex-basis 0.35s ease,
+    transform 0.35s ease,
+    opacity 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.streams-panel-section.streams-panel-hidden {
+  flex-basis: 0;
+  transform: translateX(350px);
+  opacity: 0;
+}
+
 .stream-viewport {
   flex: 1;
   min-height: 0;
@@ -177,16 +201,161 @@ html, body {
   border: 0;
   border-radius: 3px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
-  cursor: pointer;
+  transition: width 0.15s ease, height 0.15s ease;
 }
 
 .stream-thumbnail.thumbnail-device-start {
   margin-inline-start: 8px;
 }
 
-.stream-thumbnail:focus-visible {
+.stream-thumbnail.positioned-thumbnail {
+  position: absolute;
+  flex: none;
+  margin: 0;
+}
+
+.stream-thumbnail.viewport-secondary-hidden {
+  display: none;
+}
+
+.stream-thumbnail.dragging-thumbnail {
+  z-index: 9;
+  transition: none;
+}
+
+.stream-thumbnail.minimized-thumbnail {
+  flex-basis: 64px;
+  width: 64px;
+  height: 34px;
+}
+
+.stream-thumbnail.minimized-thumbnail.labels-visible {
+  flex-basis: 180px;
+  width: 180px;
+}
+
+.stream-thumbnail.minimized-thumbnail .player,
+.stream-thumbnail.minimized-thumbnail .stream-promote-target {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.stream-promote-target {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.stream-promote-target:focus-visible {
   outline: 2px solid #E87530;
   outline-offset: -2px;
+}
+
+.stream-tile-toolbar {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 3;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: #fff;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.82),
+    rgba(0, 0, 0, 0.48)
+  );
+  pointer-events: none;
+}
+
+.stream-drag-handle,
+.stream-minimize-btn {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: transparent;
+  font: inherit;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.stream-drag-handle {
+  cursor: grab;
+  touch-action: none;
+}
+
+.stream-drag-handle:active {
+  cursor: grabbing;
+}
+
+.stream-drag-handle:hover,
+.stream-minimize-btn:hover,
+.stream-drag-handle:focus-visible,
+.stream-minimize-btn:focus-visible {
+  background: rgba(255, 255, 255, 0.16);
+  outline: none;
+}
+
+.stream-tile-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  overflow: hidden;
+  font-size: 0.7rem;
+  font-weight: 650;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+.stream-tile-label span,
+.stream-tile-label small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stream-tile-label small {
+  flex: 0 1 auto;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.58rem;
+  font-weight: 500;
+}
+
+.main-stream-label {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 3;
+  max-width: calc(100% - 20px);
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 5px 9px;
+  border-radius: 4px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.68);
+  font-size: 0.76rem;
+  font-weight: 650;
+  pointer-events: none;
+}
+
+.main-stream-label small {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.62rem;
+  font-weight: 500;
 }
 
 .stream-waiting {
@@ -378,12 +547,24 @@ html, body {
     height: 81px;
   }
 
+  .stream-thumbnail.minimized-thumbnail {
+    flex-basis: 64px;
+    width: 64px;
+    height: 32px;
+  }
+
+  .stream-thumbnail.minimized-thumbnail.labels-visible {
+    flex-basis: 144px;
+    width: 144px;
+  }
+
   /* Chat, admin, and stream panels all share the same cell and behave
      identically: only one is open at a time, and it collapses via max-height
      (never translateX, which would push it off-screen right on mobile). */
   .chat-section,
   .admin-section,
-  .stream-panel-section {
+  .stream-panel-section,
+  .streams-panel-section {
     grid-area: chat;
     min-height: 0;
     min-width: 0;
@@ -393,7 +574,8 @@ html, body {
 
   .chat-section.chat-hidden,
   .admin-section.admin-hidden,
-  .stream-panel-section.stream-panel-hidden {
+  .stream-panel-section.stream-panel-hidden,
+  .streams-panel-section.streams-panel-hidden {
     flex-basis: auto;
     transform: none;
     max-height: 0;

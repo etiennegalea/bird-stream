@@ -3,6 +3,7 @@
   import { get } from 'svelte/store';
   import AdminPanel from './components/AdminPanel.svelte';
   import StreamPanel from './components/StreamPanel.svelte';
+  import StreamsPanel from './components/StreamsPanel.svelte';
   import Auth from './components/Auth.svelte';
   import ChatRoom from './components/ChatRoom.svelte';
   import StreamPlayer from './components/StreamPlayer.svelte';
@@ -13,7 +14,9 @@
     availableStreams as transmittedStreams,
     chooseMainStreamPath,
     groupStreamsByDevice,
+    secondaryStreams as listSecondaryStreams,
   } from './streamCatalog.js';
+  import { clampThumbnailPosition } from './thumbnailLayout.js';
   import { getApiBaseUrl } from './utils.js';
 
   // Stream endpoints (MediaMTX via traefik, same-origin). Override for local
@@ -33,6 +36,8 @@
   let city = '...';
   let streamCatalog = [];
   let availableStreams = [];
+  let secondaryStreams = [];
+  let enabledSecondaryPaths = new Set();
   let streamGroups = [];
   let thumbnailGroupStartPaths = new Set();
   let selectedStreamPath = null;
@@ -40,6 +45,12 @@
   let catalogTimer = null;
   let playbackReady = false;
   let playerStates = {};
+  let streamStageEl;
+  let thumbnailPositions = {};
+  let minimizedStreamPaths = new Set();
+  let thumbnailDrag = null;
+  let draggedStreamPath = null;
+  let hiddenSecondaryPaths = new Set();
 
   let peerCountWs = null;
 
@@ -63,14 +74,25 @@
   let streamAccessTokenExpiresAt = 0;
   let activatingPlayback = false;
   let isStreamPanelOpen = false;
+  let isStreamsPanelOpen = false;
   let streamSettingsWs = null;
 
   $: isAdmin = !!$auth?.user?.is_admin;
+  $: showStreamLabels = isAdmin && isAdminPanelOpen;
   $: canViewStreams = privacyKnown && (!privateEnabled || isAdmin);
   $: streamGroups = groupStreamsByDevice(streamCatalog);
   // Keep every player in this stable, device-grouped order. Switching the
   // selected path then changes only CSS/controls; no WHEP player is remounted.
   $: availableStreams = streamGroups.flatMap(group => group.streams);
+  $: secondaryStreams = listSecondaryStreams(
+    availableStreams,
+    selectedStreamPath,
+  );
+  $: enabledSecondaryPaths = new Set(
+    secondaryStreams
+      .filter(stream => !hiddenSecondaryPaths.has(stream.path))
+      .map(stream => stream.path),
+  );
   $: thumbnailGroupStartPaths = new Set(
     streamGroups
       .map(group => group.streams.find(
@@ -106,6 +128,16 @@
       playerStates = Object.fromEntries(
         Object.entries(playerStates)
           .filter(([path]) => activePaths.has(path)),
+      );
+      thumbnailPositions = Object.fromEntries(
+        Object.entries(thumbnailPositions)
+          .filter(([path]) => activePaths.has(path)),
+      );
+      minimizedStreamPaths = new Set(
+        [...minimizedStreamPaths].filter(path => activePaths.has(path)),
+      );
+      hiddenSecondaryPaths = new Set(
+        [...hiddenSecondaryPaths].filter(path => activePaths.has(path)),
       );
       if (!selectedStreamPath) {
         playbackReady = false;
@@ -151,6 +183,7 @@
 
   function stopPrivatePlayback() {
     cleanup();
+    isStreamsPanelOpen = false;
     streamCatalog = [];
     selectedStreamPath = null;
     error = null;
@@ -202,13 +235,150 @@
 
   function selectStream(path) {
     if (!path || path === selectedStreamPath) return;
+    if (minimizedStreamPaths.has(path)) {
+      const nextMinimized = new Set(minimizedStreamPaths);
+      nextMinimized.delete(path);
+      minimizedStreamPaths = nextMinimized;
+    }
     selectedStreamPath = path;
   }
 
-  function selectStreamFromKeyboard(event, path) {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
+  function tileForPath(path) {
+    return [...(streamStageEl?.querySelectorAll('[data-stream-path]') || [])]
+      .find(tile => tile.dataset.streamPath === path);
+  }
+
+  function clampPositionForPath(path) {
+    const position = thumbnailPositions[path];
+    const tile = tileForPath(path);
+    if (!position || !tile || !streamStageEl) return;
+
+    const stageRect = streamStageEl.getBoundingClientRect();
+    const tileRect = tile.getBoundingClientRect();
+    const clamped = clampThumbnailPosition(
+      position,
+      { width: tileRect.width, height: tileRect.height },
+      { width: stageRect.width, height: stageRect.height },
+    );
+    if (clamped.x !== position.x || clamped.y !== position.y) {
+      thumbnailPositions = {
+        ...thumbnailPositions,
+        [path]: clamped,
+      };
+    }
+  }
+
+  function clampAllThumbnailPositions() {
+    for (const path of Object.keys(thumbnailPositions)) {
+      clampPositionForPath(path);
+    }
+  }
+
+  function observeStreamStage(node) {
+    if (typeof ResizeObserver === 'undefined') return {};
+    const observer = new ResizeObserver(clampAllThumbnailPositions);
+    observer.observe(node);
+    return {
+      destroy() {
+        observer.disconnect();
+      },
+    };
+  }
+
+  function startThumbnailDrag(event, path) {
+    if (event.button !== 0 || !streamStageEl) return;
+    const tile = tileForPath(path);
+    if (!tile) return;
+
+    const stageRect = streamStageEl.getBoundingClientRect();
+    const tileRect = tile.getBoundingClientRect();
+    thumbnailDrag = {
+      path,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: tileRect.left - stageRect.left,
+      originY: tileRect.top - stageRect.top,
+      width: tileRect.width,
+      height: tileRect.height,
+    };
+    draggedStreamPath = path;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
     event.preventDefault();
-    selectStream(path);
+    event.stopPropagation();
+  }
+
+  function moveThumbnail(event) {
+    if (!thumbnailDrag || event.pointerId !== thumbnailDrag.pointerId) return;
+    const stageRect = streamStageEl?.getBoundingClientRect();
+    if (!stageRect) return;
+
+    const position = clampThumbnailPosition(
+      {
+        x: thumbnailDrag.originX + event.clientX - thumbnailDrag.startX,
+        y: thumbnailDrag.originY + event.clientY - thumbnailDrag.startY,
+      },
+      { width: thumbnailDrag.width, height: thumbnailDrag.height },
+      { width: stageRect.width, height: stageRect.height },
+    );
+    thumbnailPositions = {
+      ...thumbnailPositions,
+      [thumbnailDrag.path]: position,
+    };
+    event.preventDefault();
+  }
+
+  function endThumbnailDrag(event) {
+    if (!thumbnailDrag || event.pointerId !== thumbnailDrag.pointerId) return;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    thumbnailDrag = null;
+    draggedStreamPath = null;
+    event.stopPropagation();
+  }
+
+  function moveThumbnailWithKeyboard(event, path) {
+    const movement = {
+      ArrowLeft: [-1, 0],
+      ArrowRight: [1, 0],
+      ArrowUp: [0, -1],
+      ArrowDown: [0, 1],
+    }[event.key];
+    if (!movement || !streamStageEl) return;
+
+    const tile = tileForPath(path);
+    if (!tile) return;
+    const stageRect = streamStageEl.getBoundingClientRect();
+    const tileRect = tile.getBoundingClientRect();
+    const current = thumbnailPositions[path] || {
+      x: tileRect.left - stageRect.left,
+      y: tileRect.top - stageRect.top,
+    };
+    const step = event.shiftKey ? 1 : 10;
+    thumbnailPositions = {
+      ...thumbnailPositions,
+      [path]: clampThumbnailPosition(
+        {
+          x: current.x + movement[0] * step,
+          y: current.y + movement[1] * step,
+        },
+        { width: tileRect.width, height: tileRect.height },
+        { width: stageRect.width, height: stageRect.height },
+      ),
+    };
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  function toggleThumbnailMinimized(event, path) {
+    event.stopPropagation();
+    const nextMinimized = new Set(minimizedStreamPaths);
+    if (nextMinimized.has(path)) {
+      nextMinimized.delete(path);
+    } else {
+      nextMinimized.add(path);
+    }
+    minimizedStreamPaths = nextMinimized;
+    requestAnimationFrame(() => clampPositionForPath(path));
   }
 
   function handlePlayerState(event) {
@@ -296,6 +466,7 @@
       isChatVisible = true;
       isAdminPanelOpen = false;
       isStreamPanelOpen = false;
+      isStreamsPanelOpen = false;
       hasUnreadMessages = false;
     } else {
       isChatVisible = false;
@@ -307,6 +478,7 @@
       isAdminPanelOpen = true;
       isChatVisible = false;
       isStreamPanelOpen = false;
+      isStreamsPanelOpen = false;
     } else {
       isAdminPanelOpen = false;
     }
@@ -317,9 +489,32 @@
       isStreamPanelOpen = true;
       isChatVisible = false;
       isAdminPanelOpen = false;
+      isStreamsPanelOpen = false;
     } else {
       isStreamPanelOpen = false;
     }
+  }
+
+  function toggleStreamsPanel() {
+    if (!isStreamsPanelOpen) {
+      isStreamsPanelOpen = true;
+      isChatVisible = false;
+      isAdminPanelOpen = false;
+      isStreamPanelOpen = false;
+    } else {
+      isStreamsPanelOpen = false;
+    }
+  }
+
+  function handleSecondaryVisibility(event) {
+    const { path, enabled } = event.detail;
+    const nextHidden = new Set(hiddenSecondaryPaths);
+    if (enabled) {
+      nextHidden.delete(path);
+    } else {
+      nextHidden.add(path);
+    }
+    hiddenSecondaryPaths = nextHidden;
   }
 
   onMount(async () => {
@@ -437,30 +632,42 @@
             <button class="reconnect-btn" on:click={reconnect}>Reconnect</button>
           </div>
         {:else if playbackReady && selectedStream}
-          <div class="multi-stream-stage">
+          <div
+            class="multi-stream-stage"
+            bind:this={streamStageEl}
+            use:observeStreamStage
+          >
             {#each availableStreams as camera (camera.path)}
               {@const isMainStream = camera.path === selectedStreamPath}
-              <!-- The same keyed element changes between a passive main
-                   player and a keyboard-selectable thumbnail to avoid
-                   remounting/reconnecting its WHEP session. -->
-              <!-- svelte-ignore a11y-no-noninteractive-tabindex -->
+              <!-- The same keyed element changes size and position without
+                   remounting or reconnecting its WHEP session. -->
               <div
                 class="stream-tile"
                 class:main-stream={isMainStream}
                 class:stream-thumbnail={!isMainStream}
+                class:positioned-thumbnail={
+                  !isMainStream && !!thumbnailPositions[camera.path]}
+                class:minimized-thumbnail={
+                  !isMainStream && minimizedStreamPaths.has(camera.path)}
+                class:labels-visible={showStreamLabels}
+                class:dragging-thumbnail={
+                  !isMainStream && draggedStreamPath === camera.path}
+                class:viewport-secondary-hidden={
+                  !isMainStream && (
+                    isStreamsPanelOpen
+                    || hiddenSecondaryPaths.has(camera.path)
+                  )}
                 class:thumbnail-device-start={
                   !isMainStream && thumbnailGroupStartPaths.has(camera.path)}
-                role={isMainStream ? undefined : 'button'}
-                tabindex={isMainStream ? undefined : 0}
-                aria-label={isMainStream
-                  ? undefined
-                  : `Show ${camera.label} from ${camera.pi_id} as main stream`}
-                title={isMainStream ? undefined : 'Show as main stream'}
-                on:click={() => !isMainStream && selectStream(camera.path)}
-                on:keydown={(event) => {
-                  if (!isMainStream) {
-                    selectStreamFromKeyboard(event, camera.path);
-                  }
+                data-stream-path={camera.path}
+                data-main-stream={isMainStream}
+                data-minimized={
+                  !isMainStream && minimizedStreamPaths.has(camera.path)}
+                style={!isMainStream && thumbnailPositions[camera.path]
+                  ? `left: ${thumbnailPositions[camera.path].x}px; top: ${thumbnailPositions[camera.path].y}px;`
+                  : undefined}
+                on:transitionend={() => {
+                  if (!isMainStream) clampPositionForPath(camera.path);
                 }}
               >
                 <StreamPlayer
@@ -472,6 +679,64 @@
                   accessToken={privateEnabled ? streamAccessToken : null}
                   on:state={handlePlayerState}
                 />
+
+                {#if isMainStream && showStreamLabels}
+                  <div class="main-stream-label">
+                    <span>{camera.label}</span>
+                    <small>{camera.pi_id}</small>
+                  </div>
+                {:else if !isMainStream}
+                  <button
+                    type="button"
+                    class="stream-promote-target"
+                    aria-label={`Show ${camera.label} from ${camera.pi_id} as main stream`}
+                    title="Show as main stream"
+                    on:click={() => selectStream(camera.path)}
+                  ></button>
+                  <div class="stream-tile-toolbar">
+                    <button
+                      type="button"
+                      class="stream-drag-handle"
+                      aria-label={`Move ${camera.label}`}
+                      title="Drag to move"
+                      on:pointerdown={(event) => startThumbnailDrag(event, camera.path)}
+                      on:pointermove={moveThumbnail}
+                      on:pointerup={endThumbnailDrag}
+                      on:pointercancel={endThumbnailDrag}
+                      on:keydown={(event) => moveThumbnailWithKeyboard(
+                        event,
+                        camera.path,
+                      )}
+                      on:click|stopPropagation
+                    >
+                      <span aria-hidden="true">⠿</span>
+                    </button>
+                    {#if showStreamLabels}
+                      <span class="stream-tile-label">
+                        <span>{camera.label}</span>
+                        <small>{camera.pi_id}</small>
+                      </span>
+                    {/if}
+                    <button
+                      type="button"
+                      class="stream-minimize-btn"
+                      aria-label={minimizedStreamPaths.has(camera.path)
+                        ? `Restore ${camera.label}`
+                        : `Minimize ${camera.label}`}
+                      title={minimizedStreamPaths.has(camera.path)
+                        ? 'Restore stream'
+                        : 'Minimize stream'}
+                      on:click={(event) => toggleThumbnailMinimized(
+                        event,
+                        camera.path,
+                      )}
+                    >
+                      <span aria-hidden="true">
+                        {minimizedStreamPaths.has(camera.path) ? '□' : '−'}
+                      </span>
+                    </button>
+                  </div>
+                {/if}
               </div>
             {/each}
           </div>
@@ -516,6 +781,21 @@
       <ChatRoom onNewMessage={handleNewMessage} {isChatVisible} onSignInClick={() => { authView = 'login'; }} />
     </div>
 
+    <div
+      class="streams-panel-section"
+      class:streams-panel-hidden={!isStreamsPanelOpen}
+    >
+      {#if isStreamsPanelOpen}
+        <StreamsPanel
+          streams={secondaryStreams}
+          {playerStates}
+          enabledPaths={enabledSecondaryPaths}
+          on:close={() => isStreamsPanelOpen = false}
+          on:visibilitychange={handleSecondaryVisibility}
+        />
+      {/if}
+    </div>
+
     {#if $auth?.user?.is_admin}
       <div class="admin-section" class:admin-hidden={!isAdminPanelOpen}>
         {#if isAdminPanelOpen}
@@ -541,6 +821,24 @@
       >
         <img src="/chat_icon.svg" alt="Chat Icon" />
         <span class="notification-marker" class:seen={!hasUnreadMessages}></span>
+      </button>
+      <button
+        class="streams-toggle-btn"
+        class:active={isStreamsPanelOpen}
+        on:click={toggleStreamsPanel}
+        aria-label={isStreamsPanelOpen
+          ? 'Close secondary streams'
+          : 'Open secondary streams'}
+        aria-expanded={isStreamsPanelOpen}
+        title="Secondary streams"
+        disabled={!canViewStreams || secondaryStreams.length === 0}
+      >
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M4 5h11v8H4V5zm13 3h3v11H8v-4h9V8z"/>
+        </svg>
+        {#if secondaryStreams.length > 0}
+          <span class="streams-count">{secondaryStreams.length}</span>
+        {/if}
       </button>
       {#if $auth?.user?.is_admin}
         <button
@@ -717,6 +1015,59 @@
   }
   .admin-toggle-btn:hover { background: #fff; color: #B35610; border-color: #e0c8b8; }
   .admin-toggle-btn.active { background: #B35610; color: #fff; border-color: #B35610; }
+
+  .streams-toggle-btn {
+    position: relative;
+    width: 32px;
+    height: 32px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: #fafafa;
+    color: #aaa;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .streams-toggle-btn:hover:not(:disabled) {
+    background: #fff;
+    color: #B35610;
+    border-color: #e0c8b8;
+  }
+  .streams-toggle-btn.active {
+    background: #B35610;
+    color: #fff;
+    border-color: #B35610;
+  }
+  .streams-toggle-btn:disabled {
+    cursor: default;
+    opacity: 0.4;
+  }
+
+  .streams-count {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    min-width: 13px;
+    height: 13px;
+    padding: 0 2px;
+    display: grid;
+    place-items: center;
+    border: 2px solid #f5f5f5;
+    border-radius: 999px;
+    color: #fff;
+    background: #B35610;
+    font-size: 0.5rem;
+    font-weight: 700;
+    line-height: 1;
+    box-sizing: content-box;
+  }
+
+  .streams-toggle-btn.active .streams-count {
+    color: #B35610;
+    background: #fff;
+  }
 
   .stream-toggle-btn {
     position: relative;

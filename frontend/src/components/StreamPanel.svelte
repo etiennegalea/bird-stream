@@ -220,14 +220,11 @@
     return d.status || 'unknown';
   }
 
-  function deviceExpanded(piId) {
-    return expandedDevices[piId] !== false;
-  }
-
   function toggleDevice(piId) {
+    const isExpanded = expandedDevices[piId] !== false;
     expandedDevices = {
       ...expandedDevices,
-      [piId]: !deviceExpanded(piId),
+      [piId]: !isExpanded,
     };
   }
 
@@ -322,14 +319,16 @@
         <p class="stream-muted">No transmitters have reported yet.</p>
       {:else}
         {#each devices as d (d.pi_id)}
-          {@const expanded = deviceExpanded(d.pi_id)}
           {@const temperature = temperatureState(d.cpu_temp)}
-          <div class="device-card" class:collapsed={!expanded}>
+          <div
+            class="device-card"
+            class:collapsed={expandedDevices[d.pi_id] === false}
+          >
             <button
               type="button"
               class="device-summary"
               on:click={() => toggleDevice(d.pi_id)}
-              aria-expanded={expanded}
+              aria-expanded={expandedDevices[d.pi_id] !== false}
               aria-controls={`device-${d.pi_id}-details`}
             >
               <div class="device-head">
@@ -356,8 +355,13 @@
               </div>
             </button>
 
-            {#if expanded}
-              <div class="device-details" id={`device-${d.pi_id}-details`}>
+            <!-- Keep the controls mounted. Expanding/collapsing only toggles
+                 the native hidden style, so MQTT refreshes are unrelated. -->
+            <div
+              class="device-details"
+              id={`device-${d.pi_id}-details`}
+              hidden={expandedDevices[d.pi_id] === false}
+            >
                 {#if d.status === 'error' && d.error}
                   <p class="device-error" title={d.error}>{d.error}</p>
                 {/if}
@@ -496,8 +500,7 @@
                 </div>
                   </div>
                 {/if}
-              </div>
-            {/if}
+            </div>
           </div>
         {/each}
       {/if}

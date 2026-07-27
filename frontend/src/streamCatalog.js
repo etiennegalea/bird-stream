@@ -10,6 +10,11 @@ export function chooseMainStreamPath(streams, currentPath = null) {
   return available[0]?.path || null;
 }
 
+export function secondaryStreams(streams, primaryPath) {
+  return availableStreams(streams)
+    .filter((stream) => stream.path !== primaryPath);
+}
+
 export function groupStreamsByDevice(streams) {
   const groups = new Map();
   for (const stream of availableStreams(streams)) {

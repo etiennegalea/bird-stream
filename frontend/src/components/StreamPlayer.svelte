@@ -22,6 +22,7 @@
   let connected = false;
   let error = null;
   let fallbackStarted = false;
+  let mediaStream = null;
 
   $: if (videoEl && (!isMain || !audioAllowed) && !videoEl.muted) {
     videoEl.muted = true;
@@ -41,6 +42,7 @@
       connected,
       error,
       fps: 0,
+      mediaStream,
       ...patch,
     });
   }
@@ -101,6 +103,7 @@
       videoEl.srcObject = null;
       videoEl.removeAttribute('src');
     }
+    mediaStream = null;
   }
 
   function markConnected() {
@@ -172,7 +175,9 @@
 
       pc.ontrack = (event) => {
         if (!destroyed && videoEl && event.streams[0]) {
-          videoEl.srcObject = event.streams[0];
+          mediaStream = event.streams[0];
+          videoEl.srcObject = mediaStream;
+          report();
         }
       };
       pc.onconnectionstatechange = () => {
