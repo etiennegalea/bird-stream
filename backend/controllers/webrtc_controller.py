@@ -8,6 +8,7 @@ from litestar.exceptions import ValidationException
 import services.auth_service as auth_svc
 from models.datastructures import ClientModel
 from services.webrtc_service import handle_offer, pcs_manager, get_webrtc_config
+from services.client_ip import get_client_ip
 
 logger = logging.getLogger("webrtc_controller")
 
@@ -21,19 +22,6 @@ def _get_user_id(request: Request) -> int | None:
     return int(payload["sub"]) if payload else None
 
 
-def _get_client_ip(request: Request) -> str | None:
-    raw = request.headers.get("x-forwarded-for")
-    if raw:
-        ip = raw.split(",")[0].strip()
-    elif request.client:
-        ip = request.client.host
-    else:
-        return None
-    if ip.startswith(("::ffff:", "::FFFF:")):
-        return ip[7:]
-    return ip
-
-
 class WebRTCController(Controller):
     path = "/webrtc"
     tags = ["webrtc"]
@@ -43,7 +31,7 @@ class WebRTCController(Controller):
         if not data.offer.sdp:
             raise ValidationException("offer.sdp cannot be empty")
         user_id = _get_user_id(request)
-        client_ip = _get_client_ip(request) if user_id is not None else None
+        client_ip = get_client_ip(request) if user_id is not None else None
         return await handle_offer(
             data, state.audio, state.video,
             db_factory=state.db, user_id=user_id, client_ip=client_ip,

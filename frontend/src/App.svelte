@@ -79,9 +79,18 @@
   let activatingPlayback = false;
   let isStreamPanelOpen = false;
   let isStreamsPanelOpen = false;
+  let suppressPanelTransitions = false;
   let streamSettingsWs = null;
+  let streamsChanged = false;
+  let devicesChanged = false;
+  let knownSecondaryStreamPaths = null;
+  let knownDeviceIds = null;
+  let deviceInventoryTimer = null;
+  let authValidationTimer = null;
 
   $: isAdmin = !!$auth?.user?.is_admin;
+  $: isAnyPanelOpen = isChatVisible || isAdminPanelOpen
+    || isStreamPanelOpen || isStreamsPanelOpen;
   $: showStreamLabels = isAdmin && isAdminPanelOpen;
   $: canViewStreams = privacyKnown && (!privateEnabled || isAdmin);
   $: streamGroups = groupStreamsByDevice(streamCatalog);
@@ -122,6 +131,19 @@
       const previousPath = selectedStreamPath;
       streamCatalog = next;
       selectedStreamPath = chooseMainStreamPath(next, previousPath);
+      const nextSecondaryKey = transmittedStreams(next)
+        .filter(stream => stream.path !== selectedStreamPath)
+        .map(stream => stream.path)
+        .sort()
+        .join('\n');
+      if (
+        knownSecondaryStreamPaths !== null
+        && knownSecondaryStreamPaths !== nextSecondaryKey
+        && !isStreamsPanelOpen
+      ) {
+        streamsChanged = true;
+      }
+      knownSecondaryStreamPaths = nextSecondaryKey;
       const activePaths = new Set(
         transmittedStreams(next).map(stream => stream.path));
       playerStates = Object.fromEntries(
@@ -148,6 +170,58 @@
       }
     } catch (_) {
       // Retain the last catalog during brief API/MQTT interruptions.
+    }
+  }
+
+  async function fetchDeviceInventory() {
+    const authState = get(auth);
+    if (!authState?.token || !authState?.user?.is_admin) return;
+    try {
+      const resp = await fetch(
+        `${getApiBaseUrl()}/admin/stream/devices`,
+        { headers: { 'Authorization': `Bearer ${authState.token}` } },
+      );
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const nextDeviceIds = (data.devices || [])
+        .map(device => device.pi_id)
+        .filter(Boolean)
+        .sort()
+        .join('\n');
+      if (
+        knownDeviceIds !== null
+        && knownDeviceIds !== nextDeviceIds
+        && !isStreamPanelOpen
+      ) {
+        devicesChanged = true;
+      }
+      knownDeviceIds = nextDeviceIds;
+    } catch (_) {
+      // Retain the last successful inventory during brief API interruptions.
+    }
+  }
+
+  async function validateAuthSession() {
+    const authState = get(auth);
+    if (!authState?.token) return true;
+    try {
+      const resp = await fetch(`${getApiBaseUrl()}/auth/profile`, {
+        headers: { 'Authorization': `Bearer ${authState.token}` },
+      });
+      if (resp.status === 401) {
+        auth.logout();
+        window.location.reload();
+        return false;
+      }
+      if (resp.ok && (await resp.json()).is_blocked) {
+        auth.logout();
+        window.location.reload();
+        return false;
+      }
+      return resp.ok;
+    } catch {
+      // A temporarily unavailable server is not the same as an invalid token.
+      return true;
     }
   }
 
@@ -581,8 +655,18 @@
     }
   }
 
+  function suppressPanelSwitchAnimation() {
+    suppressPanelTransitions = true;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        suppressPanelTransitions = false;
+      });
+    });
+  }
+
   function toggleChat() {
     if (!isChatVisible) {
+      if (isAnyPanelOpen) suppressPanelSwitchAnimation();
       isChatVisible = true;
       isAdminPanelOpen = false;
       isStreamPanelOpen = false;
@@ -595,6 +679,7 @@
 
   function toggleAdmin() {
     if (!isAdminPanelOpen) {
+      if (isAnyPanelOpen) suppressPanelSwitchAnimation();
       isAdminPanelOpen = true;
       isChatVisible = false;
       isStreamPanelOpen = false;
@@ -606,7 +691,9 @@
 
   function toggleStreamPanel() {
     if (!isStreamPanelOpen) {
+      if (isAnyPanelOpen) suppressPanelSwitchAnimation();
       isStreamPanelOpen = true;
+      devicesChanged = false;
       isChatVisible = false;
       isAdminPanelOpen = false;
       isStreamsPanelOpen = false;
@@ -617,7 +704,9 @@
 
   function toggleStreamsPanel() {
     if (!isStreamsPanelOpen) {
+      if (isAnyPanelOpen) suppressPanelSwitchAnimation();
       isStreamsPanelOpen = true;
+      streamsChanged = false;
       isChatVisible = false;
       isAdminPanelOpen = false;
       isStreamPanelOpen = false;
@@ -664,10 +753,20 @@
         });
         if (resp.ok) {
           const data = await resp.json();
+          if (data.is_blocked) {
+            auth.logout();
+            window.location.reload();
+            return;
+          }
           auth.updateUser({ username: data.username, avatar: data.avatar, bio: data.bio, is_admin: data.is_admin });
+        } else if (resp.status === 401) {
+          auth.logout();
+          window.location.reload();
+          return;
         }
       } catch (_) { /* non-critical */ }
     }
+    authValidationTimer = setInterval(validateAuthSession, 30_000);
 
     setupPeerCountWs();
     setupStreamSettingsWs();
@@ -676,10 +775,14 @@
       await activatePlayback();
     }
     catalogTimer = setInterval(fetchStreamCatalog, 5000);
+    await fetchDeviceInventory();
+    deviceInventoryTimer = setInterval(fetchDeviceInventory, 5000);
 
     return () => {
       cleanup();
       clearInterval(catalogTimer);
+      clearInterval(deviceInventoryTimer);
+      clearInterval(authValidationTimer);
       if (peerCountWs) peerCountWs.close();
       if (streamSettingsWs) {
         streamSettingsWs.onclose = null; // prevent reconnect
@@ -736,7 +839,11 @@
     </div>
   </div>
 
-  <div class="main-content" class:chat-hidden={!isChatVisible}>
+  <div
+    class="main-content"
+    class:panel-hidden={!isAnyPanelOpen}
+    class:panel-switching={suppressPanelTransitions}
+  >
     <div class="stream-section">
       <div class="stream-viewport">
         {#if !privacyKnown || !canViewStreams}
@@ -959,7 +1066,7 @@
     <div class="side-buttons">
       <button
         class="chat-toggle-btn"
-        class:chat-hidden={!isChatVisible}
+        class:active={isChatVisible}
         on:click={toggleChat}
         aria-label={isChatVisible
           ? 'Hide chat'
@@ -967,7 +1074,9 @@
             ? `Show chat, ${unreadMessageCount} unread ${unreadMessageCount === 1 ? 'message' : 'messages'}`
             : 'Show chat'}
       >
-        <img src="/chat_icon.svg" alt="Chat Icon" />
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M16.16 18.383a9.645 9.645 0 0 1-2.843.421 9.146 9.146 0 0 1-4.865-1.345 11.567 11.567 0 0 0 2.348.241 11.132 11.132 0 0 0 4.608-.978c.073-.021.148-.037.22-.059a1.8 1.8 0 0 1 .531-.08 1.8 1.8 0 0 1 1.055.341l.441.319-.05-.171a1.8 1.8 0 0 1 .485-1.806 4.069 4.069 0 0 0 1.048-1.586 6.919 6.919 0 0 0 1.251-3.619 5.069 5.069 0 0 1 .727 2.593 5.407 5.407 0 0 1-1.784 3.914c.8 2.738 1.138 3.594.564 3.912a.6.6 0 0 1-.3.085c-.454 0-1.163-.538-3.436-2.182Zm-11.941-.807c-.573-.318-.234-1.174.564-3.911A5.407 5.407 0 0 1 3 9.75c0-3.4 3.492-6.15 7.8-6.15s7.8 2.753 7.8 6.15-3.492 6.15-7.8 6.15a9.642 9.642 0 0 1-2.842-.421c-2.273 1.644-2.983 2.182-3.437 2.182a.6.6 0 0 1-.302-.085Zm.58-7.826a3.65 3.65 0 0 0 1.227 2.612 1.8 1.8 0 0 1 .485 1.806l-.05.171.441-.319a1.8 1.8 0 0 1 1.055-.342 1.8 1.8 0 0 1 .531.08 7.828 7.828 0 0 0 2.312.341c3.252 0 6-1.992 6-4.35s-2.748-4.35-6-4.35-6 1.993-6 4.351Z"/>
+        </svg>
         {#if unreadMessageCount > 0}
           <span class="notification-marker">
             {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
@@ -980,16 +1089,18 @@
         on:click={toggleStreamsPanel}
         aria-label={isStreamsPanelOpen
           ? 'Close secondary streams'
+          : streamsChanged
+            ? 'Open secondary streams, list changed'
           : 'Open secondary streams'}
         aria-expanded={isStreamsPanelOpen}
         title="Secondary streams"
-        disabled={!canViewStreams || secondaryStreams.length === 0}
+        disabled={!canViewStreams || (secondaryStreams.length === 0 && !streamsChanged)}
       >
         <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
           <path d="M4 5h11v8H4V5zm13 3h3v11H8v-4h9V8z"/>
         </svg>
-        {#if secondaryStreams.length > 0}
-          <span class="streams-count">{secondaryStreams.length}</span>
+        {#if streamsChanged}
+          <span class="panel-change-marker" aria-hidden="true"></span>
         {/if}
       </button>
       {#if $auth?.user?.is_admin}
@@ -1009,13 +1120,20 @@
           class:active={isStreamPanelOpen}
           class:blocking={!videoAllowed || !audioAllowed}
           on:click={toggleStreamPanel}
-          aria-label={isStreamPanelOpen ? 'Close stream panel' : 'Open stream panel'}
+          aria-label={isStreamPanelOpen
+            ? 'Close stream panel'
+            : devicesChanged
+              ? 'Open stream panel, device list changed'
+              : 'Open stream panel'}
           aria-expanded={isStreamPanelOpen}
           title="Stream panel"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
           </svg>
+          {#if devicesChanged}
+            <span class="panel-change-marker" aria-hidden="true"></span>
+          {/if}
         </button>
       {/if}
     </div>
@@ -1195,30 +1313,6 @@
   .streams-toggle-btn:disabled {
     cursor: default;
     opacity: 0.4;
-  }
-
-  .streams-count {
-    position: absolute;
-    top: -5px;
-    right: -5px;
-    min-width: 13px;
-    height: 13px;
-    padding: 0 2px;
-    display: grid;
-    place-items: center;
-    border: 2px solid #f5f5f5;
-    border-radius: 999px;
-    color: #fff;
-    background: #B35610;
-    font-size: 0.5rem;
-    font-weight: 700;
-    line-height: 1;
-    box-sizing: content-box;
-  }
-
-  .streams-toggle-btn.active .streams-count {
-    color: #B35610;
-    background: #fff;
   }
 
   .stream-toggle-btn {

@@ -2,58 +2,67 @@
   import { createEventDispatcher, onMount } from 'svelte';
   import { get } from 'svelte/store';
   import { auth } from '../stores/auth.js';
+  import { readAppearance, saveAppearance } from '../appearance.js';
   import { getApiBaseUrl } from '../utils.js';
   import '../styles/UserSettings.css';
 
   const dispatch = createEventDispatcher();
-
   const authState = get(auth);
   const token = authState?.token;
   const isAdmin = authState?.user?.is_admin ?? false;
+  const sections = [
+    ['profile', 'Profile'],
+    ['account', 'Account'],
+    ['options', 'Options'],
+    ['appearance', 'Appearance'],
+  ];
+  const accentColours = ['#B35610', '#2563EB', '#7C3AED', '#DB2777', '#059669', '#DC2626'];
 
-  // Profile fields
+  let activeSection = 'profile';
+  let email = '';
   let username = authState?.user?.username ?? '';
   let bio = '';
-  let avatarDataUrl = null;    // current preview (may differ from saved)
+  let avatarDataUrl = null;
   let avatarFile = null;
-
-  // Password fields
   let currentPassword = '';
   let newPassword = '';
   let confirmPassword = '';
-
-  // UI state
-  let profileError = '';
-  let profileInfo = '';
-  let profileLoading = false;
-  let passwordError = '';
-  let passwordInfo = '';
-  let passwordLoading = false;
+  let message = '';
+  let error = '';
+  let loading = false;
+  let appearance = readAppearance();
 
   function authHeader() {
-    return { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+    return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
   }
 
   onMount(async () => {
     try {
       const resp = await fetch(`${getApiBaseUrl()}/auth/profile`, {
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (resp.ok) {
         const data = await resp.json();
+        email = data.email ?? '';
         username = data.username ?? username;
         bio = data.bio ?? '';
         avatarDataUrl = data.avatar ?? null;
       }
-    } catch (err) {
-      console.warn('Could not load profile:', err);
+    } catch {
+      error = 'Could not load your settings.';
     }
   });
+
+  function selectSection(section) {
+    activeSection = section;
+    message = '';
+    error = '';
+  }
 
   function resizeImage(file, maxPx = 150) {
     return new Promise((resolve) => {
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = (event) => {
         const img = new Image();
         img.onload = () => {
           const scale = Math.min(maxPx / img.width, maxPx / img.height, 1);
@@ -63,27 +72,23 @@
           canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
           resolve(canvas.toDataURL('image/jpeg', 0.85));
         };
-        img.src = e.target.result;
+        img.src = event.target.result;
       };
       reader.readAsDataURL(file);
     });
   }
 
-  async function handleAvatarChange(e) {
-    const file = e.target.files?.[0];
+  async function handleAvatarChange(event) {
+    const file = event.target.files?.[0];
     if (!file) return;
     avatarDataUrl = await resizeImage(file);
     avatarFile = file;
   }
 
-  async function handleSaveProfile() {
-    profileError = '';
-    profileInfo = '';
-    profileLoading = true;
-
-    const body = { username, bio };
-    if (avatarFile) body.avatar = avatarDataUrl;
-
+  async function updateProfile(body, successMessage) {
+    error = '';
+    message = '';
+    loading = true;
     try {
       const resp = await fetch(`${getApiBaseUrl()}/auth/profile`, {
         method: 'PATCH',
@@ -91,118 +96,192 @@
         body: JSON.stringify(body),
       });
       const data = await resp.json().catch(() => ({}));
-      if (resp.ok) {
-        auth.updateUser({ username: data.username, avatar: data.avatar, bio: data.bio });
-        avatarFile = null;
-        profileInfo = 'Profile saved.';
-      } else {
-        profileError = data.detail || 'Failed to save profile.';
+      if (!resp.ok) {
+        error = data.detail || 'Could not save your changes.';
+        return false;
       }
-    } catch (err) {
-      profileError = 'Network error. Please try again.';
+      email = data.email;
+      username = data.username;
+      bio = data.bio ?? '';
+      avatarDataUrl = data.avatar ?? null;
+      auth.updateUser({
+        email: data.email,
+        username: data.username,
+        avatar: data.avatar,
+        bio: data.bio,
+      });
+      message = successMessage;
+      return true;
+    } catch {
+      error = 'Network error. Please try again.';
+      return false;
     } finally {
-      profileLoading = false;
+      loading = false;
     }
   }
 
-  async function handleChangePassword() {
-    passwordError = '';
-    passwordInfo = '';
-    if (newPassword !== confirmPassword) { passwordError = 'Passwords do not match.'; return; }
-    if (newPassword.length < 8) { passwordError = 'New password must be at least 8 characters.'; return; }
-    passwordLoading = true;
+  async function saveProfile() {
+    const body = { bio };
+    if (avatarFile) body.avatar = avatarDataUrl;
+    if (await updateProfile(body, 'Profile saved.')) avatarFile = null;
+  }
 
+  async function saveAccount() {
+    await updateProfile({ email, username }, 'Account details saved.');
+  }
+
+  async function changePassword() {
+    error = '';
+    message = '';
+    if (newPassword !== confirmPassword) {
+      error = 'Passwords do not match.';
+      return;
+    }
+    if (newPassword.length < 8) {
+      error = 'New password must be at least 8 characters.';
+      return;
+    }
+    loading = true;
     try {
       const resp = await fetch(`${getApiBaseUrl()}/auth/change-password`, {
         method: 'POST',
         headers: authHeader(),
-        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+        body: JSON.stringify({
+          current_password: currentPassword,
+          new_password: newPassword,
+        }),
       });
       const data = await resp.json().catch(() => ({}));
-      if (resp.ok) {
-        currentPassword = newPassword = confirmPassword = '';
-        passwordInfo = 'Password changed.';
+      if (!resp.ok) {
+        error = data.detail || 'Could not change your password.';
       } else {
-        passwordError = data.detail || 'Failed to change password.';
+        currentPassword = '';
+        newPassword = '';
+        confirmPassword = '';
+        message = 'Password changed.';
       }
-    } catch (err) {
-      passwordError = 'Network error. Please try again.';
+    } catch {
+      error = 'Network error. Please try again.';
     } finally {
-      passwordLoading = false;
+      loading = false;
     }
+  }
+
+  function updateAppearance(patch) {
+    appearance = { ...appearance, ...patch };
+    saveAppearance(appearance);
   }
 </script>
 
-<div class="settings-overlay" role="dialog" aria-modal="true">
-  <div class="settings-card">
-    <div class="settings-header">
+<div class="settings-overlay" role="presentation" on:click|self={() => dispatch('close')}>
+  <div class="settings-card" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <header class="settings-header">
       <div class="settings-title-row">
-        <h2>Account Settings</h2>
+        <h2 id="settings-title">User settings</h2>
         {#if isAdmin}<span class="admin-tag">ADMIN</span>{/if}
       </div>
-      <button class="close-btn" on:click={() => dispatch('close')} aria-label="Close">✕</button>
-    </div>
-    <div class="settings-body">
+      <button class="close-btn" on:click={() => dispatch('close')} aria-label="Close settings">✕</button>
+    </header>
 
-    <!-- Avatar -->
-    <div class="avatar-section">
-      <label class="avatar-wrap" aria-label="Change profile picture">
-        {#if avatarDataUrl}
-          <img src={avatarDataUrl} alt="Profile" class="avatar-img" />
+    <div class="settings-layout">
+      <nav class="settings-menu" aria-label="Settings sections">
+        {#each sections as section}
+          <button
+            class:active={activeSection === section[0]}
+            aria-current={activeSection === section[0] ? 'page' : undefined}
+            on:click={() => selectSection(section[0])}
+          >{section[1]}</button>
+        {/each}
+      </nav>
+
+      <main class="settings-content">
+        <div class="section-heading">
+          <h3>{sections.find(section => section[0] === activeSection)?.[1]}</h3>
+        </div>
+        {#if message}<p class="success" role="status">{message}</p>{/if}
+        {#if error}<p class="error" role="alert">{error}</p>{/if}
+
+        {#if activeSection === 'profile'}
+          <div class="avatar-section">
+            <label class="avatar-wrap" aria-label="Change profile picture">
+              {#if avatarDataUrl}
+                <img src={avatarDataUrl} alt="Profile" class="avatar-img" />
+              {:else}
+                <span class="avatar-placeholder">{username.charAt(0).toUpperCase()}</span>
+              {/if}
+              <span class="avatar-overlay">Change</span>
+              <input type="file" accept="image/*" class="avatar-input" on:change={handleAvatarChange} />
+            </label>
+          </div>
+          <form class="settings-form" on:submit|preventDefault={saveProfile}>
+            <label>Bio
+              <textarea bind:value={bio} maxlength="500" rows="5" placeholder="Tell us about yourself…"></textarea>
+              <span class="char-count">{bio.length}/500</span>
+            </label>
+            <button class="primary-btn" type="submit" disabled={loading}>
+              {loading ? 'Saving…' : 'Save profile'}
+            </button>
+          </form>
+        {:else if activeSection === 'account'}
+          <form class="settings-form" on:submit|preventDefault={saveAccount}>
+            <label>Email
+              <input type="email" bind:value={email} required autocomplete="email" />
+            </label>
+            <label>Username
+              <input type="text" bind:value={username} minlength="2" maxlength="50" required autocomplete="username" />
+            </label>
+            <button class="primary-btn" type="submit" disabled={loading}>
+              {loading ? 'Saving…' : 'Save account details'}
+            </button>
+          </form>
+          <div class="divider"><span>Update password</span></div>
+          <form class="settings-form" on:submit|preventDefault={changePassword}>
+            <label>Current password
+              <input type="password" bind:value={currentPassword} required autocomplete="current-password" />
+            </label>
+            <label>New password
+              <input type="password" bind:value={newPassword} minlength="8" required autocomplete="new-password" />
+            </label>
+            <label>Confirm new password
+              <input type="password" bind:value={confirmPassword} minlength="8" required autocomplete="new-password" />
+            </label>
+            <button class="primary-btn" type="submit" disabled={loading}>
+              {loading ? 'Saving…' : 'Change password'}
+            </button>
+          </form>
+        {:else if activeSection === 'options'}
+          <div class="empty-settings">
+            <strong>More options are coming later.</strong>
+            <span>This section is ready for future preferences.</span>
+          </div>
         {:else}
-          <div class="avatar-placeholder">{username.charAt(0).toUpperCase()}</div>
+          <fieldset class="appearance-group">
+            <legend>Colour mode</legend>
+            <div class="mode-grid">
+              {#each ['light', 'dark', 'system'] as mode}
+                <button
+                  class:active={appearance.mode === mode}
+                  on:click={() => updateAppearance({ mode })}
+                >{mode.charAt(0).toUpperCase() + mode.slice(1)}</button>
+              {/each}
+            </div>
+          </fieldset>
+          <fieldset class="appearance-group">
+            <legend>Accent colour</legend>
+            <div class="accent-grid">
+              {#each accentColours as colour}
+                <button
+                  class="accent-swatch"
+                  class:active={appearance.accent === colour}
+                  style={`--swatch: ${colour}`}
+                  aria-label={`Use accent colour ${colour}`}
+                  on:click={() => updateAppearance({ accent: colour })}
+                ></button>
+              {/each}
+            </div>
+          </fieldset>
         {/if}
-        <div class="avatar-overlay">Change</div>
-        <input type="file" accept="image/*" class="avatar-input" on:change={handleAvatarChange} />
-      </label>
-    </div>
-
-    <!-- Profile form -->
-    <form on:submit|preventDefault={handleSaveProfile} class="settings-form">
-      {#if profileInfo}<p class="success">{profileInfo}</p>{/if}
-      {#if profileError}<p class="error">{profileError}</p>{/if}
-
-      <label>
-        Username
-        <input type="text" bind:value={username} minlength="2" maxlength="50" required />
-      </label>
-
-      <label>
-        Bio
-        <textarea bind:value={bio} maxlength="500" rows="3" placeholder="Tell us about yourself…"></textarea>
-        <span class="char-count">{bio.length}/500</span>
-      </label>
-
-      <button type="submit" class="primary-btn" disabled={profileLoading}>
-        {profileLoading ? 'Saving…' : 'Save Profile'}
-      </button>
-    </form>
-
-    <div class="divider"><span>Change Password</span></div>
-
-    <!-- Password form -->
-    <form on:submit|preventDefault={handleChangePassword} class="settings-form">
-      {#if passwordInfo}<p class="success">{passwordInfo}</p>{/if}
-      {#if passwordError}<p class="error">{passwordError}</p>{/if}
-
-      <label>
-        Current password
-        <input type="password" bind:value={currentPassword} required autocomplete="current-password" />
-      </label>
-      <label>
-        New password
-        <input type="password" bind:value={newPassword} minlength="8" required autocomplete="new-password" />
-      </label>
-      <label>
-        Confirm new password
-        <input type="password" bind:value={confirmPassword} minlength="8" required autocomplete="new-password" />
-      </label>
-
-      <button type="submit" class="primary-btn" disabled={passwordLoading}>
-        {passwordLoading ? 'Saving…' : 'Change Password'}
-      </button>
-    </form>
-
+      </main>
     </div>
   </div>
 </div>

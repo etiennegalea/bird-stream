@@ -203,6 +203,13 @@
   color: #555;
 }
 
+.admin-blocked-ip small {
+  display: block;
+  margin-top: 2px;
+  color: #aaa;
+  font-size: 0.62rem;
+}
+
 .admin-unblock-btn {
   flex-shrink: 0;
   background: none;

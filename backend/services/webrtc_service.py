@@ -9,7 +9,6 @@ from aiortc import (
 from aiortc.contrib.media import MediaRelay
 from aiortc.rtcrtpsender import RTCRtpSender
 
-import services.auth_service as auth_svc
 from models.datastructures import ClientModel
 from services.config_service import load_turn_credentials
 from services.connection_manager import ConnectionManager
@@ -67,8 +66,6 @@ async def handle_offer(
 
     if user_id is not None:
         await pcs_manager.bind_user(user_id, peer.id)
-        if db_factory is not None:
-            auth_svc.update_last_ip(db_factory, user_id, client_ip)
 
     if audio:
         audio_sender = pc.addTrack(relay.subscribe(audio))

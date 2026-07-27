@@ -44,7 +44,6 @@ html, body {
   justify-content: center;
   align-items: stretch;
   position: relative;
-  transition: all 0.3s ease;
 }
 
 .main-content .stream-section {
@@ -56,8 +55,16 @@ html, body {
   flex-direction: column;
 }
 
-.main-content.chat-hidden .stream-section {
+.main-content.panel-hidden .stream-section {
   max-width: 1100px; /* Expand when chat is hidden */
+}
+
+.main-content.panel-switching .stream-section,
+.main-content.panel-switching .chat-section,
+.main-content.panel-switching .admin-section,
+.main-content.panel-switching .stream-panel-section,
+.main-content.panel-switching .streams-panel-section {
+  transition: none;
 }
 
 .chat-section {
@@ -471,17 +478,25 @@ html, body {
   height: 32px;
   border: 1px solid #ddd;
   border-radius: 8px;
-  background-color: #fafafa;
+  background: #fafafa;
+  color: #aaa;
   cursor: pointer;
-  font-size: 15px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
 .chat-toggle-btn:hover {
-  background-color: #fff;
+  background: #fff;
+  color: #B35610;
+  border-color: #e0c8b8;
+}
+
+.chat-toggle-btn.active {
+  background: #B35610;
+  color: #fff;
+  border-color: #B35610;
 }
 
 .notification-marker {
@@ -501,6 +516,20 @@ html, body {
   font-weight: 700;
   line-height: 1;
   box-sizing: content-box;
+  z-index: 25;
+}
+
+.panel-change-marker {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid #f5f5f5;
+  border-radius: 50%;
+  background: #dc2626;
+  box-sizing: content-box;
+  pointer-events: none;
   z-index: 25;
 }
 

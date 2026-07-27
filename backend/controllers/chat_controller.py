@@ -5,8 +5,10 @@ from time import time as _time
 from litestar import WebSocket, get, websocket
 from litestar.datastructures import State
 from litestar.exceptions import WebSocketDisconnect
+from models.orm import User
 
 import services.auth_service as auth_svc
+from services.client_ip import get_client_ip
 from services.chat_service import ChatService
 
 logger = logging.getLogger("chat_controller")
@@ -14,13 +16,20 @@ logger = logging.getLogger("chat_controller")
 chat_service = ChatService()
 
 
-def _validate_token(token: str, username: str) -> tuple[bool, int | None]:
+def _validate_token(
+    token: str, username: str, db_factory
+) -> tuple[bool, int | None, bool]:
     if not token:
-        return False, None
+        return False, None, False
     payload = auth_svc.decode_jwt(token)
     if not payload or payload.get("username") != username:
-        return False, None
-    return True, int(payload["sub"])
+        return False, None, False
+    user_id = int(payload["sub"])
+    with db_factory() as session:
+        user = session.get(User, user_id)
+        if not user or user.is_blocked:
+            return False, user_id, bool(user and user.is_blocked)
+    return True, user_id, False
 
 
 async def _process_incoming(data: str, username: str, socket: WebSocket, db_factory) -> None:
@@ -71,33 +80,15 @@ def chat_usernames() -> list[str]:
     return sorted(chat_service.active_usernames())
 
 
-def _normalise_ip(ip: str | None) -> str | None:
-    if not ip:
-        return ip
-    # ::ffff:1.2.3.4 is IPv4-mapped IPv6 — strip the prefix to get plain IPv4
-    if ip.startswith(("::ffff:", "::FFFF:")):
-        return ip[7:]
-    return ip
-
-
-def _get_client_ip(socket: WebSocket) -> str | None:
-    forwarded = socket.headers.get("x-forwarded-for", "")
-    if forwarded:
-        return _normalise_ip(forwarded.split(",")[0].strip())
-    real_ip = socket.headers.get("x-real-ip", "")
-    if real_ip:
-        return _normalise_ip(real_ip.strip())
-    return _normalise_ip(socket.client[0] if socket.client else None)
-
-
 @websocket("/chat")
 async def chat_endpoint(socket: WebSocket, state: State) -> None:
     raw_username = socket.query_params.get("username")
     username = raw_username[:20] if raw_username else "anon"
-    is_account, user_id = _validate_token(socket.query_params.get("token", ""), username)
+    is_account, user_id, user_blocked = _validate_token(
+        socket.query_params.get("token", ""), username, state.db)
 
-    client_ip = _get_client_ip(socket)
-    if chat_service.is_ip_blocked(client_ip):
+    client_ip = get_client_ip(socket)
+    if user_blocked or chat_service.is_ip_blocked(client_ip):
         await socket.close(code=4403)
         return
 

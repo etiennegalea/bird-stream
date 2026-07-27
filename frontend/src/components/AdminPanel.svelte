@@ -10,6 +10,7 @@
   let accounts = [];
   let guests = [];
   let blockedIps = [];
+  let blockedUsers = [];
   let loading = true;
   let error = '';
   let pollTimer = null;
@@ -27,6 +28,7 @@
         accounts = data.accounts ?? [];
         guests = data.guests ?? [];
         blockedIps = data.blocked_ips ?? [];
+        blockedUsers = data.blocked_users ?? [];
         error = '';
       } else {
         error = resp.status === 403 ? 'Admin access required' : 'Failed to load users';
@@ -53,6 +55,15 @@
       method: 'POST',
       headers: authHeader(),
       body: JSON.stringify({ ip }),
+    });
+    await fetchUsers();
+  }
+
+  async function setUserBlocked(userId, isBlocked) {
+    await fetch(`${getApiBaseUrl()}/admin/users/${userId}/blocked`, {
+      method: 'POST',
+      headers: authHeader(),
+      body: JSON.stringify({ is_blocked: isBlocked }),
     });
     await fetchUsers();
   }
@@ -113,18 +124,18 @@
                 {#if user.email}
                   <div class="admin-email">{user.email}</div>
                 {/if}
-                <div class="admin-ip" title="Chat IP">
+                <div class="admin-ip" title="Current public IP">
                   {user.chat_ip ?? '—'}
                   {#if user.last_ip && user.last_ip !== user.chat_ip}
-                    <span title="Last stream IP"> / {user.last_ip}</span>
+                    <span title="Last login public IP"> / {user.last_ip}</span>
                   {/if}
                 </div>
               </div>
               <button
                 class="admin-block-btn"
-                disabled={!user.chat_ip}
-                on:click={() => blockIp(user.chat_ip)}
-                title={user.chat_ip ? `Block ${user.chat_ip}` : 'No IP available'}
+                disabled={!user.user_id}
+                on:click={() => setUserBlocked(user.user_id, true)}
+                title={`Block ${user.username}'s account`}
               >
                 BLOCK
               </button>
@@ -167,6 +178,28 @@
           {/each}
         {/if}
       </div>
+
+      {#if blockedUsers.length > 0}
+        <div class="admin-divider"></div>
+        <div class="admin-group">
+          <div class="admin-group-label">
+            Blocked users
+            <span class="admin-count-badge">{blockedUsers.length}</span>
+          </div>
+          {#each blockedUsers as user}
+            <div class="admin-blocked-row">
+              <span class="admin-blocked-ip">
+                {user.username}
+                {#if user.last_ip}<small>{user.last_ip}</small>{/if}
+              </span>
+              <button
+                class="admin-unblock-btn"
+                on:click={() => setUserBlocked(user.user_id, false)}
+              >UNBLOCK</button>
+            </div>
+          {/each}
+        </div>
+      {/if}
 
       {#if blockedIps.length > 0}
         <div class="admin-divider"></div>

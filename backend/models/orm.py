@@ -27,6 +27,7 @@ class User(TimestampMixin, Base):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_blocked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     avatar: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     bio: Mapped[str | None] = mapped_column(String(500), nullable=True, default=None)
     last_ip: Mapped[str | None] = mapped_column(String(45), nullable=True, default=None)

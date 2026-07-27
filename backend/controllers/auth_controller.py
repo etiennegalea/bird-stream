@@ -17,6 +17,7 @@ from models.datastructures import (
     VerifyEmailRequest,
 )
 from services.email_service import send_password_reset_email, send_verification_email
+from services.client_ip import get_client_ip
 
 logger = logging.getLogger("auth_controller")
 
@@ -55,8 +56,13 @@ class AuthController(Controller):
         return {"message": f"Verification email sent to {user_info['email']}"}
 
     @post("/login")
-    async def login(self, data: LoginRequest, state: State) -> dict:
-        token, user_dict, error = await auth_svc.login_user(state.db, data.identifier, data.password)
+    async def login(self, request: Request, data: LoginRequest, state: State) -> dict:
+        token, user_dict, error = await auth_svc.login_user(
+            state.db,
+            data.identifier,
+            data.password,
+            client_ip=get_client_ip(request),
+        )
         if error:
             code = 403 if "verify" in error else 401
             raise HTTPException(status_code=code, detail=error)
@@ -97,8 +103,10 @@ class AuthController(Controller):
     @patch("/profile")
     async def update_profile(self, request: Request, data: UpdateProfileRequest, state: State) -> dict:
         user_id = _require_auth(request)
+        if data.email is not None and not _EMAIL_RE.match(data.email.strip()):
+            raise HTTPException(status_code=400, detail="Invalid email address")
         profile, error = auth_svc.update_user_profile(
-            state.db, user_id, data.username, data.bio, data.avatar
+            state.db, user_id, data.email, data.username, data.bio, data.avatar
         )
         if error:
             raise HTTPException(status_code=400, detail=error)
@@ -127,4 +135,3 @@ class AuthController(Controller):
         if not profile:
             raise HTTPException(status_code=404, detail="User not found")
         return profile
-

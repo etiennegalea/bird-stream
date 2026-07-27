@@ -16,6 +16,9 @@ logger = logging.getLogger("auth_service")
 _JWT_SECRET = os.environ.get("JWT_SECRET_KEY", "change-me-in-production")
 _JWT_ALGORITHM = "HS256"
 _JWT_EXPIRY_DAYS = int(os.environ.get("JWT_EXPIRY_DAYS", "7"))
+# Deliberately changes for every backend process. Tokens from an earlier
+# process remain correctly signed, but are rejected after a server restart.
+_SERVER_SESSION_ID = secrets.token_urlsafe(24)
 _STREAM_ACCESS_MINUTES = int(os.environ.get("STREAM_ACCESS_TOKEN_MINUTES", "10"))
 _PBKDF2_ITERATIONS = 260_000
 _EMAIL_VERIFY_HOURS = 24
@@ -55,6 +58,7 @@ def create_jwt(user: User) -> str:
         "sub": str(user.id),
         "email": user.email,
         "username": user.username,
+        "server_session": _SERVER_SESSION_ID,
         "exp": datetime.now(timezone.utc) + timedelta(days=_JWT_EXPIRY_DAYS),
     }
     return jwt.encode(payload, _JWT_SECRET, algorithm=_JWT_ALGORITHM)
@@ -62,7 +66,10 @@ def create_jwt(user: User) -> str:
 
 def decode_jwt(token: str) -> dict | None:
     try:
-        return jwt.decode(token, _JWT_SECRET, algorithms=[_JWT_ALGORITHM])
+        payload = jwt.decode(token, _JWT_SECRET, algorithms=[_JWT_ALGORITHM])
+        if payload.get("server_session") != _SERVER_SESSION_ID:
+            return None
+        return payload
     except jwt.ExpiredSignatureError:
         return None
     except jwt.InvalidTokenError:
@@ -74,6 +81,7 @@ def create_stream_access_token(user_id: int) -> str:
     payload = {
         "sub": str(user_id),
         "scope": "stream:read:admin",
+        "server_session": _SERVER_SESSION_ID,
         "exp": datetime.now(timezone.utc)
         + timedelta(minutes=_STREAM_ACCESS_MINUTES),
     }
@@ -140,6 +148,7 @@ async def login_user(
     db_factory: sessionmaker,
     identifier: str,
     password: str,
+    client_ip: str | None = None,
 ) -> tuple[str | None, dict | None, str]:
     """
     Returns (jwt_token, user_dict, error). On success error is ''.
@@ -166,6 +175,12 @@ async def login_user(
         if not user.is_verified:
             return None, None, "Please verify your email before logging in"
 
+        if user.is_blocked:
+            return None, None, "Account has been blocked"
+
+        if client_ip:
+            user.last_ip = _to_ipv4(client_ip)[:45]
+            session.commit()
         token = create_jwt(user)
         user_dict = {
             "id": user.id,
@@ -175,6 +190,7 @@ async def login_user(
             "avatar": user.avatar,
             "bio": user.bio,
             "is_admin": user.is_admin,
+            "is_blocked": user.is_blocked,
         }
         return token, user_dict, ""
 
@@ -239,6 +255,7 @@ def _profile_dict(user: User) -> dict:
         "bio": user.bio,
         "avatar": user.avatar,
         "is_admin": user.is_admin,
+        "is_blocked": user.is_blocked,
     }
 
 
@@ -272,6 +289,7 @@ def get_user_profile(db_factory: sessionmaker, user_id: int) -> dict | None:
 def update_user_profile(
     db_factory: sessionmaker,
     user_id: int,
+    email: str | None,
     username: str | None,
     bio: str | None,
     avatar: str | None,
@@ -281,6 +299,15 @@ def update_user_profile(
         user = session.get(User, user_id)
         if not user:
             return None, "User not found"
+
+        if email is not None:
+            email = email.lower().strip()
+            conflict = session.execute(
+                select(User).where(User.email == email, User.id != user_id)
+            ).scalar_one_or_none()
+            if conflict:
+                return None, "Email already in use"
+            user.email = email
 
         if username is not None:
             username = username.strip()[:50]

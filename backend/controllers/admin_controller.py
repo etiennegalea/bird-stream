@@ -31,13 +31,17 @@ def _require_admin(request: Request, db_factory) -> int:
     user_id = int(payload["sub"])
     with db_factory() as session:
         user = session.get(User, user_id)
-        if not user or not user.is_admin:
+        if not user or user.is_blocked or not user.is_admin:
             raise HTTPException(status_code=403, detail="Admin access required")
     return user_id
 
 
 class BlockIpRequest(msgspec.Struct):
     ip: str
+
+
+class BlockUserRequest(msgspec.Struct):
+    is_blocked: bool
 
 
 class StreamSettingsRequest(msgspec.Struct):
@@ -72,12 +76,16 @@ class AdminController(Controller):
         # Enrich account users with DB details (email, avatar, last_ip, watching_stream).
         user_ids = [a["user_id"] for a in data["accounts"] if a["user_id"] is not None]
         db_users: dict[int, User] = {}
-        if user_ids:
-            with state.db() as session:
+        with state.db() as session:
+            if user_ids:
                 rows = session.execute(
                     select(User).where(User.id.in_(user_ids))
                 ).scalars().all()
                 db_users = {u.id: u for u in rows}
+            blocked_users = session.execute(
+                select(User).where(User.is_blocked.is_(True))
+                .order_by(User.username)
+            ).scalars().all()
 
         watching_user_ids: set[int] = set(pcs_manager.user_peers.keys())
 
@@ -92,6 +100,7 @@ class AdminController(Controller):
                 "avatar": db_user.avatar if db_user else None,
                 "chat_ip": entry["ip"],
                 "last_ip": db_user.last_ip if db_user else None,
+                "is_blocked": db_user.is_blocked if db_user else False,
                 "watching_stream": uid in watching_user_ids if uid else False,
             })
 
@@ -99,6 +108,49 @@ class AdminController(Controller):
             "accounts": enriched_accounts,
             "guests": data["guests"],
             "blocked_ips": data["blocked_ips"],
+            "blocked_users": [
+                {
+                    "user_id": user.id,
+                    "username": user.username,
+                    "email": user.email,
+                    "last_ip": user.last_ip,
+                    "is_blocked": True,
+                }
+                for user in blocked_users
+            ],
+        }
+
+    @post("/users/{user_id:int}/blocked")
+    async def set_user_blocked(
+        self,
+        request: Request,
+        state: State,
+        user_id: int,
+        data: BlockUserRequest,
+    ) -> dict:
+        admin_id = _require_admin(request, state.db)
+        if user_id == admin_id and data.is_blocked:
+            raise HTTPException(status_code=400, detail="You cannot block yourself")
+        with state.db() as session:
+            user = session.get(User, user_id)
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+            user.is_blocked = data.is_blocked
+            username = user.username
+            session.commit()
+        disconnected = (
+            await chat_service.disconnect_user(user_id)
+            if data.is_blocked else 0
+        )
+        logger.info(
+            "Admin user_id=%s set blocked=%s for user_id=%s",
+            admin_id, data.is_blocked, user_id,
+        )
+        return {
+            "user_id": user_id,
+            "username": username,
+            "is_blocked": data.is_blocked,
+            "connections_closed": disconnected,
         }
 
     @post("/block-ip")

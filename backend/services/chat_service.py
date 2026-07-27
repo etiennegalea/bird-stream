@@ -97,6 +97,20 @@ class ChatService:
             self.disconnect(ws)
         return len(to_close)
 
+    async def disconnect_user(self, user_id: int) -> int:
+        """Close every active chat connection belonging to an account."""
+        to_close = [
+            ws for ws, stored_user_id in self.user_id_map.items()
+            if stored_user_id == user_id
+        ]
+        for ws in to_close:
+            try:
+                await ws.close(code=4403)
+            except Exception:
+                pass
+            self.disconnect(ws)
+        return len(to_close)
+
     def unblock_ip(self, ip: str) -> None:
         self.blocked_ips.discard(ip)
 
