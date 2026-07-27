@@ -123,7 +123,7 @@ class AuthController(Controller):
             raise HTTPException(status_code=400, detail=error)
         return {"message": "Password changed successfully."}
 
-    @delete("/account")
+    @delete("/account", status_code=200)
     async def delete_account(self, request: Request, data: DeleteAccountRequest, state: State) -> dict:
         user_id = _require_auth(request)
         success, error = await auth_svc.delete_user_account(
