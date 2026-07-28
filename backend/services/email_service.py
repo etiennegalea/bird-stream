@@ -253,16 +253,23 @@ async def send_bird_alerts(
     db_factory,
     snapshot_jpeg: bytes,
     detected_at: str | None = None,
+    admins_only: bool = False,
 ) -> int:
-    """Notify every opted-in user. This is the detector integration boundary."""
+    """Notify eligible subscribers, restricted to admins for a private stream."""
     detected_at = detected_at or datetime.now().astimezone().strftime("%d %B %Y at %H:%M")
+    recipient_filters = [
+        User.bird_notification_email.is_(True),
+        User.is_verified.is_(True),
+        User.is_blocked.is_(False),
+    ]
+    if admins_only:
+        recipient_filters.append(User.is_admin.is_(True))
+
     with db_factory() as session:
         recipients = list(
             session.execute(
                 select(User.email, User.username).where(
-                    User.bird_notification_email.is_(True),
-                    User.is_verified.is_(True),
-                    User.is_blocked.is_(False),
+                    *recipient_filters,
                 )
             ).all()
         )

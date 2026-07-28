@@ -119,3 +119,64 @@ async def test_bird_alerts_only_send_to_eligible_opted_in_users(monkeypatch):
         ("opted-in@example.com", "opted-in", b"jpeg", "27 July 2026 at 21:00")
     ]
     engine.dispose()
+
+
+async def test_private_stream_bird_alerts_only_send_to_subscribed_admins(
+    monkeypatch,
+):
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    db_factory = sessionmaker(bind=engine)
+    with db_factory() as session:
+        session.add_all([
+            User(
+                email="admin@example.com",
+                username="admin",
+                hashed_password="unused",
+                is_verified=True,
+                is_admin=True,
+                bird_notification_email=True,
+            ),
+            User(
+                email="viewer@example.com",
+                username="viewer",
+                hashed_password="unused",
+                is_verified=True,
+                bird_notification_email=True,
+            ),
+            User(
+                email="unsubscribed-admin@example.com",
+                username="unsubscribed-admin",
+                hashed_password="unused",
+                is_verified=True,
+                is_admin=True,
+                bird_notification_email=False,
+            ),
+        ])
+        session.commit()
+
+    recipients = []
+
+    async def fake_alert(to_email, username, snapshot_jpeg, detected_at):
+        recipients.append((to_email, username, snapshot_jpeg, detected_at))
+        return True
+
+    monkeypatch.setattr(email_service, "send_bird_alert_email", fake_alert)
+
+    sent = await email_service.send_bird_alerts(
+        db_factory,
+        b"private-jpeg",
+        "28 July 2026 at 12:00",
+        admins_only=True,
+    )
+
+    assert sent == 1
+    assert recipients == [
+        (
+            "admin@example.com",
+            "admin",
+            b"private-jpeg",
+            "28 July 2026 at 12:00",
+        )
+    ]
+    engine.dispose()

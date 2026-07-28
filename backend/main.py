@@ -87,7 +87,12 @@ async def lifespan(app: Litestar):
 
         def notify_bird(snapshot_jpeg, _detections, detected_at):
             future = asyncio.run_coroutine_threadsafe(
-                send_bird_alerts(SessionLocal, snapshot_jpeg, detected_at),
+                send_bird_alerts(
+                    SessionLocal,
+                    snapshot_jpeg,
+                    detected_at,
+                    admins_only=stream_settings.private_enabled,
+                ),
                 event_loop,
             )
             future.add_done_callback(log_notification_result)
