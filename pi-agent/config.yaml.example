@@ -6,13 +6,15 @@ device:
 
 mqtt:
   host: "192.168.1.100"       # Proxmox box running mosquitto
-  port: 1883                  # 8883 when TLS is enabled
+  port: 1883                  # use 8883 for mutual TLS
   keepalive: 60
-  username: "pi-01"
-  password: "change-me"
+  username: "pi-01"           # set null when certificate auth is enabled
+  password: "change-me"       # set null when certificate auth is enabled
   tls:
     enabled: false
-    ca_cert: null             # e.g. /etc/birdstream/ca.crt
+    ca_cert: null             # e.g. /etc/birdstream/mqtt/ca.crt
+    client_cert: null         # e.g. /etc/birdstream/mqtt/client.crt
+    client_key: null          # e.g. /etc/birdstream/mqtt/client.key
 
 camera:
   auto_detect: true           # true also discovers unlisted capture devices;

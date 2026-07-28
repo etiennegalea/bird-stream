@@ -193,6 +193,10 @@ button.overview-tab {
   color: #b6cfb3;
 }
 
+button.mtls-tab {
+  color: #a9c8d6;
+}
+
 button.add-pi-tab {
   color: #9fc59c;
   border: 1px dashed #405544;
@@ -714,6 +718,90 @@ textarea.preview {
   color: #91a394;
 }
 
+.mtls-callout {
+  margin: 0 0 28px;
+  padding: 14px 16px;
+  border-left: 3px solid #b99b5e;
+  background: #17160f;
+  color: #c8b98e;
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.mtls-section {
+  margin-top: 18px;
+  padding: 22px;
+  border: 1px solid #304034;
+  background: #0c130e;
+}
+
+.mtls-section + .mtls-section {
+  margin-top: 14px;
+}
+
+.mtls-section h3 {
+  margin-bottom: 18px;
+  color: #dfeadd;
+}
+
+.mtls-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.mtls-field textarea {
+  min-height: 110px;
+}
+
+.mtls-command {
+  margin-top: 22px;
+}
+
+.code-block {
+  position: relative;
+  margin-top: 14px;
+}
+
+.code-block pre {
+  max-width: 100%;
+  margin: 0;
+  padding: 18px;
+  overflow-x: auto;
+  border: 1px solid #2c3b30;
+  background: #080c09;
+  color: #b9cfb7;
+  font: 0.72rem/1.65 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+button.code-copy {
+  position: absolute;
+  z-index: 1;
+  top: 8px;
+  right: 10px;
+  padding: 5px 8px;
+  background: #080c09;
+}
+
+.mtls-section ul,
+.mtls-section ol {
+  margin: 0;
+  padding-left: 22px;
+  color: #9eaaa0;
+  font-size: 0.78rem;
+  line-height: 1.65;
+}
+
+.mtls-section li + li {
+  margin-top: 7px;
+}
+
+.mtls-readme {
+  border-color: #506951;
+}
+
 .empty {
   grid-column: 1 / -1;
   display: grid;
@@ -781,7 +869,8 @@ code {
   }
 
   .pi-card-grid,
-  .service-grid {
+  .service-grid,
+  .mtls-form {
     grid-template-columns: 1fr;
   }
 

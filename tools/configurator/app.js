@@ -1,5 +1,6 @@
 const {
   CONFIG_RELATIONSHIPS,
+  buildMtlsCommand,
   compareRelationshipValues,
   documentKind,
   isPiConfigTarget,
@@ -9,6 +10,7 @@ const {
   normalizeConfigValue,
   piConfigTarget,
   readTextSource,
+  parseMtlsDeviceIds,
   renderDocument,
   targetPathForTemplate,
 } = globalThis.BirdstreamConfiguratorCore;
@@ -26,6 +28,12 @@ const state = {
   selectedPiTarget: null,
   newPiFormOpen: false,
   linkedRelationshipIds: new Set(),
+  mtls: {
+    brokerHost: "",
+    brokerIps: "",
+    deviceIds: "backend",
+    outputDir: "mosquitto/pki",
+  },
 };
 
 const statusNode = document.querySelector("#status");
@@ -83,6 +91,16 @@ function initializeLoadedDocuments(documents) {
   state.selectedPiTarget = piModels()[0]?.targetPath ?? null;
   state.newPiFormOpen = false;
   state.linkedRelationshipIds.clear();
+  const piDevices = piModels()
+    .filter((model) => fieldValue(model, "device.id"))
+    .map(piId);
+  state.mtls.deviceIds = ["backend", ...piDevices].join("\n");
+  const configuredHost = fieldValue(piModels()[0], "mqtt.host");
+  if (/^[0-9A-Fa-f:.]+$/.test(configuredHost)) {
+    state.mtls.brokerIps = configuredHost;
+  } else if (configuredHost) {
+    state.mtls.brokerHost = configuredHost;
+  }
 }
 
 async function walkDirectory(handle, prefix = "", files = new Map()) {
@@ -152,7 +170,11 @@ function relativePath(file) {
 
 async function chooseFolderFallback(event) {
   const files = new Map(
-    [...event.target.files].map((file) => [relativePath(file), file]),
+    [...event.target.files]
+      .map((file) => [relativePath(file), file])
+      .filter(([path]) => !path.split("/").some(
+        (part) => SKIP_DIRECTORIES.has(part),
+      )),
   );
   state.rootHandle = null;
   initializeLoadedDocuments(await loadFromHandles(files));
@@ -249,6 +271,13 @@ function showConsistency() {
   render();
 }
 
+function showMtls() {
+  state.view = "mtls";
+  state.activeIndex = -1;
+  state.newPiFormOpen = false;
+  render();
+}
+
 function selectDocument(model) {
   const index = state.documents.indexOf(model);
   if (index < 0) return;
@@ -299,6 +328,14 @@ function renderTabs() {
   );
   consistency.classList.toggle("active", state.view === "consistency");
   tabsNode.append(consistency);
+
+  const mtls = makeButton(
+    "MQTT mutual TLS",
+    "tab mtls-tab",
+    showMtls,
+  );
+  mtls.classList.toggle("active", state.view === "mtls");
+  tabsNode.append(mtls);
 
   appendTabGroup(
     "PROXMOX SERVER",
@@ -552,6 +589,234 @@ function renderConsistencyPage() {
   editorNode.replaceChildren(renderConsistencyMap());
 }
 
+function makeCodeBlock(value, label = "Copy") {
+  const wrapper = document.createElement("div");
+  wrapper.className = "code-block";
+  const pre = document.createElement("pre");
+  const code = document.createElement("code");
+  code.textContent = value;
+  pre.append(code);
+  const copy = makeButton(label, "subtle code-copy", async () => {
+    try {
+      await navigator.clipboard.writeText(code.textContent);
+      setStatus("Copied to clipboard.", "success");
+    } catch {
+      setStatus("Clipboard access was denied; select and copy the text.", "error");
+    }
+  });
+  wrapper.append(copy, pre);
+  return wrapper;
+}
+
+function makeMtlsInput({ id, label, help, value, multiline = false, onInput }) {
+  const field = document.createElement("div");
+  field.className = "mtls-field";
+  const labelNode = document.createElement("label");
+  labelNode.htmlFor = id;
+  labelNode.textContent = label;
+  const helpNode = document.createElement("p");
+  helpNode.className = "description";
+  helpNode.textContent = help;
+  const input = multiline
+    ? document.createElement("textarea")
+    : document.createElement("input");
+  input.id = id;
+  input.value = value;
+  input.spellcheck = false;
+  input.addEventListener("input", () => onInput(input.value));
+  field.append(labelNode, helpNode, input);
+  return field;
+}
+
+function mtlsCommandResult() {
+  try {
+    return {
+      command: buildMtlsCommand({
+        brokerHost: state.mtls.brokerHost,
+        brokerIps: state.mtls.brokerIps.split(/[\s,]+/).filter(Boolean),
+        deviceIds: parseMtlsDeviceIds(state.mtls.deviceIds),
+        outputDir: state.mtls.outputDir,
+      }),
+      error: "",
+    };
+  } catch (error) {
+    return { command: "", error: error.message };
+  }
+}
+
+function renderMtlsPage() {
+  editorNode.classList.remove("architecture-editor");
+  editorNode.replaceChildren();
+
+  const header = document.createElement("header");
+  const title = document.createElement("h2");
+  title.textContent = "MQTT mutual TLS";
+  const intro = document.createElement("p");
+  intro.textContent = "Generate one private CA, a broker identity, and a unique certificate for the backend and every Pi. Certificate CNs become Mosquitto usernames, replacing MQTT passwords.";
+  header.append(title, intro);
+  editorNode.append(header);
+
+  const warning = document.createElement("aside");
+  warning.className = "mtls-callout";
+  warning.textContent = "Use a DNS name that every client actually uses to connect. Add the LAN IP only when some clients connect by IP. The CA private key authorizes new devices; archive it offline after enrollment.";
+  editorNode.append(warning);
+
+  const form = document.createElement("section");
+  form.className = "mtls-section";
+  const formTitle = document.createElement("h3");
+  formTitle.textContent = "1 · Prepare the generator command";
+  const formGrid = document.createElement("div");
+  formGrid.className = "mtls-form";
+  const commandArea = document.createElement("div");
+  commandArea.className = "mtls-command";
+
+  const refreshCommand = () => {
+    const result = mtlsCommandResult();
+    commandArea.replaceChildren();
+    if (result.error) {
+      const error = document.createElement("p");
+      error.className = "form-error";
+      error.textContent = result.error;
+      commandArea.append(error);
+    } else {
+      commandArea.append(makeCodeBlock(result.command, "Copy command"));
+    }
+  };
+
+  formGrid.append(
+    makeMtlsInput({
+      id: "mtls-broker-host",
+      label: "Broker DNS name",
+      help: "Certificate hostname, for example mqtt.home.arpa. Do not include mqtt:// or a port.",
+      value: state.mtls.brokerHost,
+      onInput: (value) => {
+        state.mtls.brokerHost = value;
+        refreshCommand();
+      },
+    }),
+    makeMtlsInput({
+      id: "mtls-broker-ips",
+      label: "Broker IP SANs",
+      help: "Optional, comma or space separated. Include each IP clients use directly.",
+      value: state.mtls.brokerIps,
+      onInput: (value) => {
+        state.mtls.brokerIps = value;
+        refreshCommand();
+      },
+    }),
+    makeMtlsInput({
+      id: "mtls-device-ids",
+      label: "Client certificate IDs",
+      help: "One per line. Keep backend, then add every Pi device.id. Rerun later with a new ID to enroll another device.",
+      value: state.mtls.deviceIds,
+      multiline: true,
+      onInput: (value) => {
+        state.mtls.deviceIds = value;
+        refreshCommand();
+      },
+    }),
+    makeMtlsInput({
+      id: "mtls-output-dir",
+      label: "Private PKI directory",
+      help: "Generated keys are ignored by Git. The default matches the Compose TLS overlay.",
+      value: state.mtls.outputDir,
+      onInput: (value) => {
+        state.mtls.outputDir = value;
+        refreshCommand();
+      },
+    }),
+  );
+  form.append(formTitle, formGrid, commandArea);
+  editorNode.append(form);
+  refreshCommand();
+
+  const references = document.createElement("section");
+  references.className = "mtls-section";
+  const referencesTitle = document.createElement("h3");
+  referencesTitle.textContent = "2 · Broker configuration references";
+  const referenceList = document.createElement("ul");
+  [
+    ["mosquitto/config/mosquitto.conf", "Current password listener; retained as the default for a reversible migration."],
+    ["mosquitto/config/mosquitto-mtls.conf.example", "mTLS listener on 8883; the Compose overlay mounts it as mosquitto.conf."],
+    ["mosquitto/config/acl-mtls", "Maps certificate CNs to per-device topics and gives backend fleet access."],
+    ["docker-compose.mtls.yml", "Mounts only the broker and backend identities into their containers."],
+  ].forEach(([path, detail]) => {
+    const item = document.createElement("li");
+    const code = document.createElement("code");
+    code.textContent = path;
+    item.append(code, document.createTextNode(` — ${detail}`));
+    referenceList.append(item);
+  });
+  references.append(referencesTitle, referenceList);
+  references.append(makeCodeBlock(
+    [
+      'MQTT_PORT="8883"',
+      'MQTT_USERNAME=""',
+      'MQTT_PASSWORD=""',
+      'MQTT_TLS_ENABLED="true"',
+      'MQTT_TLS_CA_CERT="/run/secrets/mqtt/ca.crt"',
+      'MQTT_TLS_CLIENT_CERT="/run/secrets/mqtt/client.crt"',
+      'MQTT_TLS_CLIENT_KEY="/run/secrets/mqtt/client.key"',
+      "",
+      "docker compose -f docker-compose.yml -f docker-compose.mtls.yml up -d",
+    ].join("\n"),
+    "Copy backend settings",
+  ));
+  editorNode.append(references);
+
+  const pi = selectedPiModel();
+  const device = pi && fieldValue(pi, "device.id") ? piId(pi) : "pi-01";
+  const piSection = document.createElement("section");
+  piSection.className = "mtls-section";
+  const piTitle = document.createElement("h3");
+  piTitle.textContent = `3 · Install the ${device} client bundle`;
+  const piHelp = document.createElement("p");
+  piHelp.className = "description";
+  piHelp.textContent = "Copy only this device's bundle. Never copy ca.key, the backend key, or another Pi's key.";
+  const piInstall = [
+    `scp mosquitto/pki/clients/${device}/{ca.crt,client.crt,client.key} pi@${device}:/tmp/`,
+    `ssh pi@${device} 'sudo install -d -m 755 /etc/birdstream/mqtt && sudo install -m 644 /tmp/ca.crt /tmp/client.crt /etc/birdstream/mqtt/ && sudo install -m 600 /tmp/client.key /etc/birdstream/mqtt/client.key'`,
+  ].join("\n");
+  const piYaml = [
+    "mqtt:",
+    "  port: 8883",
+    "  username: null",
+    "  password: null",
+    "  tls:",
+    "    enabled: true",
+    "    ca_cert: /etc/birdstream/mqtt/ca.crt",
+    "    client_cert: /etc/birdstream/mqtt/client.crt",
+    "    client_key: /etc/birdstream/mqtt/client.key",
+  ].join("\n");
+  piSection.append(
+    piTitle,
+    piHelp,
+    makeCodeBlock(piInstall, "Copy install commands"),
+    makeCodeBlock(piYaml, "Copy Pi YAML"),
+  );
+  editorNode.append(piSection);
+
+  const readme = document.createElement("section");
+  readme.className = "mtls-section mtls-readme";
+  const readmeTitle = document.createElement("h3");
+  readmeTitle.textContent = "4 · Migration checklist";
+  const steps = document.createElement("ol");
+  [
+    "Stop after generating the PKI and verify each expected client bundle exists.",
+    "Deploy every Pi bundle and its YAML before disabling password authentication.",
+    "Set the backend environment values above, then start the stack with the mTLS Compose overlay.",
+    "Restart each Pi agent and confirm its status appears in the admin panel.",
+    "Confirm port 1883 is no longer listening, then firewall it and archive ca.key offline.",
+    "To add a Pi later, rerun the generator with its new --device ID; existing keys are never overwritten.",
+  ].forEach((text) => {
+    const item = document.createElement("li");
+    item.textContent = text;
+    steps.append(item);
+  });
+  readme.append(readmeTitle, steps);
+  editorNode.append(readme);
+}
+
 function renderField(model, field) {
   const wrapper = document.createElement("div");
   wrapper.className = "field";
@@ -795,6 +1060,10 @@ function createNewPi(piIdValue) {
   });
   state.documents.push(model);
   state.selectedPiTarget = model.targetPath;
+  state.mtls.deviceIds = [
+    ...parseMtlsDeviceIds(state.mtls.deviceIds),
+    id,
+  ].filter((value, index, values) => values.indexOf(value) === index).join("\n");
   setStatus(
     `Created ${model.targetPath}. Save it to the project or download it.`,
     "success",
@@ -941,6 +1210,7 @@ function render() {
   renderTabs();
   if (state.view === "overview") renderArchitecture();
   else if (state.view === "consistency") renderConsistencyPage();
+  else if (state.view === "mtls") renderMtlsPage();
   else renderEditor();
 }
 

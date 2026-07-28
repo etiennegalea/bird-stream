@@ -156,6 +156,7 @@ pi-configs/
 mosquitto/data/
 mosquitto/log/
 mosquitto/config/passwd
+mosquitto/pki/
 
 # YOLO weights auto-downloaded by the detection worker
 backend/*.pt

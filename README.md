@@ -149,6 +149,13 @@ interactively and do not appear in shell history:
 Use the backend password as `MQTT_PASSWORD` in `.env`. Put each Pi user's
 password in that Pi's `pi-agent/config.yaml`.
 
+To replace passwords with client certificates, open the configurator's
+**MQTT mutual TLS** section. It prepares one command for the backend and every
+Pi, shows the required Pi YAML and backend variables, and links the tracked
+`mosquitto/config/mosquitto-mtls.conf.example`,
+`mosquitto/config/acl-mtls`, and `docker-compose.mtls.yml` references. The full
+migration procedure is in `mosquitto/README.md`.
+
 ### 3. Start the stack
 
 ```bash

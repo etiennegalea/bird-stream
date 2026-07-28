@@ -1,0 +1,18 @@
+# Opt-in mutual-TLS overlay.
+#
+# Generate mosquitto/pki first, set the MQTT_TLS_* variables shown in
+# .env.template, then run:
+#   docker compose -f docker-compose.yml -f docker-compose.mtls.yml up -d
+
+services:
+  backend:
+    volumes:
+      # Only the backend client identity is exposed to the backend container.
+      - ./mosquitto/pki/clients/backend:/run/secrets/mqtt:ro
+
+  mosquitto:
+    volumes:
+      # Override the password listener without editing the tracked default.
+      - ./mosquitto/config/mosquitto-mtls.conf.example:/mosquitto/config/mosquitto.conf:ro
+      # This directory contains only the broker key and public CA certificate.
+      - ./mosquitto/pki/broker:/mosquitto/certs:ro

@@ -79,7 +79,7 @@ const CONFIG_RELATIONSHIPS = Object.freeze([
       { target: ".env", path: "MQTT_PASSWORD" },
       { external: "Mosquitto password database entry for the backend user" },
     ],
-    note: "Create/update it with ./scripts/mosquitto-user.sh backend.",
+    note: "Password mode uses ./scripts/mosquitto-user.sh backend. In mTLS mode the backend certificate CN must be backend.",
   },
   {
     id: "mqtt-host-context",
@@ -102,7 +102,7 @@ const CONFIG_RELATIONSHIPS = Object.freeze([
       { target: "pi-agent/config.yaml", path: "mqtt.password" },
       { external: "Mosquitto password database entry for this Pi user" },
     ],
-    note: "Create/update it with ./scripts/mosquitto-user.sh <pi-id>.",
+    note: "Password mode uses mosquitto-user.sh. In mTLS mode the certificate CN must equal device.id and the password stays empty.",
   },
   {
     id: "database-url",
@@ -442,6 +442,48 @@ function compareRelationshipValues(values) {
     : "mismatch";
 }
 
+function isValidBrokerHost(value) {
+  return /^[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?$/.test(
+    String(value ?? "").trim(),
+  );
+}
+
+function parseMtlsDeviceIds(value) {
+  const candidates = String(value ?? "")
+    .split(/[\s,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return [...new Set(candidates)];
+}
+
+function shellQuote(value) {
+  return `'${String(value).replaceAll("'", "'\"'\"'")}'`;
+}
+
+function buildMtlsCommand({ brokerHost, brokerIps = [], deviceIds = [], outputDir }) {
+  const host = String(brokerHost ?? "").trim();
+  const ips = brokerIps.map((value) => String(value).trim()).filter(Boolean);
+  const devices = parseMtlsDeviceIds(deviceIds);
+  if (!isValidBrokerHost(host)) {
+    throw new Error("Enter a valid broker DNS name.");
+  }
+  if (!devices.length || devices.some((device) => !isValidPiId(device))) {
+    throw new Error("Enter at least one valid client ID.");
+  }
+  if (!String(outputDir ?? "").trim()) {
+    throw new Error("Enter an output directory.");
+  }
+
+  const lines = [
+    "./scripts/mosquitto-mtls.sh",
+    `--broker-host ${shellQuote(host)}`,
+  ];
+  ips.forEach((ip) => lines.push(`--broker-ip ${shellQuote(ip)}`));
+  devices.forEach((device) => lines.push(`--device ${shellQuote(device)}`));
+  lines.push(`--output-dir ${shellQuote(String(outputDir).trim())}`);
+  return lines.join(" \\\n  ");
+}
+
 async function readTextSource(source) {
   if (typeof source?.text === "function") return source.text();
   if (typeof source?.getFile === "function") {
@@ -466,6 +508,9 @@ const api = Object.freeze({
   renderDocument,
   normalizeConfigValue,
   compareRelationshipValues,
+  isValidBrokerHost,
+  parseMtlsDeviceIds,
+  buildMtlsCommand,
   readTextSource,
 });
 

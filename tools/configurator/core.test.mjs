@@ -6,12 +6,15 @@ const require = createRequire(import.meta.url);
 const {
   CONFIG_RELATIONSHIPS,
   compareRelationshipValues,
+  buildMtlsCommand,
   documentKind,
   isPiConfigTarget,
   isValidPiId,
+  isValidBrokerHost,
   mergeTemplate,
   parseYaml,
   piConfigTarget,
+  parseMtlsDeviceIds,
   readTextSource,
   renderDocument,
   targetPathForTemplate,
@@ -122,4 +125,37 @@ test("reads both browser File objects and writable file handles", async () => {
     "write-access",
   );
   await assert.rejects(() => readTextSource({}), /Unsupported configuration/);
+});
+
+test("builds a safe repeatable mutual TLS generation command", () => {
+  assert.equal(isValidBrokerHost("mqtt.home.arpa"), true);
+  assert.equal(isValidBrokerHost("https://mqtt.example"), false);
+  assert.deepEqual(
+    parseMtlsDeviceIds("backend, pi-01\npi-02 pi-01"),
+    ["backend", "pi-01", "pi-02"],
+  );
+  assert.equal(
+    buildMtlsCommand({
+      brokerHost: "mqtt.home.arpa",
+      brokerIps: ["192.168.1.100"],
+      deviceIds: ["backend", "pi-01"],
+      outputDir: "mosquitto/pki",
+    }),
+    [
+      "./scripts/mosquitto-mtls.sh",
+      "  --broker-host 'mqtt.home.arpa'",
+      "  --broker-ip '192.168.1.100'",
+      "  --device 'backend'",
+      "  --device 'pi-01'",
+      "  --output-dir 'mosquitto/pki'",
+    ].join(" \\\n"),
+  );
+  assert.throws(
+    () => buildMtlsCommand({
+      brokerHost: "bad host",
+      deviceIds: ["pi-01"],
+      outputDir: "mosquitto/pki",
+    }),
+    /valid broker DNS/,
+  );
 });

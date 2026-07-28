@@ -1,0 +1,9 @@
+# The backend controls all transmitters and receives their retained status.
+user backend
+topic read camera/+/status
+topic write camera/+/control
+
+# Every Pi certificate CN must equal device.id. Mosquitto substitutes %u with
+# that CN, preventing one transmitter from using another transmitter's topics.
+pattern write camera/%u/status
+pattern read camera/%u/control

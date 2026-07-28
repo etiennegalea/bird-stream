@@ -1,0 +1,24 @@
+# Mutual-TLS replacement for mosquitto/config/mosquitto.conf.
+# Generate the referenced certificates with scripts/mosquitto-mtls.sh, then
+# copy this file over mosquitto.conf after all clients are configured.
+
+persistence true
+persistence_location /mosquitto/data/
+log_dest stdout
+
+listener 8883
+protocol mqtt
+
+cafile /mosquitto/certs/ca.crt
+certfile /mosquitto/certs/server.crt
+keyfile /mosquitto/certs/server.key
+
+# TLS 1.2 is the minimum; TLS 1.3 is also accepted.
+tls_version tlsv1.2
+
+# A CA-signed client certificate is mandatory. Its CN becomes the Mosquitto
+# username used by acl_file, so MQTT passwords are neither requested nor read.
+require_certificate true
+use_identity_as_username true
+allow_anonymous false
+acl_file /mosquitto/config/acl-mtls

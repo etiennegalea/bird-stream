@@ -80,7 +80,12 @@ DEFAULT_CONFIG = {
         "keepalive": 60,
         "username": None,
         "password": None,
-        "tls": {"enabled": False, "ca_cert": None},
+        "tls": {
+            "enabled": False,
+            "ca_cert": None,
+            "client_cert": None,
+            "client_key": None,
+        },
     },
     "camera": {
         # Every detected V4L2 capture device is streamed independently.
@@ -1226,7 +1231,19 @@ class CameraAgent:
             self.client.username_pw_set(m["username"], m.get("password"))
         tls = m.get("tls") or {}
         if tls.get("enabled"):
-            self.client.tls_set(ca_certs=tls.get("ca_cert"))
+            required = ("ca_cert", "client_cert", "client_key")
+            missing = [name for name in required if not tls.get(name)]
+            if missing:
+                logger.critical(
+                    "MQTT mutual TLS is enabled but these paths are missing: %s",
+                    ", ".join(missing),
+                )
+                sys.exit(1)
+            self.client.tls_set(
+                ca_certs=tls["ca_cert"],
+                certfile=tls["client_cert"],
+                keyfile=tls["client_key"],
+            )
 
         logger.info(f"[{self.pi_id}] Connecting to {m['host']}:{m.get('port', 1883)}")
         try:

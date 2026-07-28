@@ -231,6 +231,44 @@ class TestLifecycle(unittest.TestCase):
         self.assertIsNone(svc._client)
         self.assertFalse(svc.connected)
 
+    @mock.patch("services.mqtt_service.mqtt.Client")
+    def test_mutual_tls_configures_ca_and_client_identity(self, client_class):
+        client = client_class.return_value
+        with mock.patch.dict("os.environ", {
+            "MQTT_ENABLED": "true",
+            "MQTT_USERNAME": "",
+            "MQTT_PASSWORD": "",
+            "MQTT_TLS_ENABLED": "true",
+            "MQTT_TLS_CA_CERT": "/tls/ca.crt",
+            "MQTT_TLS_CLIENT_CERT": "/tls/client.crt",
+            "MQTT_TLS_CLIENT_KEY": "/tls/client.key",
+        }, clear=True):
+            svc = MqttDeviceService()
+            svc.start()
+        client.tls_set.assert_called_once_with(
+            ca_certs="/tls/ca.crt",
+            certfile="/tls/client.crt",
+            keyfile="/tls/client.key",
+        )
+        client.username_pw_set.assert_not_called()
+        client.connect_async.assert_called_once_with(
+            "mosquitto", 1883, keepalive=60,
+        )
+
+    @mock.patch("services.mqtt_service.mqtt.Client")
+    def test_mutual_tls_missing_path_does_not_connect(self, client_class):
+        client = client_class.return_value
+        with mock.patch.dict("os.environ", {
+            "MQTT_ENABLED": "true",
+            "MQTT_TLS_ENABLED": "true",
+            "MQTT_TLS_CA_CERT": "/tls/ca.crt",
+            "MQTT_TLS_CLIENT_CERT": "",
+            "MQTT_TLS_CLIENT_KEY": "/tls/client.key",
+        }, clear=True):
+            svc = MqttDeviceService()
+            svc.start()
+        client.connect_async.assert_not_called()
+
     def test_on_connect_subscribes_to_status_wildcard(self):
         svc = make_service(connected=False)
         client = FakeClient()

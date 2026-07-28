@@ -9,6 +9,8 @@ Env:
     MQTT_HOST      default "mosquitto" (compose service name)
     MQTT_PORT      default 1883
     MQTT_USERNAME / MQTT_PASSWORD
+    MQTT_TLS_ENABLED
+    MQTT_TLS_CA_CERT / MQTT_TLS_CLIENT_CERT / MQTT_TLS_CLIENT_KEY
 """
 
 import json
@@ -36,6 +38,12 @@ class MqttDeviceService:
         self.port = int(os.environ.get("MQTT_PORT", "1883"))
         self.username = os.environ.get("MQTT_USERNAME") or None
         self.password = os.environ.get("MQTT_PASSWORD") or None
+        self.tls_enabled = (
+            os.environ.get("MQTT_TLS_ENABLED", "false").lower() == "true"
+        )
+        self.tls_ca_cert = os.environ.get("MQTT_TLS_CA_CERT") or None
+        self.tls_client_cert = os.environ.get("MQTT_TLS_CLIENT_CERT") or None
+        self.tls_client_key = os.environ.get("MQTT_TLS_CLIENT_KEY") or None
 
         self.connected = False
         self._client = None
@@ -55,6 +63,24 @@ class MqttDeviceService:
         )
         if self.username:
             client.username_pw_set(self.username, self.password)
+        if self.tls_enabled:
+            tls_paths = {
+                "MQTT_TLS_CA_CERT": self.tls_ca_cert,
+                "MQTT_TLS_CLIENT_CERT": self.tls_client_cert,
+                "MQTT_TLS_CLIENT_KEY": self.tls_client_key,
+            }
+            missing = [name for name, value in tls_paths.items() if not value]
+            if missing:
+                logger.error(
+                    "MQTT mutual TLS enabled but paths are missing: %s",
+                    ", ".join(missing),
+                )
+                return
+            client.tls_set(
+                ca_certs=self.tls_ca_cert,
+                certfile=self.tls_client_cert,
+                keyfile=self.tls_client_key,
+            )
         client.on_connect = self._on_connect
         client.on_disconnect = self._on_disconnect
         client.on_message = self._on_message

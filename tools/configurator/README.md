@@ -74,6 +74,21 @@ consistency panel. Relationship checks involving a Pi use the currently
 selected transmitter, so selecting each Pi makes it clear which values must
 match the shared Proxmox configuration.
 
+The **MQTT mutual TLS** page is a local migration assistant. It:
+
+- pre-fills the backend and all discovered Pi IDs as certificate identities;
+- collects the broker DNS name and optional IP subject-alternative names;
+- produces a copyable `scripts/mosquitto-mtls.sh` command;
+- references the tracked Mosquitto mTLS configuration, ACL, and Compose
+  overlay;
+- produces the backend environment settings and selected Pi YAML; and
+- includes a deployment checklist that keeps the CA key and per-device keys
+  separated.
+
+The browser does not generate or retain private keys. Run the generated command
+in the repository terminal so OpenSSL can write them to the ignored
+`mosquitto/pki/` directory.
+
 The primary folder picker works when `index.html` is opened directly from disk
 and in browsers without the File System Access API. It operates in
 download-only mode. Chrome and Edge on localhost additionally expose
