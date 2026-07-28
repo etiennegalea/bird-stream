@@ -18,10 +18,16 @@ Env:
                             (default /var/lib/birdstream/models)
     DETECTION_FPS           inference sampling rate (default 2)
     DETECTION_CONF          min confidence (default 0.4)
-    DETECTION_CLASSES       comma-separated COCO class names (default "bird")
+    DETECTION_CLASSES       comma-separated supported object names
+                            (bird, cat, human; default all three)
     DETECTION_MOTION_GATE   "false" to run inference on every sampled frame
     DETECTION_MOTION_MIN_AREA  min changed-pixel fraction to count as motion
                                (default 0.005 = 0.5% of the frame)
+    BIRD_LINGER_SECONDS     continuous bird presence required before an alert
+                            (default 3 seconds)
+    BIRD_PRESENCE_GAP_SECONDS  tolerated missed-detection gap (default 1 second)
+    BIRD_SNAPSHOT_BORDER    crop padding relative to the bird bounds
+                            (default 0.4 = 40%)
 
 The ultralytics import is lazy so the backend runs fine without the optional
 'detection' dependency group installed (uv sync --group detection).
@@ -37,6 +43,10 @@ from pathlib import Path
 from urllib import parse, request
 
 logger = logging.getLogger("detection_service")
+
+_SUPPORTED_CLASSES = {"bird", "cat", "human"}
+_MODEL_CLASS_NAMES = {"human": "person"}
+_DISPLAY_CLASS_NAMES = {"person": "human"}
 
 
 def detection_enabled() -> bool:
@@ -99,9 +109,29 @@ class DetectionService:
         )
         self.sample_fps = float(os.environ.get("DETECTION_FPS", "2"))
         self.conf = float(os.environ.get("DETECTION_CONF", "0.4"))
-        self.classes = _parse_classes(os.environ.get("DETECTION_CLASSES", "bird"))
+        requested_classes = _parse_classes(
+            os.environ.get("DETECTION_CLASSES", "bird,cat,human")
+        )
+        unsupported_classes = requested_classes - _SUPPORTED_CLASSES
+        if unsupported_classes:
+            logger.warning(
+                "Unsupported detection classes ignored: %s",
+                sorted(unsupported_classes),
+            )
+        self.classes = requested_classes & _SUPPORTED_CLASSES
+        if not self.classes:
+            self.classes = set(_SUPPORTED_CLASSES)
         self.notification_cooldown = float(
             os.environ.get("BIRD_NOTIFICATION_COOLDOWN_SECONDS", "900")
+        )
+        self.bird_linger_seconds = max(
+            0.0, float(os.environ.get("BIRD_LINGER_SECONDS", "3"))
+        )
+        self.bird_presence_gap_seconds = max(
+            0.0, float(os.environ.get("BIRD_PRESENCE_GAP_SECONDS", "1"))
+        )
+        self.snapshot_border = max(
+            0.0, float(os.environ.get("BIRD_SNAPSHOT_BORDER", "0.4"))
         )
         self.motion_gate_enabled = os.environ.get(
             "DETECTION_MOTION_GATE", "true").lower() == "true"
@@ -113,7 +143,10 @@ class DetectionService:
         self._thread = None
         self._model = None
         self._on_detection = on_detection
-        self._last_notification = 0.0
+        self._last_notification = None
+        self._bird_seen_since = None
+        self._bird_last_seen = None
+        self._bird_alerted_for_presence = False
 
         # state exposed via the API
         self.running = False
@@ -173,13 +206,21 @@ class DetectionService:
         self.last_error = None
         # Resolve requested class names -> ids for this model
         name_to_id = {v.lower(): k for k, v in model.names.items()}
-        self._class_ids = [name_to_id[c] for c in self.classes if c in name_to_id]
-        missing = self.classes - set(name_to_id)
+        requested_model_names = {
+            _MODEL_CLASS_NAMES.get(name, name) for name in self.classes
+        }
+        self._class_ids = [
+            name_to_id[name]
+            for name in requested_model_names
+            if name in name_to_id
+        ]
+        missing = requested_model_names - set(name_to_id)
         if missing:
             logger.warning(f"Classes not in model vocabulary, ignored: {missing}")
         if not self._class_ids:
-            logger.warning("No valid classes requested; detecting ALL classes")
-            self._class_ids = None
+            self.last_error = "Model does not support bird, cat, or human detection"
+            logger.error(self.last_error)
+            return None
         return model
 
     def _infer(self, frame) -> list[dict]:
@@ -189,7 +230,10 @@ class DetectionService:
         for r in results:
             for b in r.boxes:
                 detections.append({
-                    "label": self._model.names[int(b.cls)],
+                    "label": _DISPLAY_CLASS_NAMES.get(
+                        self._model.names[int(b.cls)].lower(),
+                        self._model.names[int(b.cls)].lower(),
+                    ),
                     "confidence": round(float(b.conf), 3),
                     "bbox": [round(float(v), 1) for v in b.xyxy[0].tolist()],
                 })
@@ -291,7 +335,14 @@ class DetectionService:
                     continue
                 last_inference = now
 
-                if self.motion_gate_enabled and not self._gate.check(frame):
+                # Once a bird-presence candidate exists, keep sampling even if
+                # the scene becomes still. Otherwise the motion gate would
+                # prevent a perched bird from ever satisfying the linger time.
+                if (
+                    self.motion_gate_enabled
+                    and self._bird_seen_since is None
+                    and not self._gate.check(frame)
+                ):
                     continue
 
                 try:
@@ -309,33 +360,111 @@ class DetectionService:
                         self.events.append(entry)
                 if detections:
                     logger.info(f"Detected: {detections}")
-                    self._notify_detection(frame, detections, entry["timestamp"])
+                self._track_bird_presence(
+                    frame, detections, entry["timestamp"], now
+                )
 
             cap.release()
 
         self.connected = False
 
-    def _notify_detection(self, frame, detections: list[dict], timestamp: str) -> bool:
-        """Hand the triggering frame to the email bridge, subject to cooldown."""
+    def _track_bird_presence(
+        self,
+        frame,
+        detections: list[dict],
+        timestamp: str,
+        now: float | None = None,
+    ) -> bool:
+        """Notify once when a bird has remained visible for the linger period."""
+        now = time.monotonic() if now is None else now
+        birds = [item for item in detections if item.get("label") == "bird"]
+
+        if not birds:
+            if (
+                self._bird_last_seen is not None
+                and now - self._bird_last_seen > self.bird_presence_gap_seconds
+            ):
+                self._bird_seen_since = None
+                self._bird_last_seen = None
+                self._bird_alerted_for_presence = False
+            return False
+
+        if self._bird_seen_since is None:
+            self._bird_seen_since = now
+            self._bird_alerted_for_presence = False
+        self._bird_last_seen = now
+
+        if (
+            self._bird_alerted_for_presence
+            or now - self._bird_seen_since < self.bird_linger_seconds
+        ):
+            return False
+
+        notified = self._notify_detection(frame, birds, timestamp, now=now)
+        if notified:
+            self._bird_alerted_for_presence = True
+        return notified
+
+    def _crop_bird_snapshot(self, frame, detections: list[dict]):
+        """Crop around every visible bird while retaining a generous border."""
+        height, width = frame.shape[:2]
+        boxes = [
+            item["bbox"]
+            for item in detections
+            if item.get("label") == "bird"
+            and len(item.get("bbox", [])) == 4
+        ]
+        if not boxes:
+            return frame
+
+        left = min(box[0] for box in boxes)
+        top = min(box[1] for box in boxes)
+        right = max(box[2] for box in boxes)
+        bottom = max(box[3] for box in boxes)
+        bird_width = max(1.0, right - left)
+        bird_height = max(1.0, bottom - top)
+        pad_x = max(bird_width * self.snapshot_border, width * 0.05)
+        pad_y = max(bird_height * self.snapshot_border, height * 0.05)
+
+        x1 = max(0, int(left - pad_x))
+        y1 = max(0, int(top - pad_y))
+        x2 = min(width, int(right + pad_x + 0.999))
+        y2 = min(height, int(bottom + pad_y + 0.999))
+        if x2 <= x1 or y2 <= y1:
+            return frame
+        return frame[y1:y2, x1:x2]
+
+    def _notify_detection(
+        self,
+        frame,
+        detections: list[dict],
+        timestamp: str,
+        now: float | None = None,
+    ) -> bool:
+        """Send the bordered bird crop to the email bridge, subject to cooldown."""
         if self._on_detection is None:
             return False
-        now = time.monotonic()
-        if now - self._last_notification < self.notification_cooldown:
+        now = time.monotonic() if now is None else now
+        if (
+            self._last_notification is not None
+            and now - self._last_notification < self.notification_cooldown
+        ):
             return False
 
         import cv2
 
-        encoded, buffer = cv2.imencode(".jpg", frame)
+        snapshot = self._crop_bird_snapshot(frame, detections)
+        encoded, buffer = cv2.imencode(".jpg", snapshot)
         if not encoded:
             logger.warning("Could not encode bird detection snapshot")
             return False
 
-        self._last_notification = now
         try:
             self._on_detection(buffer.tobytes(), detections, timestamp)
         except Exception:
             logger.exception("Bird notification callback failed")
             return False
+        self._last_notification = now
         return True
 
     # ── API accessors ─────────────────────────────────────────────────────
@@ -355,6 +484,9 @@ class DetectionService:
             "classes": sorted(self.classes),
             "motion_gate": self.motion_gate_enabled,
             "notification_cooldown_seconds": self.notification_cooldown,
+            "bird_linger_seconds": self.bird_linger_seconds,
+            "bird_presence_gap_seconds": self.bird_presence_gap_seconds,
+            "snapshot_border": self.snapshot_border,
             "frames_seen": self.frames_seen,
             "frames_inferred": self.frames_inferred,
             "last_frame_ts": self.last_frame_ts,

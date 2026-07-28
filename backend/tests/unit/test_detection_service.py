@@ -75,7 +75,9 @@ class TestDetectionServiceConfig:
                     "DETECTION_MODEL_DIR", "DETECTION_CONF",
                     "DETECTION_CLASSES", "DETECTION_MOTION_GATE",
                     "DETECTION_RTSP_BASE_URL", "MEDIAMTX_API_URL",
-                    "MEDIAMTX_PATH"]:
+                    "MEDIAMTX_PATH", "BIRD_LINGER_SECONDS",
+                    "BIRD_PRESENCE_GAP_SECONDS", "BIRD_SNAPSHOT_BORDER",
+                    "BIRD_NOTIFICATION_COOLDOWN_SECONDS"]:
             monkeypatch.delenv(var, raising=False)
         svc = DetectionService()
         assert svc.configured_stream_url == "auto"
@@ -84,7 +86,10 @@ class TestDetectionServiceConfig:
         assert str(svc.model_path) == "/var/lib/birdstream/models/yolo11n.pt"
         assert svc.sample_fps == 2.0
         assert svc.conf == 0.4
-        assert svc.classes == {"bird"}
+        assert svc.classes == {"bird", "cat", "human"}
+        assert svc.bird_linger_seconds == 3.0
+        assert svc.bird_presence_gap_seconds == 1.0
+        assert svc.snapshot_border == 0.4
         assert svc.motion_gate_enabled is True
         assert svc.running is False
 
@@ -99,6 +104,31 @@ class TestDetectionServiceConfig:
         assert svc.sample_fps == 5.0
         assert svc.classes == {"bird", "cat"}
         assert svc.motion_gate_enabled is False
+
+    def test_only_supported_object_classes_are_retained(self, monkeypatch):
+        monkeypatch.setenv("DETECTION_CLASSES", "bird,dog,human")
+
+        svc = DetectionService()
+
+        assert svc.classes == {"bird", "human"}
+
+    def test_human_maps_to_person_model_class(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("DETECTION_CLASSES", "human")
+        monkeypatch.setenv("DETECTION_MODEL_DIR", str(tmp_path))
+
+        class FakeModel:
+            names = {0: "person", 1: "bird"}
+
+        monkeypatch.setitem(
+            sys.modules,
+            "ultralytics",
+            SimpleNamespace(YOLO=lambda _path: FakeModel()),
+        )
+
+        svc = DetectionService()
+
+        assert svc._load_model() is not None
+        assert svc._class_ids == [0]
 
     def test_auto_discovers_primary_stream_first(self, monkeypatch):
         response = BytesIO(json.dumps({
@@ -215,3 +245,74 @@ class TestDetectionServiceConfig:
         assert len(calls) == 1
         assert calls[0][0].startswith(b"\xff\xd8")
         assert calls[0][1] == detections
+
+    def test_bird_must_linger_before_notification(self, monkeypatch):
+        calls = []
+        monkeypatch.setenv("BIRD_LINGER_SECONDS", "3")
+        svc = DetectionService(
+            on_detection=lambda jpeg, detections, timestamp: calls.append(
+                (jpeg, detections, timestamp)
+            )
+        )
+        frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        bird = [{"label": "bird", "confidence": 0.92, "bbox": [30, 30, 60, 60]}]
+
+        assert not svc._track_bird_presence(frame, bird, "first", now=10.0)
+        assert not svc._track_bird_presence(frame, bird, "second", now=12.9)
+        assert svc._track_bird_presence(frame, bird, "third", now=13.0)
+        assert not svc._track_bird_presence(frame, bird, "fourth", now=20.0)
+
+        assert len(calls) == 1
+        assert calls[0][1] == bird
+        assert calls[0][2] == "third"
+
+    def test_cat_and_human_never_trigger_bird_alert(self):
+        calls = []
+        svc = DetectionService(on_detection=lambda *_args: calls.append(True))
+        frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        other_objects = [
+            {"label": "cat", "bbox": [10, 10, 20, 20]},
+            {"label": "human", "bbox": [30, 30, 80, 90]},
+        ]
+
+        svc._track_bird_presence(frame, other_objects, "first", now=1.0)
+        svc._track_bird_presence(frame, other_objects, "later", now=10.0)
+
+        assert calls == []
+
+    def test_short_bird_visit_is_discarded(self, monkeypatch):
+        calls = []
+        monkeypatch.setenv("BIRD_LINGER_SECONDS", "3")
+        monkeypatch.setenv("BIRD_PRESENCE_GAP_SECONDS", "1")
+        svc = DetectionService(on_detection=lambda *_args: calls.append(True))
+        frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        bird = [{"label": "bird", "bbox": [30, 30, 60, 60]}]
+
+        svc._track_bird_presence(frame, bird, "seen", now=1.0)
+        svc._track_bird_presence(frame, [], "gone", now=2.1)
+        svc._track_bird_presence(frame, bird, "back", now=3.0)
+        svc._track_bird_presence(frame, bird, "not-yet", now=5.9)
+
+        assert calls == []
+
+    def test_snapshot_crops_all_birds_with_border(self, monkeypatch):
+        snapshots = []
+        monkeypatch.setenv("BIRD_SNAPSHOT_BORDER", "0.5")
+        svc = DetectionService(
+            on_detection=lambda jpeg, *_args: snapshots.append(jpeg)
+        )
+        frame = np.zeros((200, 300, 3), dtype=np.uint8)
+        birds = [
+            {"label": "bird", "bbox": [100, 80, 140, 120]},
+            {"label": "bird", "bbox": [150, 90, 170, 130]},
+        ]
+
+        assert svc._notify_detection(frame, birds, "now", now=1.0)
+
+        import cv2
+
+        decoded = cv2.imdecode(
+            np.frombuffer(snapshots[0], dtype=np.uint8), cv2.IMREAD_COLOR
+        )
+        # Union is 70x50; 50% padding on both sides produces a 140x100 crop.
+        assert decoded.shape[:2] == (100, 140)

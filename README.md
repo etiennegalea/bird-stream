@@ -267,7 +267,15 @@ docker compose build backend && docker compose up -d backend
 curl localhost:8051/detection/status     # or /detection/latest, /detection/events
 ```
 
-Tune with `DETECTION_FPS`, `DETECTION_CONF`, `DETECTION_CLASSES`.
+The lightweight model recognizes only `bird`, `cat`, and `human` for this
+application. Bird alerts are sent to verified, unblocked subscribers only after
+a bird remains visible for `BIRD_LINGER_SECONDS` (3 seconds by default). The
+snapshot taken at that point is cropped around all visible birds with a
+configurable `BIRD_SNAPSHOT_BORDER`, embedded in the prepared email, and
+attached as a JPEG. Tune sampling and recognition with `DETECTION_FPS`,
+`DETECTION_CONF`, and `DETECTION_CLASSES`; tune brief missed detections with
+`BIRD_PRESENCE_GAP_SECONDS` and repeat-alert suppression with
+`BIRD_NOTIFICATION_COOLDOWN_SECONDS`.
 With `DETECTION_STREAM_URL=auto`, the worker queries MediaMTX and follows the
 first active camera path, preferring the legacy `birdcam` path. Set an explicit
 internal RTSP URL such as `rtsp://mediamtx:8554/birdcam-pi-01-feeder` to pin
