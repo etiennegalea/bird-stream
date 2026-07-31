@@ -193,6 +193,7 @@ async def login_user(
             "is_blocked": user.is_blocked,
             "bird_notification_email": user.bird_notification_email,
             "auto_join_chat": user.auto_join_chat,
+            "profanity_filter_enabled": user.profanity_filter_enabled,
         }
         return token, user_dict, ""
 
@@ -260,6 +261,7 @@ def _profile_dict(user: User) -> dict:
         "is_blocked": user.is_blocked,
         "bird_notification_email": user.bird_notification_email,
         "auto_join_chat": user.auto_join_chat,
+        "profanity_filter_enabled": user.profanity_filter_enabled,
     }
 
 
@@ -299,6 +301,7 @@ def update_user_profile(
     avatar: str | None,
     bird_notification_email: bool | None = None,
     auto_join_chat: bool | None = None,
+    profanity_filter_enabled: bool | None = None,
 ) -> tuple[dict | None, str]:
     """Returns (updated_profile, error). Passes None fields through unchanged."""
     with db_factory() as session:
@@ -337,6 +340,9 @@ def update_user_profile(
 
         if auto_join_chat is not None:
             user.auto_join_chat = auto_join_chat
+
+        if profanity_filter_enabled is not None:
+            user.profanity_filter_enabled = profanity_filter_enabled
 
         session.commit()
         return _profile_dict(user), ""
@@ -426,22 +432,35 @@ async def reset_password(
         return True, ""
 
 
-def get_public_profile_by_username(db_factory: sessionmaker, username: str) -> dict | None:
+def _public_profile(user: User, session, include_profanities: bool) -> dict:
+    profile = {"user_id": user.id, "username": user.username, "avatar": user.avatar, "bio": user.bio}
+    if include_profanities:
+        from services.profanity_service import get_profanity_counts, retention_days
+        profile["profanities"] = get_profanity_counts(session, user.id)
+        profile["profanity_retention_days"] = retention_days()
+    return profile
+
+
+def get_public_profile_by_username(
+    db_factory: sessionmaker, username: str, include_profanities: bool = False
+) -> dict | None:
     with db_factory() as session:
         user = session.execute(
             select(User).where(User.username == username)
         ).scalar_one_or_none()
         if not user:
             return None
-        return {"user_id": user.id, "username": user.username, "avatar": user.avatar, "bio": user.bio}
+        return _public_profile(user, session, include_profanities)
 
 
-def get_public_profile_by_id(db_factory: sessionmaker, user_id: int) -> dict | None:
+def get_public_profile_by_id(
+    db_factory: sessionmaker, user_id: int, include_profanities: bool = False
+) -> dict | None:
     with db_factory() as session:
         user = session.get(User, user_id)
         if not user:
             return None
-        return {"user_id": user.id, "username": user.username, "avatar": user.avatar, "bio": user.bio}
+        return _public_profile(user, session, include_profanities)
 
 
 async def seed_admin_user(

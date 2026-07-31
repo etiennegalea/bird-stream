@@ -53,22 +53,29 @@
           {#each group.streams as stream (stream.path)}
             {@const state = playerStates[stream.path] || {}}
             <article class="stream-card">
-              <div class="preview">
-                <video
-                  use:attachMedia={state.mediaStream}
-                  autoplay
-                  muted
-                  playsinline
-                  aria-label={`${stream.label} preview`}
-                >
-                  <track kind="captions" label="Captions" />
-                </video>
-                {#if !state.mediaStream}
-                  <div class="preview-state">
-                    {state.error ? 'Stream unavailable' : 'Connecting…'}
-                  </div>
-                {/if}
-              </div>
+              <button
+                type="button"
+                class="stream-select-btn"
+                aria-label={`Show ${stream.label} from ${stream.pi_id} as the main stream`}
+                on:click={() => dispatch('select', { path: stream.path })}
+              >
+                <div class="preview">
+                  <video
+                    use:attachMedia={state.mediaStream}
+                    autoplay
+                    muted
+                    playsinline
+                    aria-label={`${stream.label} preview`}
+                  >
+                    <track kind="captions" label="Captions" />
+                  </video>
+                  {#if !state.mediaStream}
+                    <div class="preview-state">
+                      {state.error ? 'Stream unavailable' : 'Connecting…'}
+                    </div>
+                  {/if}
+                </div>
+              </button>
 
               <div class="stream-row">
                 <div class="stream-identity">
@@ -80,17 +87,15 @@
                 <label class="visibility-toggle">
                   <input
                     type="checkbox"
-                    checked={hiddenPaths.has(stream.path)}
-                    aria-label={`Hide ${stream.label} from the main viewport`}
-                    on:change={() => dispatch('visibilitychange', {
+                    checked={!hiddenPaths.has(stream.path)}
+                    aria-label={`Show ${stream.label} over the main stream`}
+                    on:change={(event) => dispatch('visibilitychange', {
                       path: stream.path,
-                      hidden: !hiddenPaths.has(stream.path),
+                      hidden: !event.currentTarget.checked,
                     })}
                   />
                   <span class="toggle-track" aria-hidden="true"></span>
-                  <span class="toggle-label">
-                    {hiddenPaths.has(stream.path) ? 'Hidden' : 'Visible'}
-                  </span>
+                  <span class="toggle-label">Visible</span>
                 </label>
               </div>
             </article>
@@ -181,6 +186,24 @@
 
   .stream-card + .stream-card {
     margin-top: 0.7rem;
+  }
+
+  .stream-select-btn {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .stream-select-btn:hover .preview {
+    filter: brightness(1.08);
+  }
+
+  .stream-select-btn:focus-visible {
+    outline: 2px solid var(--accent, #B35610);
+    outline-offset: -2px;
   }
 
   .preview {
@@ -281,7 +304,7 @@
   }
 
   .visibility-toggle input:checked + .toggle-track {
-    background: #777;
+    background: var(--accent, #B35610);
   }
 
   .visibility-toggle input:checked + .toggle-track::after {

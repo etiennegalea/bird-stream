@@ -30,11 +30,33 @@ class User(TimestampMixin, Base):
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     bird_notification_email: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     auto_join_chat: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    profanity_filter_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     avatar: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     bio: Mapped[str | None] = mapped_column(String(500), nullable=True, default=None)
     last_ip: Mapped[str | None] = mapped_column(String(45), nullable=True, default=None)
 
     tokens: Mapped[list["AuthToken"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    profanity_occurrences: Mapped[list["ProfanityOccurrence"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+class ProfanityOccurrence(Base):
+    """One detected profanity occurrence, retained for the configured window."""
+
+    __tablename__ = "profanity_occurrences"
+    __table_args__ = (
+        Index("ix_profanity_occurrences_user_occurred", "user_id", "occurred_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    word: Mapped[str] = mapped_column(String(50), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship(back_populates="profanity_occurrences")
 
 
 class AuthToken(TimestampMixin, Base):

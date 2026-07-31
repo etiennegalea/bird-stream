@@ -7,8 +7,31 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
-    # SPA routing
+    # Vite fingerprints production bundles, so they are safe to cache until
+    # their URL changes on the next build.
+    location /assets/ {
+        try_files $uri =404;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
+    # Files copied from public/ keep stable names. Cache them briefly so an
+    # updated image or icon does not remain stale for an entire release cycle.
+    location ~* \.(?:avif|gif|ico|jpe?g|png|svg|webp|woff2?)$ {
+        try_files $uri =404;
+        add_header Cache-Control "public, max-age=86400";
+    }
+
+    # Always revalidate the application shell: it contains the current hashed
+    # asset URLs and must update promptly after a deployment.
+    location = /index.html {
+        try_files $uri =404;
+        add_header Cache-Control "no-cache";
+    }
+
+    # SPA routes serve the application shell and inherit its revalidation
+    # policy rather than being cached as separate pages.
     location / {
         try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache";
     }
 }

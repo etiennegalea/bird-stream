@@ -4,6 +4,7 @@
   import '../styles/ChatRoom.css';
   import { auth } from '../stores/auth.js';
   import { formatChatTime } from '../chatTime.js';
+  import { censorProfanity } from '../profanity.js';
   import { getApiBaseUrl, generateBirdUsername } from '../utils.js';
 
   export let onNewMessage = () => {};
@@ -13,6 +14,7 @@
 
   const authState = get(auth);
   const isLoggedIn = !!authState?.user?.username;
+  $: profanityFilterEnabled = $auth?.user?.profanity_filter_enabled ?? true;
 
   let username = authState?.user?.username ?? generateBirdUsername();
   let messages = [];
@@ -136,11 +138,13 @@
     clearTimeout(hideTimeout);
     const rect = event.currentTarget.getBoundingClientRect();
     const popupWidth = 190;
+    const popupHeight = 260;
     const spaceRight = window.innerWidth - rect.right - 10;
     const x = spaceRight >= popupWidth ? rect.right + 6 : rect.left - popupWidth - 6;
-    const y = Math.max(8, Math.min(rect.top - 8, window.innerHeight - 200));
+    const y = Math.max(8, Math.min(rect.top - 8, window.innerHeight - popupHeight));
 
-    const cacheKey = userId != null ? userId : `u:${hovUsername}`;
+    const profileKey = userId != null ? userId : `u:${hovUsername}`;
+    const cacheKey = `${profileKey}|filter:${profanityFilterEnabled}`;
     popup = { cacheKey, x, y, profile: cacheKey in profileCache ? profileCache[cacheKey] : undefined };
 
     if (!(cacheKey in profileCache)) {
@@ -148,7 +152,9 @@
         const url = userId != null
           ? `${getApiBaseUrl()}/auth/profile/public/id/${userId}`
           : `${getApiBaseUrl()}/auth/profile/public/${encodeURIComponent(hovUsername)}`;
-        const resp = await fetch(url);
+        const resp = await fetch(url, {
+          headers: authState?.token ? { Authorization: `Bearer ${authState.token}` } : {},
+        });
         profileCache[cacheKey] = resp.ok ? await resp.json() : null;
       } catch (_) {
         profileCache[cacheKey] = null;
@@ -309,7 +315,7 @@
               {@const prevTimeStr = i > 0 ? formatChatTime(group.messages[i - 1].timestamp) : null}
               <div class="msg-row" class:gap-above={i > 0 && timeStr !== prevTimeStr}>
                 <span class="msg-time">{timeStr !== prevTimeStr ? timeStr : ''}</span>
-                <span class="msg-text">{msg.text}</span>
+                <span class="msg-text">{profanityFilterEnabled ? censorProfanity(msg.text) : msg.text}</span>
               </div>
             {/each}
           </div>
@@ -397,6 +403,16 @@
         <p class="popup-username">{popup.profile.username}</p>
         {#if popup.profile.bio}
           <p class="popup-bio">{popup.profile.bio}</p>
+        {/if}
+        {#if !profanityFilterEnabled && popup.profile.profanities?.length}
+          <div class="popup-profanities" aria-label="Recent profanity use">
+            <span>{popup.profile.profanity_retention_days ?? 7}-day profanity</span>
+            <ul>
+              {#each popup.profile.profanities as profanity}
+                <li><span>{profanity.word}</span><strong>×{profanity.count}</strong></li>
+              {/each}
+            </ul>
+          </div>
         {/if}
       </div>
     {/if}

@@ -23,6 +23,7 @@ def test_user_options_default_off_and_can_be_enabled():
     initial = get_user_profile(db_factory, user_id)
     assert initial["bird_notification_email"] is False
     assert initial["auto_join_chat"] is False
+    assert initial["profanity_filter_enabled"] is True
 
     profile, error = update_user_profile(
         db_factory,
@@ -33,9 +34,11 @@ def test_user_options_default_off_and_can_be_enabled():
         avatar=None,
         bird_notification_email=True,
         auto_join_chat=True,
+        profanity_filter_enabled=False,
     )
 
     assert error == ""
     assert profile["bird_notification_email"] is True
     assert profile["auto_join_chat"] is True
+    assert profile["profanity_filter_enabled"] is False
     engine.dispose()

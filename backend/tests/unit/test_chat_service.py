@@ -3,7 +3,10 @@ from time import sleep
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import sessionmaker
 
+from models.orm import Base, ChatMessage, ProfanityOccurrence, User
 from services.chat_service import ChatService, LeakyBucket, _BUCKET_CAPACITY
 
 
@@ -203,3 +206,31 @@ async def test_broadcast_participants_skips_failed_sends(service):
     # Should not raise even if one send fails
     await service.broadcast_participants()
     ws_ok.send_json.assert_called()
+
+
+async def test_broadcast_keeps_text_raw_and_records_account_profanity(service):
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    db_factory = sessionmaker(bind=engine)
+    with db_factory() as session:
+        user = User(email="alice@example.com", username="alice", hashed_password="unused")
+        session.add(user)
+        session.commit()
+        user_id = user.id
+
+    ws = _make_ws()
+    service.active_connections[ws] = "alice"
+    raw_text = "this is shit and foxx"
+    await service.broadcast_message({
+        "type": "message",
+        "username": "alice",
+        "text": raw_text,
+        "sender_type": "account",
+        "user_id": user_id,
+    }, db_factory)
+
+    assert ws.send_json.call_args.args[0]["text"] == raw_text
+    with db_factory() as session:
+        assert session.execute(select(ChatMessage.text)).scalar_one() == raw_text
+        assert sorted(session.execute(select(ProfanityOccurrence.word)).scalars()) == ["foxx", "shit"]
+    engine.dispose()

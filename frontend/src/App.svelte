@@ -1064,6 +1064,7 @@
           {playerStates}
           hiddenPaths={hiddenSecondaryPaths}
           on:close={() => isStreamsPanelOpen = false}
+          on:select={(event) => selectStream(event.detail.path)}
           on:visibilitychange={handleSecondaryVisibility}
         />
       {/if}

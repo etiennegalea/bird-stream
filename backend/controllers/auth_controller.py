@@ -115,6 +115,7 @@ class AuthController(Controller):
             data.avatar,
             data.bird_notification_email,
             data.auto_join_chat,
+            data.profanity_filter_enabled,
         )
         if error:
             raise HTTPException(status_code=400, detail=error)
@@ -142,15 +143,31 @@ class AuthController(Controller):
         return {"message": "Account deleted successfully."}
 
     @get("/profile/public/{username:str}")
-    async def get_public_profile(self, username: str, state: State) -> dict:
-        profile = auth_svc.get_public_profile_by_username(state.db, username)
+    async def get_public_profile(self, request: Request, username: str, state: State) -> dict:
+        profile = auth_svc.get_public_profile_by_username(
+            state.db, username, _viewer_has_filter_off(request, state.db)
+        )
         if not profile:
             raise HTTPException(status_code=404, detail="User not found")
         return profile
 
     @get("/profile/public/id/{user_id:int}")
-    async def get_public_profile_by_id(self, user_id: int, state: State) -> dict:
-        profile = auth_svc.get_public_profile_by_id(state.db, user_id)
+    async def get_public_profile_by_id(self, request: Request, user_id: int, state: State) -> dict:
+        profile = auth_svc.get_public_profile_by_id(
+            state.db, user_id, _viewer_has_filter_off(request, state.db)
+        )
         if not profile:
             raise HTTPException(status_code=404, detail="User not found")
         return profile
+
+
+def _viewer_has_filter_off(request: Request, db_factory) -> bool:
+    """Profanity statistics are omitted unless an authenticated viewer opted out."""
+    header = request.headers.get("authorization", "")
+    if not header.startswith("Bearer "):
+        return False
+    payload = auth_svc.decode_jwt(header[7:])
+    if not payload:
+        return False
+    profile = auth_svc.get_user_profile(db_factory, int(payload["sub"]))
+    return bool(profile and not profile["profanity_filter_enabled"])

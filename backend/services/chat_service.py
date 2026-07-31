@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from models.orm import ChatMessage, User
+from services.profanity_service import record_profanities
 
 logger = logging.getLogger("chat_service")
 
@@ -198,6 +199,8 @@ class ChatService:
                     text=message["text"],
                     message_type="message",
                 ))
+                if sender_type == "account" and user_id:
+                    record_profanities(session, user_id, message["text"])
                 session.commit()
 
         connections_to_remove = []

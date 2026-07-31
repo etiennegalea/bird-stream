@@ -29,6 +29,7 @@
   let confirmPassword = '';
   let birdNotificationEmail = false;
   let autoJoinChat = false;
+  let profanityFilterEnabled = true;
   let showDeleteConfirmation = false;
   let deletePassword = '';
   let message = '';
@@ -53,6 +54,7 @@
         avatarDataUrl = data.avatar ?? null;
         birdNotificationEmail = data.bird_notification_email ?? false;
         autoJoinChat = data.auto_join_chat ?? false;
+        profanityFilterEnabled = data.profanity_filter_enabled ?? true;
       }
     } catch {
       error = 'Could not load your settings.';
@@ -112,6 +114,7 @@
       avatarDataUrl = data.avatar ?? null;
       birdNotificationEmail = data.bird_notification_email ?? false;
       autoJoinChat = data.auto_join_chat ?? false;
+      profanityFilterEnabled = data.profanity_filter_enabled ?? true;
       auth.updateUser({
         email: data.email,
         username: data.username,
@@ -119,6 +122,7 @@
         bio: data.bio,
         bird_notification_email: data.bird_notification_email,
         auto_join_chat: data.auto_join_chat,
+        profanity_filter_enabled: data.profanity_filter_enabled,
       });
       message = successMessage;
       return true;
@@ -145,6 +149,7 @@
       {
         bird_notification_email: birdNotificationEmail,
         auto_join_chat: autoJoinChat,
+        profanity_filter_enabled: profanityFilterEnabled,
       },
       'Options saved.',
     );
@@ -347,6 +352,13 @@
               <span>
                 <strong>Automatically join chat</strong>
                 <small>Join the conversation with your account whenever you open Bird Stream while logged in.</small>
+              </span>
+            </label>
+            <label class="preference-card">
+              <input type="checkbox" bind:checked={profanityFilterEnabled} />
+              <span>
+                <strong>Filter profanities</strong>
+                <small>Mask English and Maltese profanity in chat on this account. This is on by default.</small>
               </span>
             </label>
             <button class="primary-btn" type="submit" disabled={loading}>
