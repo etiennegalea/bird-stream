@@ -2,14 +2,31 @@
 // Keep variants aligned with backend/services/profanity_service.py.
 const variants = [
   // English
-  'motherfuckers', 'motherfucker', 'bullshit', 'fuckers', 'fucking', 'fucked',
-  'fucker', 'fucks', 'fuck', 'assholes', 'asshole', 'bastards', 'bastard',
-  'bitches', 'bitch', 'shitty', 'shits', 'shit', 'wankers', 'wanker',
-  'whores', 'whore', 'cunts', 'cunt', 'dicks', 'dick', 'cocks', 'cock',
-  'pissed', 'piss', 'sluts', 'slut',
+  'motherfuckers', 'motherfucker', 'fuckfaces', 'fuckface', 'fuckers', 'fucking',
+  'fucked', 'fucker', 'fucks', 'fuck', 'f*ck', 'fck', 'fuk', 'phuck',
+  'bullshit', 'shitheads', 'shithead', 'shitty', 'shits', 'shit', 'sh1t',
+  'bitches', 'bitch', 'b1tch', 'bastards', 'bastard', 'assholes', 'asshole',
+  'a$$holes', 'a$$hole', 'asses', 'ass', 'arseholes', 'arsehole', 'arses', 'arse',
+  'dickheads', 'dickhead', 'dicks', 'dick', 'cocks', 'cock', 'cunts', 'cunt',
+  'pissing', 'pisses', 'pissed', 'piss', 'wankers', 'wanking', 'wanked',
+  'wanks', 'wanker', 'wank', 'whores', 'whore', 'sluts', 'slut',
+  'goddamned', 'goddamn', 'damning', 'dammit', 'damned', 'damns', 'damn',
+  'crappy', 'craps', 'crap', 'bollocks', 'bollock', 'buggering', 'buggered',
+  'buggers', 'bugger', 'douchebags', 'douchebag', 'douches', 'douche',
+  'jackasses', 'jackass', 'pricks', 'prick', 'twats', 'twat', 'pussies', 'pussy', 'sonofabitch',
+  // Abusive slurs
+  'niggers', 'nigger', 'niggas', 'nigga', 'faggots', 'faggot', 'fags', 'fag',
+  'retarded', 'retards', 'retard', 'chinks', 'chink', 'spics', 'spic',
+  'kikes', 'kike', 'wetbacks', 'wetback', 'trannies', 'tranny',
   // Maltese and common unaccented spellings
-  'għoxx', 'ghoxx', 'qaħba', 'qahba', 'ħara', 'hara', 'żobb', 'zobb',
-  'foxx', 'sorm', 'liba', 'ostja',
+  'għoxxkom', 'ghoxxkom', 'għoxxhom', 'ghoxxhom', 'għoxxha', 'ghoxxha',
+  'għoxxna', 'ghoxxna', 'għoxxok', 'ghoxxok', 'għoxxi', 'ghoxxi',
+  'għoxxu', 'ghoxxu', 'għoxx', 'ghoxx', 'għoss', 'ghoss', 'oxx',
+  'qaħba', 'qahba', 'qħab', 'qhab', 'qoħob', 'qohob', 'ħara', 'hara',
+  'żobbkom', 'zobbkom', 'żobbhom', 'zobbhom', 'żobbha', 'zobbha',
+  'żobbna', 'zobbna', 'żobbok', 'zobbok', 'żobbi', 'zobbi', 'żobbu',
+  'zobbu', 'żobb', 'zobb', 'żbubi', 'zbubi', 'żbub', 'zbub', 'foxx', 'liba',
+  'ostja', 'nejka', 'żabbab', 'zabbab', 'żagħka', 'zaghka', 'żoċċ', 'zocc', 'pufta', 'pufti',
 ];
 
 const escaped = variants

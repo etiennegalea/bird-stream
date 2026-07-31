@@ -18,3 +18,25 @@ test('does not censor profanity embedded inside another word', () => {
 test('preserves case-insensitive matching and masks full variants', () => {
   assert.equal(censorProfanity('FUCKING Shit'), '******* ****');
 });
+
+test('censors racial slur variants as complete words', () => {
+  assert.equal(censorProfanity('nigga, NIGGER and niggas'), '*****, ****** and ******');
+});
+
+test('censors expanded English profanity and common obfuscations', () => {
+  assert.equal(
+    censorProfanity('damn douchebag prick f*ck a$$hole'),
+    '**** ********* ***** **** *******',
+  );
+});
+
+test('censors Maltese inflections and unaccented keyboard spellings', () => {
+  assert.equal(
+    censorProfanity('żobbi zobbhom sormok mnieghel pacocc'),
+    '***** ******* ****** ******** ******',
+  );
+});
+
+test('does not censor tit because bird names are valid chat content', () => {
+  assert.equal(censorProfanity('A blue tit visited today'), 'A blue tit visited today');
+});

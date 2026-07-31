@@ -12,22 +12,80 @@ from models.orm import ProfanityOccurrence
 
 # Variants map to the word displayed in public statistics. Keep this list in
 # sync with frontend/src/profanity.js, where masking happens.
+_CANONICAL_VARIANTS = {
+    # English profanity and common inflections/obfuscations
+    "fuck": ("fuck", "fucks", "fucked", "fucker", "fuckers", "fucking", "fuckface", "fuckfaces", "fck", "fuk", "f*ck", "phuck"),
+    "motherfucker": ("motherfucker", "motherfuckers"),
+    "shit": ("shit", "shits", "shitty", "shithead", "shitheads", "sh1t"),
+    "bullshit": ("bullshit",),
+    "bitch": ("bitch", "bitches", "b1tch"),
+    "bastard": ("bastard", "bastards"),
+    "ass": ("ass", "asses"),
+    "asshole": ("asshole", "assholes", "a$$hole", "a$$holes"),
+    "arse": ("arse", "arses"),
+    "arsehole": ("arsehole", "arseholes"),
+    "dick": ("dick", "dicks", "dickhead", "dickheads"),
+    "cock": ("cock", "cocks"),
+    "cunt": ("cunt", "cunts"),
+    "piss": ("piss", "pisses", "pissed", "pissing"),
+    "wank": ("wank", "wanks", "wanked", "wanking", "wanker", "wankers"),
+    "whore": ("whore", "whores"),
+    "slut": ("slut", "sluts"),
+    "damn": ("damn", "damns", "damned", "damning", "dammit", "goddamn", "goddamned"),
+    "crap": ("crap", "craps", "crappy"),
+    "bollocks": ("bollock", "bollocks"),
+    "bugger": ("bugger", "buggers", "buggered", "buggering"),
+    "douchebag": ("douche", "douches", "douchebag", "douchebags"),
+    "jackass": ("jackass", "jackasses"),
+    "prick": ("prick", "pricks"),
+    "twat": ("twat", "twats"),
+    "tosser": ("tosser", "tossers"),
+    "pussy": ("pussy", "pussies"),
+    # Avoid "tit"/"tits": they are bird names in this application.
+    "tits": ("titty", "titties"),
+    "skank": ("skank", "skanks"),
+    "cum": ("cum", "cumming"),
+    "jizz": ("jizz", "jizzed", "jizzing"),
+    "blowjob": ("blowjob", "blowjobs"),
+    "handjob": ("handjob", "handjobs"),
+    "sonofabitch": ("sonofabitch",),
+    # Abusive slurs
+    "nigga": ("nigga", "niggas"),
+    "nigger": ("nigger", "niggers"),
+    "faggot": ("fag", "fags", "faggot", "faggots"),
+    "retard": ("retard", "retards", "retarded"),
+    "chink": ("chink", "chinks"),
+    "spic": ("spic", "spics"),
+    "kike": ("kike", "kikes"),
+    "wetback": ("wetback", "wetbacks"),
+    "tranny": ("tranny", "trannies"),
+    # Maltese, including inflections and unaccented keyboard spellings
+    "foxx": ("foxx",),
+    "għoxx": ("għoxx", "ghoxx", "oxx", "għoxxi", "ghoxxi", "għoxxok", "ghoxxok", "għoxxu", "ghoxxu", "għoxxha", "ghoxxha", "għoxxna", "ghoxxna", "għoxxkom", "ghoxxkom", "għoxxhom", "ghoxxhom", "għoss", "ghoss"),
+    "ħara": ("ħara", "hara"),
+    "qaħba": ("qaħba", "qahba", "qħab", "qhab", "qoħob", "qohob"),
+    "żobb": ("żobb", "zobb", "żobbi", "zobbi", "żobbok", "zobbok", "żobbu", "zobbu", "żobbha", "zobbha", "żobbna", "zobbna", "żobbkom", "zobbkom", "żobbhom", "zobbhom", "żbub", "zbub", "żbubi", "zbubi"),
+    "sorm": ("sorm", "sormi", "sormok", "sormu", "sormha", "sormna", "sormkom", "sormhom"),
+    "liba": ("liba",),
+    "ostja": ("ostja",),
+    "fotta": ("fotta", "tfotta"),
+    "mniegħel": ("mniegħel", "mnieghel"),
+    "nejk": ("nejk", "nejka", "niek"),
+    "paċoċċ": ("paċoċċ", "pacocc"),
+    "tirra": ("tirra", "tirma"),
+    "toqbi": ("toqbi",),
+    "żabbab": ("żabbab", "zabbab"),
+    "żagħka": ("żagħka", "zaghka"),
+    "żoċċ": ("żoċċ", "zocc"),
+    "pufta": ("pufta", "pufti"),
+    "beżżula": ("beżżula", "bezzula", "beżżul", "bezzul"),
+    "żejżiet": ("żejżiet", "zejziet"),
+}
+
 _VARIANTS = {
-    # English
-    "fuck": "fuck", "fucks": "fuck", "fucked": "fuck", "fucker": "fuck",
-    "fuckers": "fuck", "fucking": "fuck", "motherfucker": "motherfucker",
-    "motherfuckers": "motherfucker", "shit": "shit", "shits": "shit",
-    "shitty": "shit", "bullshit": "bullshit", "bitch": "bitch",
-    "bitches": "bitch", "bastard": "bastard", "bastards": "bastard",
-    "asshole": "asshole", "assholes": "asshole", "dick": "dick",
-    "dicks": "dick", "cock": "cock", "cocks": "cock", "cunt": "cunt",
-    "cunts": "cunt", "piss": "piss", "pissed": "piss", "wanker": "wanker",
-    "wankers": "wanker", "whore": "whore", "whores": "whore",
-    "slut": "slut", "sluts": "slut",
-    # Maltese, including common unaccented keyboard spellings
-    "foxx": "foxx", "għoxx": "għoxx", "ghoxx": "għoxx", "ħara": "ħara",
-    "hara": "ħara", "qaħba": "qaħba", "qahba": "qaħba", "żobb": "żobb",
-    "zobb": "żobb", "sorm": "sorm", "liba": "liba", "ostja": "ostja",
+    variant: canonical
+    for canonical, variants in _CANONICAL_VARIANTS.items()
+    for variant in variants
 }
 
 _PATTERN = re.compile(

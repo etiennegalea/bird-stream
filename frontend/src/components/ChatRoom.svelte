@@ -112,6 +112,11 @@
       if (data.type === 'history') {
         messages = data.messages.filter(msg => msg.type !== 'system');
       } else if (data.type === 'message') {
+        // Profanity counts are live data. Drop both filter-mode cache entries
+        // so the sender's next hover includes this message (including our own).
+        const senderProfileKey = data.user_id != null ? data.user_id : `u:${data.username}`;
+        delete profileCache[`${senderProfileKey}|filter:true`];
+        delete profileCache[`${senderProfileKey}|filter:false`];
         messages = [...messages, data];
         onNewMessage(data);
       } else if (data.type === 'system') {
@@ -147,7 +152,9 @@
     const cacheKey = `${profileKey}|filter:${profanityFilterEnabled}`;
     popup = { cacheKey, x, y, profile: cacheKey in profileCache ? profileCache[cacheKey] : undefined };
 
-    if (!(cacheKey in profileCache)) {
+    // When the viewer has filtering off, counts can change with every message;
+    // refresh on every hover instead of serving an indefinitely stale record.
+    if (!(cacheKey in profileCache) || !profanityFilterEnabled) {
       try {
         const url = userId != null
           ? `${getApiBaseUrl()}/auth/profile/public/id/${userId}`

@@ -24,6 +24,36 @@ def test_detects_english_and_maltese_whole_words():
     assert counts == {"fuck": 2, "qaħba": 2}
 
 
+def test_detects_racial_slur_variants_as_complete_words():
+    counts = extract_profanities("nigga NIGGER niggas")
+    assert counts == {"nigga": 2, "nigger": 1}
+
+
+def test_detects_expanded_english_profanity_and_obfuscations():
+    counts = extract_profanities("damn douchebag prick f*ck a$$hole")
+    assert counts == {
+        "damn": 1,
+        "douchebag": 1,
+        "prick": 1,
+        "fuck": 1,
+        "asshole": 1,
+    }
+
+
+def test_detects_maltese_inflections_and_keyboard_spellings():
+    counts = extract_profanities("żobbi zobbhom sormok mnieghel pacocc")
+    assert counts == {
+        "żobb": 2,
+        "sorm": 1,
+        "mniegħel": 1,
+        "paċoċċ": 1,
+    }
+
+
+def test_does_not_treat_a_bird_name_as_profanity():
+    assert extract_profanities("A blue tit visited today") == {}
+
+
 def test_records_every_occurrence_and_returns_rolling_counts():
     engine, factory, user_id = _db()
     now = datetime.now(timezone.utc)
