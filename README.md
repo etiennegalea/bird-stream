@@ -331,6 +331,19 @@ make configurator     # local config builder at http://localhost:8099
 
 **Frontend flag changes (VITE_*) have no effect.** They're baked at build time: `docker compose build frontend && docker compose up -d frontend`, then hard-refresh (the old bundle is cached).
 
+**Compose warns that a variable with a random-looking name is not set.** A
+password in `.env` contains `$`, which Compose treats as interpolation in
+unquoted and double-quoted values. Single-quote the complete value (for
+example, `ADMIN_PASSWORD='pa$word'`), then run `docker compose config --quiet`
+again. The warning means the password was otherwise changed before reaching
+the container.
+
+**Detection logs RTSP `DESCRIBE failed: 404`.** The configured path is not
+currently being published to MediaMTX. Use `DETECTION_STREAM_URL=auto` to
+follow the first active `birdcam` path, or confirm the Pi is publishing before
+pinning an explicit path. `docker logs mediamtx --tail 20` shows active
+publishers.
+
 **Slow backend builds / `Building numpy` in the log.** A pinned dependency has no wheels for the image's Python version and is compiling from source — bump the pin and `uv lock`.
 
 **Mosquitto says `Unable to open .../passwd`.** The broker cannot accept users

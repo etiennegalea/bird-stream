@@ -236,6 +236,7 @@
 .popup-profanities ul { display: flex; flex-wrap: wrap; gap: .25rem .45rem; margin: .3rem 0 0; padding: 0; list-style: none; }
 .popup-profanities li { display: flex; gap: .2rem; color: #ddd; }
 .popup-profanities strong { color: #e49a6b; }
+.popup-profanities-empty { margin: .3rem 0 0; color: #888; font-style: italic; }
 
 .popup-loading {
   font-size: 0.7rem;

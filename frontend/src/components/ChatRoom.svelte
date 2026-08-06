@@ -411,14 +411,18 @@
         {#if popup.profile.bio}
           <p class="popup-bio">{popup.profile.bio}</p>
         {/if}
-        {#if !profanityFilterEnabled && popup.profile.profanities?.length}
+        {#if popup.profile.can_view_profanities}
           <div class="popup-profanities" aria-label="Recent profanity use">
             <span>{popup.profile.profanity_retention_days ?? 7}-day profanity</span>
-            <ul>
-              {#each popup.profile.profanities as profanity}
-                <li><span>{profanity.word}</span><strong>×{profanity.count}</strong></li>
-              {/each}
-            </ul>
+            {#if popup.profile.profanities?.length}
+              <ul>
+                {#each popup.profile.profanities as profanity}
+                  <li><span>{profanity.word}</span><strong>×{profanity.count}</strong></li>
+                {/each}
+              </ul>
+            {:else}
+              <p class="popup-profanities-empty">None recorded</p>
+            {/if}
           </div>
         {/if}
       </div>

@@ -13,7 +13,10 @@ const variants = [
   'goddamned', 'goddamn', 'damning', 'dammit', 'damned', 'damns', 'damn',
   'crappy', 'craps', 'crap', 'bollocks', 'bollock', 'buggering', 'buggered',
   'buggers', 'bugger', 'douchebags', 'douchebag', 'douches', 'douche',
-  'jackasses', 'jackass', 'pricks', 'prick', 'twats', 'twat', 'pussies', 'pussy', 'sonofabitch',
+  'jackasses', 'jackass', 'pricks', 'prick', 'twats', 'twat', 'tossers',
+  'tosser', 'pussies', 'pussy', 'titties', 'titty', 'skanks', 'skank',
+  'cumming', 'cum', 'jizzing', 'jizzed', 'jizz', 'blowjobs', 'blowjob',
+  'handjobs', 'handjob', 'sonofabitch',
   // Abusive slurs
   'niggers', 'nigger', 'niggas', 'nigga', 'faggots', 'faggot', 'fags', 'fag',
   'retarded', 'retards', 'retard', 'chinks', 'chink', 'spics', 'spic',
@@ -25,8 +28,12 @@ const variants = [
   'qaħba', 'qahba', 'qħab', 'qhab', 'qoħob', 'qohob', 'ħara', 'hara',
   'żobbkom', 'zobbkom', 'żobbhom', 'zobbhom', 'żobbha', 'zobbha',
   'żobbna', 'zobbna', 'żobbok', 'zobbok', 'żobbi', 'zobbi', 'żobbu',
-  'zobbu', 'żobb', 'zobb', 'żbubi', 'zbubi', 'żbub', 'zbub', 'foxx', 'liba',
-  'ostja', 'nejka', 'żabbab', 'zabbab', 'żagħka', 'zaghka', 'żoċċ', 'zocc', 'pufta', 'pufti',
+  'zobbu', 'żobb', 'zobb', 'żbubi', 'zbubi', 'żbub', 'zbub',
+  'sormkom', 'sormhom', 'sormha', 'sormna', 'sormok', 'sormi', 'sormu', 'sorm',
+  'foxx', 'liba', 'ostja', 'tfotta', 'fotta', 'mniegħel', 'mnieghel',
+  'nejka', 'nejk', 'niek', 'paċoċċ', 'pacocc', 'tirra', 'tirma', 'toqbi',
+  'żabbab', 'zabbab', 'żagħka', 'zaghka', 'żoċċ', 'zocc', 'pufta', 'pufti',
+  'beżżula', 'bezzula', 'beżżul', 'bezzul', 'żejżiet', 'zejziet',
 ];
 
 const escaped = variants

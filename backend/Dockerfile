@@ -10,18 +10,19 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     XDG_CACHE_HOME=/var/cache/birdstream \
     MPLCONFIGDIR=/var/cache/birdstream/matplotlib \
     YOLO_CONFIG_DIR=/var/cache/birdstream/ultralytics \
+    # Keep uv's build cache on the BuildKit cache mount instead of baking it
+    # into XDG_CACHE_HOME. Copies avoid hardlinks into the ephemeral mount.
+    UV_CACHE_DIR=/root/.cache/uv \
+    UV_LINK_MODE=copy \
     # Venv lives outside /app so the ./backend:/app bind-mount never overwrites it.
     UV_PROJECT_ENVIRONMENT=/venv
 
 WORKDIR /app
 
-# System deps + non-root user in a single layer.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl ffmpeg gcc g++ \
-    libavdevice-dev libavfilter-dev libopus-dev libvpx-dev libsrtp2-dev \
-    libopencv-dev pkg-config python3-dev \
-    && rm -rf /var/lib/apt/lists/* \
-    && groupadd --system appgroup \
+# Native dependencies (AV, OpenCV, SRTP, crypto) are provided by locked
+# manylinux wheels, so no compiler, FFmpeg SDK, or second Python toolchain is
+# needed in the runtime image.
+RUN groupadd --system appgroup \
     && useradd --system --gid appgroup --no-create-home appuser
 
 # Install dependencies (separate layer for cache efficiency).

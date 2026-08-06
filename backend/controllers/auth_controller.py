@@ -144,20 +144,24 @@ class AuthController(Controller):
 
     @get("/profile/public/{username:str}")
     async def get_public_profile(self, request: Request, username: str, state: State) -> dict:
+        can_view_profanities = _viewer_has_filter_off(request, state.db)
         profile = auth_svc.get_public_profile_by_username(
-            state.db, username, _viewer_has_filter_off(request, state.db)
+            state.db, username, can_view_profanities
         )
         if not profile:
             raise HTTPException(status_code=404, detail="User not found")
+        profile["can_view_profanities"] = can_view_profanities
         return profile
 
     @get("/profile/public/id/{user_id:int}")
     async def get_public_profile_by_id(self, request: Request, user_id: int, state: State) -> dict:
+        can_view_profanities = _viewer_has_filter_off(request, state.db)
         profile = auth_svc.get_public_profile_by_id(
-            state.db, user_id, _viewer_has_filter_off(request, state.db)
+            state.db, user_id, can_view_profanities
         )
         if not profile:
             raise HTTPException(status_code=404, detail="User not found")
+        profile["can_view_profanities"] = can_view_profanities
         return profile
 
 
