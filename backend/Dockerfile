@@ -31,9 +31,17 @@ RUN groupadd --system appgroup \
 ARG INSTALL_DETECTION=false
 COPY pyproject.toml uv.lock ./
 # Cache mount: package downloads survive across builds (BuildKit).
+# Ultralytics depends on the GUI OpenCV distribution. Both OpenCV wheels own
+# the same `cv2` package, so whichever installs last wins; in the slim runtime
+# that GUI build crashes looking for libxcb. Detection builds therefore remove
+# it, restore the locked headless wheel, and verify that cv2 imports.
 RUN --mount=type=cache,target=/root/.cache/uv \
     if [ "$INSTALL_DETECTION" = "true" ]; then \
-        uv sync --frozen --no-install-project --no-dev --group detection; \
+        uv sync --frozen --no-install-project --no-dev --group detection \
+        && uv pip uninstall --python /venv/bin/python opencv-python \
+        && uv pip install --python /venv/bin/python --reinstall --no-deps \
+            opencv-python-headless==5.0.0.93 \
+        && /venv/bin/python -c "import cv2; print('headless cv2', cv2.__version__)"; \
     else \
         uv sync --frozen --no-install-project --no-dev; \
     fi
