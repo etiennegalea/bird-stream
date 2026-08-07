@@ -76,6 +76,7 @@ camera:
   devices:
     - id: feeder
       label: Feeder camera
+      role: pov                    # optional secondary-camera automation role
       device: /dev/v4l/by-id/usb-Example-video-index0
       enabled: true
     - id: nest

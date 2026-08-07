@@ -49,6 +49,7 @@ class MqttDeviceService:
         self._client = None
         self._lock = threading.Lock()
         self._devices: dict[str, dict] = {}  # pi_id -> last status payload
+        self._status_listeners = []
 
     # ── lifecycle ─────────────────────────────────────────────────────────
 
@@ -138,6 +139,11 @@ class MqttDeviceService:
             if "streams" not in payload and previous.get("streams"):
                 payload["streams"] = previous["streams"]
             self._devices[pi_id] = payload
+        for listener in list(self._status_listeners):
+            try:
+                listener(dict(payload))
+            except Exception:
+                logger.exception("MQTT device status listener failed")
 
     # ── API used by controllers ───────────────────────────────────────────
 
@@ -149,6 +155,10 @@ class MqttDeviceService:
         flowing. paho's is_connected() reflects reality."""
         client = self._client
         return bool(client and client.is_connected())
+
+    def add_status_listener(self, listener) -> None:
+        if listener not in self._status_listeners:
+            self._status_listeners.append(listener)
 
     def devices(self) -> list[dict]:
         """Latest known status per device, freshest heartbeat first."""

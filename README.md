@@ -247,9 +247,18 @@ camera:
       enabled: true
     - id: nest
       label: Nest box
+      role: pov                 # optional: managed as the secondary POV camera
       device: /dev/v4l/by-id/usb-Other-video-index0
       enabled: false
 ```
+
+An admin can enable **Automatically manage POV camera** for each Pi in the
+stream panel. This keeps secondary cameras marked `role: pov` enabled and
+other secondary cameras disabled; the primary camera is never changed. When
+**Bird-triggered POV stream** is also enabled, the POV stream starts only
+after a bird notification email is sent and stops after that bird is gone.
+These preferences are persisted by the backend and take effect again when an
+offline Pi reconnects.
 
 List stable camera paths with `ls -l /dev/v4l/by-id/`. The installer adds the
 agent user to the `video` and `audio` groups. Each camera is a separate
@@ -274,13 +283,19 @@ docker compose build backend && docker compose up -d backend
 curl localhost:8051/detection/status     # or /detection/latest, /detection/events
 ```
 
-The lightweight model recognizes only `bird`, `cat`, and `human` for this
-application. Bird alerts are sent to verified, unblocked subscribers only after
-a bird remains visible for `BIRD_LINGER_SECONDS` (3 seconds by default). The
+The default CPU-light profile uses the nano YOLO model as a general object
+detector—not a species classifier. It processes a 320×320 input once per second,
+recognizes the generic `bird`, `cat`, and `human` classes, and skips static
+scenes with the motion gate. Human detection maps to the model's standard
+`person` class. Only birds trigger notification emails and POV-camera
+automation; cat and human detections remain available through the detection
+status and event endpoints. Bird alerts are sent to verified, unblocked
+subscribers only after a bird remains visible for `BIRD_LINGER_SECONDS` (3
+seconds by default). The
 snapshot taken at that point is cropped around all visible birds with a
 configurable `BIRD_SNAPSHOT_BORDER`, embedded in the prepared email, and
 attached as a JPEG. Tune sampling and recognition with `DETECTION_FPS`,
-`DETECTION_CONF`, and `DETECTION_CLASSES`; tune brief missed detections with
+`DETECTION_IMGSZ`, and `DETECTION_CONF`; tune brief missed detections with
 `BIRD_PRESENCE_GAP_SECONDS` and repeat-alert suppression with
 `BIRD_NOTIFICATION_COOLDOWN_SECONDS`.
 With `DETECTION_STREAM_URL=auto`, the worker queries MediaMTX and follows the

@@ -85,7 +85,9 @@ services:
       - DETECTION_RTSP_BASE_URL=${DETECTION_RTSP_BASE_URL:-rtsp://mediamtx:8554}
       - DETECTION_MODEL=${DETECTION_MODEL:-yolo11n.pt}
       - DETECTION_MODEL_DIR=${DETECTION_MODEL_DIR:-/var/lib/birdstream/models}
-      - DETECTION_FPS=${DETECTION_FPS:-2}
+      # CPU-light default: nano model, one 320px inference per second.
+      - DETECTION_FPS=${DETECTION_FPS:-1}
+      - DETECTION_IMGSZ=${DETECTION_IMGSZ:-320}
       - DETECTION_CONF=${DETECTION_CONF:-0.4}
       - DETECTION_CLASSES=${DETECTION_CLASSES:-bird,cat,human}
       - BIRD_LINGER_SECONDS=${BIRD_LINGER_SECONDS:-3}

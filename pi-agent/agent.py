@@ -423,6 +423,8 @@ class CameraAgent:
                     "enabled", cam_cfg.get("enabled_by_default", True))),
                 "path": self._camera_slug(path, f"{base_path}-{index + 1}"),
                 "index": index,
+                "primary": is_primary,
+                "role": str(override.get("role") or "").strip().lower() or None,
                 **{k: override[k] for k in CAMERA_KEYS if k in override},
             })
         return specs
@@ -443,7 +445,7 @@ class CameraAgent:
 
     def publish_status(self, status: str | None = None, error_msg: str = None):
         stream_items = []
-        for camera in self.discover_cameras():
+        for camera_index, camera in enumerate(self.discover_cameras()):
             state = self.streams.get(camera["id"], {})
             process = state.get("process")
             running = process is not None and process.poll() is None
@@ -455,6 +457,8 @@ class CameraAgent:
                 "enabled": camera["enabled"],
                 "status": camera_status,
                 "path": camera["path"],
+                "primary": bool(camera.get("primary", camera_index == 0)),
+                "role": camera.get("role"),
                 **dict(state.get("details") or {}),
                 **({"error": state["error"]} if state.get("error") else {}),
             })

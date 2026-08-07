@@ -12,6 +12,7 @@ import services.auth_service as auth_svc
 from controllers.chat_controller import chat_service
 from models.orm import User
 from services.mqtt_service import mqtt_devices
+from services.camera_automation_service import camera_automation
 from services.stream_settings_service import stream_settings
 from services.webrtc_service import pcs_manager
 
@@ -61,6 +62,11 @@ class ScheduleRequest(msgspec.Struct):
 
 class CameraEnabledRequest(msgspec.Struct):
     enabled: bool
+
+
+class CameraAutomationRequest(msgspec.Struct):
+    auto_manage_pov: bool
+    bird_triggered_pov: bool = False
 
 
 class AdminController(Controller):
@@ -213,10 +219,35 @@ class AdminController(Controller):
     async def get_stream_devices(self, request: Request, state: State) -> dict:
         """Latest retained/heartbeat status of every known transmitter."""
         _require_admin(request, state.db)
+        devices = mqtt_devices.devices()
+        for device in devices:
+            device["camera_automation"] = camera_automation.describe_device(device)
         return {
             "broker_connected": mqtt_devices.is_connected(),
-            "devices": mqtt_devices.devices(),
+            "devices": devices,
         }
+
+    @post("/stream/devices/{pi_id:str}/camera-automation")
+    async def set_camera_automation(
+        self, request: Request, state: State, pi_id: str,
+        data: CameraAutomationRequest,
+    ) -> dict:
+        user_id = _require_admin(request, state.db)
+        # Reuse MQTT's strict identifier validation even though saving the
+        # preference itself does not require a live broker connection.
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", pi_id or ""):
+            raise HTTPException(status_code=400, detail="Invalid device id")
+        settings = camera_automation.update(
+            pi_id,
+            auto_manage_pov=data.auto_manage_pov,
+            bird_triggered_pov=data.bird_triggered_pov,
+            db_factory=state.db,
+        )
+        logger.info(
+            "Admin (user_id=%s) set camera automation on '%s': %s",
+            user_id, pi_id, settings,
+        )
+        return {"ok": True, "pi_id": pi_id, **settings}
 
     @post("/stream/devices/{pi_id:str}/schedule")
     async def set_device_schedule(

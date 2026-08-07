@@ -111,3 +111,17 @@ class StreamConfiguration(TimestampMixin, Base):
     private_enabled: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
     )
+
+
+class DeviceCameraAutomation(TimestampMixin, Base):
+    """Persisted POV-camera automation preferences for one Pi transmitter."""
+
+    __tablename__ = "device_camera_automation"
+
+    pi_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    auto_manage_pov: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    bird_triggered_pov: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )

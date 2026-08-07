@@ -178,6 +178,7 @@ class TestCameraDiscovery(unittest.TestCase):
             "label": "Nest camera",
             "device": "/dev/video4",
             "enabled": False,
+            "role": "pov",
             "bitrate": "2500k",
         }]
         with mock.patch.object(agent.glob, "glob", return_value=[]), \
@@ -187,6 +188,7 @@ class TestCameraDiscovery(unittest.TestCase):
         self.assertEqual(camera["id"], "nest-box")
         self.assertEqual(camera["label"], "Nest camera")
         self.assertFalse(camera["enabled"])
+        self.assertEqual(camera["role"], "pov")
         self.assertEqual(camera["bitrate"], "2500k")
 
     def test_querycap_rejects_metadata_node_even_when_parent_can_capture(self):
@@ -374,6 +376,8 @@ class TestStreamDetailsAndActions(unittest.TestCase):
         self.assertEqual(payload["status"], "streaming")
         self.assertEqual(len(payload["streams"]), 2)
         self.assertEqual(payload["streams"][0]["path"], "birdcam")
+        self.assertTrue(payload["streams"][0]["primary"])
+        self.assertFalse(payload["streams"][1]["primary"])
         self.assertFalse(payload["streams"][1]["enabled"])
 
     def test_streaming_status_is_logged_once_with_stream_and_device_ids(self):

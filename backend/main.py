@@ -30,6 +30,7 @@ from controllers.weather_controller import weather_endpoint
 from controllers.webrtc_controller import WebRTCController
 from db.session import SessionLocal
 from services.auth_service import seed_admin_user
+from services.camera_automation_service import camera_automation
 from services.detection_service import DetectionService, detection_enabled
 from services.email_service import send_bird_alerts
 from services.mqtt_service import mqtt_devices
@@ -52,6 +53,9 @@ async def lifespan(app: Litestar):
     app.state.db = SessionLocal
     app.state.queue_service = QueueService(pcs_manager)
     stream_settings.load(SessionLocal)
+    camera_automation.load(SessionLocal)
+    camera_automation.attach_mqtt(mqtt_devices)
+    mqtt_devices.add_status_listener(camera_automation.handle_device_status)
 
     # Legacy aiortc delivery path. Viewers now use WHEP/HLS served by
     # MediaMTX; keep this off unless reviving the old player.
@@ -73,7 +77,7 @@ async def lifespan(app: Litestar):
     if detection_enabled():
         event_loop = asyncio.get_running_loop()
 
-        def log_notification_result(completed):
+        def log_notification_result(completed, pi_id):
             error = completed.exception()
             if error:
                 logger.error(
@@ -81,11 +85,18 @@ async def lifespan(app: Litestar):
                     exc_info=(type(error), error, error.__traceback__),
                 )
             else:
+                sent = completed.result()
                 logger.info(
-                    "Sent %s bird notification email(s)", completed.result()
+                    "Sent %s bird notification email(s)", sent
                 )
+                if sent > 0:
+                    camera_automation.bird_alert_sent(pi_id)
 
         def notify_bird(snapshot_jpeg, _detections, detected_at):
+            pi_id = camera_automation.device_id_for_stream_url(
+                app.state.detection_service.stream_url
+            )
+            camera_automation.bird_alert_pending(pi_id)
             future = asyncio.run_coroutine_threadsafe(
                 send_bird_alerts(
                     SessionLocal,
@@ -95,9 +106,14 @@ async def lifespan(app: Litestar):
                 ),
                 event_loop,
             )
-            future.add_done_callback(log_notification_result)
+            future.add_done_callback(
+                lambda completed: log_notification_result(completed, pi_id)
+            )
 
-        app.state.detection_service = DetectionService(on_detection=notify_bird)
+        app.state.detection_service = DetectionService(
+            on_detection=notify_bird,
+            on_bird_presence_ended=camera_automation.bird_presence_ended,
+        )
         app.state.detection_service.start()
     else:
         app.state.detection_service = None

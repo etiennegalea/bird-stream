@@ -183,6 +183,55 @@
     }, 1500);
   }
 
+  async function setCameraAutomation(piId, patch) {
+    const key = `${piId}/automation`;
+    const device = devices.find((item) => item.pi_id === piId);
+    const current = device?.camera_automation || {};
+    const next = { ...current, ...patch };
+    if (!next.auto_manage_pov) next.bird_triggered_pov = false;
+    pending = { ...pending, [key]: true };
+    try {
+      const resp = await fetch(
+        `${getApiBaseUrl()}/admin/stream/devices/${piId}/camera-automation`,
+        {
+          method: 'POST',
+          headers: authHeader(),
+          body: JSON.stringify({
+            auto_manage_pov: !!next.auto_manage_pov,
+            bird_triggered_pov: !!next.bird_triggered_pov,
+          }),
+        },
+      );
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        devicesError = body.detail || 'Failed to update POV automation';
+      } else {
+        devicesError = '';
+        device.camera_automation = {
+          ...current,
+          ...(await resp.json()),
+        };
+        devices = devices;
+      }
+    } catch {
+      devicesError = 'Network error';
+    } finally {
+      pending = { ...pending, [key]: false };
+    }
+  }
+
+  function isPovCamera(camera) {
+    if ((camera.role || '').trim().toLowerCase() === 'pov') return true;
+    return ['camera_id', 'label'].some(
+      (key) => (camera[key] || '').trim().toLowerCase() === 'pov',
+    );
+  }
+
+  function isPrimaryCamera(camera, index, streams) {
+    const hasExplicitPrimary = streams.some((item) => item.primary);
+    return !!camera.primary || (!hasExplicitPrimary && index === 0);
+  }
+
   async function saveSchedule(piId) {
     const form = scheduleForms[piId];
     if (!form) return;
@@ -383,12 +432,18 @@
                 </div>
 
                 <div class="camera-list">
-                  {#each d.streams || [] as camera (camera.camera_id)}
+                  {#each d.streams || [] as camera, cameraIndex (camera.camera_id)}
                 {@const cameraKey = `${d.pi_id}/${camera.camera_id}`}
+                {@const primaryCamera = isPrimaryCamera(camera, cameraIndex, d.streams || [])}
                 <div class="camera-card" class:disabled={!camera.enabled}>
                   <div class="camera-head">
                     <div>
-                      <span class="camera-name">{camera.label}</span>
+                      <span class="camera-name">
+                        {camera.label}
+                        {#if isPovCamera(camera) && !primaryCamera}
+                          <span class="camera-role">POV</span>
+                        {/if}
+                      </span>
                       <span class="camera-path">{camera.path}</span>
                     </div>
                     <label class="camera-enabled-toggle" title="Show this camera publicly">
@@ -397,7 +452,8 @@
                         type="checkbox"
                         class="stream-toggle"
                         checked={camera.enabled}
-                        disabled={pending[`${cameraKey}/enabled`] || !brokerConnected}
+                        disabled={pending[`${cameraKey}/enabled`] || !brokerConnected ||
+                          (d.camera_automation?.auto_manage_pov && !primaryCamera)}
                         on:change={(e) => setCameraEnabled(
                           d.pi_id, camera.camera_id, e.target.checked)}
                       />
@@ -437,6 +493,44 @@
                   </div>
                 </div>
                   {/each}
+                </div>
+
+                <div class="device-automation">
+                  <label class="automation-toggle">
+                    <span>
+                      <strong>Automatically manage POV camera</strong>
+                      <small>Enable secondary cameras marked <code>role: pov</code> and disable other secondary cameras.</small>
+                    </span>
+                    <input
+                      type="checkbox"
+                      class="stream-toggle"
+                      checked={d.camera_automation?.auto_manage_pov || false}
+                      disabled={pending[`${d.pi_id}/automation`]}
+                      on:change={(e) => setCameraAutomation(d.pi_id, {
+                        auto_manage_pov: e.target.checked,
+                      })}
+                    />
+                  </label>
+
+                  {#if d.camera_automation?.auto_manage_pov && d.camera_automation?.has_pov_camera}
+                    <label class="automation-toggle nested">
+                      <span>
+                        <strong>Bird-triggered POV stream</strong>
+                        <small>Start after a bird alert is sent; stop when that bird is gone.</small>
+                      </span>
+                      <input
+                        type="checkbox"
+                        class="stream-toggle"
+                        checked={d.camera_automation?.bird_triggered_pov || false}
+                        disabled={pending[`${d.pi_id}/automation`]}
+                        on:change={(e) => setCameraAutomation(d.pi_id, {
+                          bird_triggered_pov: e.target.checked,
+                        })}
+                      />
+                    </label>
+                  {:else if d.camera_automation?.auto_manage_pov}
+                    <p class="automation-warning">No secondary camera is marked <code>role: pov</code>.</p>
+                  {/if}
                 </div>
 
                 {#if scheduleForms[d.pi_id]}

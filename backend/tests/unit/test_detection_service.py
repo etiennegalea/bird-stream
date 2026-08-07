@@ -72,6 +72,7 @@ class TestMotionGate:
 class TestDetectionServiceConfig:
     def test_defaults(self, monkeypatch):
         for var in ["DETECTION_STREAM_URL", "DETECTION_MODEL", "DETECTION_FPS",
+                    "DETECTION_IMGSZ",
                     "DETECTION_MODEL_DIR", "DETECTION_CONF",
                     "DETECTION_CLASSES", "DETECTION_MOTION_GATE",
                     "DETECTION_RTSP_BASE_URL", "MEDIAMTX_API_URL",
@@ -84,7 +85,8 @@ class TestDetectionServiceConfig:
         assert svc.stream_url is None
         assert svc.model_name == "yolo11n.pt"
         assert str(svc.model_path) == "/var/lib/birdstream/models/yolo11n.pt"
-        assert svc.sample_fps == 2.0
+        assert svc.sample_fps == 1.0
+        assert svc.image_size == 320
         assert svc.conf == 0.4
         assert svc.classes == {"bird", "cat", "human"}
         assert svc.bird_linger_seconds == 3.0
@@ -96,12 +98,14 @@ class TestDetectionServiceConfig:
     def test_env_overrides(self, monkeypatch):
         monkeypatch.setenv("DETECTION_STREAM_URL", "rtsp://other:8554/cam2")
         monkeypatch.setenv("DETECTION_FPS", "5")
+        monkeypatch.setenv("DETECTION_IMGSZ", "416")
         monkeypatch.setenv("DETECTION_CLASSES", "bird,cat")
         monkeypatch.setenv("DETECTION_MOTION_GATE", "false")
         svc = DetectionService()
         assert svc.configured_stream_url == "rtsp://other:8554/cam2"
         assert svc.stream_url == "rtsp://other:8554/cam2"
         assert svc.sample_fps == 5.0
+        assert svc.image_size == 416
         assert svc.classes == {"bird", "cat"}
         assert svc.motion_gate_enabled is False
 
@@ -129,6 +133,26 @@ class TestDetectionServiceConfig:
 
         assert svc._load_model() is not None
         assert svc._class_ids == [0]
+
+    def test_default_classes_map_to_generic_model_objects(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.delenv("DETECTION_CLASSES", raising=False)
+        monkeypatch.setenv("DETECTION_MODEL_DIR", str(tmp_path))
+
+        class FakeModel:
+            names = {0: "person", 1: "bird", 2: "cat", 3: "dog"}
+
+        monkeypatch.setitem(
+            sys.modules,
+            "ultralytics",
+            SimpleNamespace(YOLO=lambda _path: FakeModel()),
+        )
+
+        svc = DetectionService()
+
+        assert svc._load_model() is not None
+        assert set(svc._class_ids) == {0, 1, 2}
 
     def test_auto_discovers_primary_stream_first(self, monkeypatch):
         response = BytesIO(json.dumps({
@@ -294,6 +318,24 @@ class TestDetectionServiceConfig:
         svc._track_bird_presence(frame, bird, "not-yet", now=5.9)
 
         assert calls == []
+
+    def test_alerted_bird_presence_emits_ended_callback(self, monkeypatch):
+        ended = []
+        monkeypatch.setenv("BIRD_LINGER_SECONDS", "0")
+        monkeypatch.setenv("BIRD_PRESENCE_GAP_SECONDS", "1")
+        svc = DetectionService(
+            on_detection=lambda *_args: None,
+            on_bird_presence_ended=lambda: ended.append(True),
+        )
+        frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        bird = [{"label": "bird", "bbox": [30, 30, 60, 60]}]
+
+        assert svc._track_bird_presence(frame, bird, "seen", now=1.0)
+        svc._track_bird_presence(frame, [], "gap", now=1.5)
+        svc._track_bird_presence(frame, [], "gone", now=2.1)
+        svc._track_bird_presence(frame, [], "still gone", now=3.2)
+
+        assert ended == [True]
 
     def test_snapshot_crops_all_birds_with_border(self, monkeypatch):
         snapshots = []

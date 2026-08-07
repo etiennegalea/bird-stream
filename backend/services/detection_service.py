@@ -16,7 +16,9 @@ Env:
                             auto-downloaded on first run)
     DETECTION_MODEL_DIR     writable model cache for bare model names
                             (default /var/lib/birdstream/models)
-    DETECTION_FPS           inference sampling rate (default 2)
+    DETECTION_FPS           inference sampling rate (default 1)
+    DETECTION_IMGSZ         square inference input size (default 320; lower is
+                            faster but misses very small/distant birds)
     DETECTION_CONF          min confidence (default 0.4)
     DETECTION_CLASSES       comma-separated supported object names
                             (bird, cat, human; default all three)
@@ -85,7 +87,7 @@ class MotionGate:
 
 
 class DetectionService:
-    def __init__(self, on_detection=None):
+    def __init__(self, on_detection=None, on_bird_presence_ended=None):
         self.configured_stream_url = os.environ.get(
             "DETECTION_STREAM_URL", "auto").strip()
         self.stream_url = (
@@ -107,7 +109,10 @@ class DetectionService:
             if configured_model.is_absolute()
             else self.model_dir / configured_model
         )
-        self.sample_fps = float(os.environ.get("DETECTION_FPS", "2"))
+        self.sample_fps = float(os.environ.get("DETECTION_FPS", "1"))
+        self.image_size = max(
+            160, int(os.environ.get("DETECTION_IMGSZ", "320"))
+        )
         self.conf = float(os.environ.get("DETECTION_CONF", "0.4"))
         requested_classes = _parse_classes(
             os.environ.get("DETECTION_CLASSES", "bird,cat,human")
@@ -143,6 +148,7 @@ class DetectionService:
         self._thread = None
         self._model = None
         self._on_detection = on_detection
+        self._on_bird_presence_ended = on_bird_presence_ended
         self._last_notification = None
         self._bird_seen_since = None
         self._bird_last_seen = None
@@ -225,7 +231,12 @@ class DetectionService:
 
     def _infer(self, frame) -> list[dict]:
         results = self._model.predict(
-            frame, conf=self.conf, classes=self._class_ids, verbose=False)
+            frame,
+            conf=self.conf,
+            classes=self._class_ids,
+            imgsz=self.image_size,
+            verbose=False,
+        )
         detections = []
         for r in results:
             for b in r.boxes:
@@ -384,9 +395,15 @@ class DetectionService:
                 self._bird_last_seen is not None
                 and now - self._bird_last_seen > self.bird_presence_gap_seconds
             ):
+                was_alerted = self._bird_alerted_for_presence
                 self._bird_seen_since = None
                 self._bird_last_seen = None
                 self._bird_alerted_for_presence = False
+                if was_alerted and self._on_bird_presence_ended is not None:
+                    try:
+                        self._on_bird_presence_ended()
+                    except Exception:
+                        logger.exception("Bird presence-ended callback failed")
             return False
 
         if self._bird_seen_since is None:
@@ -480,6 +497,7 @@ class DetectionService:
             "model_path": str(self.model_path),
             "last_error": self.last_error,
             "sample_fps": self.sample_fps,
+            "inference_image_size": self.image_size,
             "confidence_threshold": self.conf,
             "classes": sorted(self.classes),
             "motion_gate": self.motion_gate_enabled,
