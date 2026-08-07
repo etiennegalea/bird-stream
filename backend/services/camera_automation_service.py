@@ -27,8 +27,9 @@ class CameraAutomationService:
         self._settings: dict[str, dict[str, bool]] = {}
         self._devices: dict[str, dict] = {}
         self._mqtt = None
-        self._pending_alert_devices: set[str] = set()
-        self._active_alert_devices: set[str] = set()
+        self._triggered_devices: set[str] = set()
+        self._primary_bird_present: set[str] = set()
+        self._pov_cat_present: dict[str, bool | None] = {}
 
     @staticmethod
     def defaults() -> dict[str, bool]:
@@ -95,6 +96,11 @@ class CameraAutomationService:
         with self._lock:
             self._settings[pi_id] = settings
             device = self._devices.get(pi_id)
+            was_triggered = pi_id in self._triggered_devices
+            if not settings["bird_triggered_pov"]:
+                self._clear_trigger_locked(pi_id)
+        if was_triggered and not settings["bird_triggered_pov"] and device:
+            self._control_pov(device, "stop")
         if device:
             self._reconcile(device)
         return dict(settings)
@@ -123,43 +129,83 @@ class CameraAutomationService:
                 return device["pi_id"]
         return None
 
-    def bird_alert_pending(self, pi_id: str | None) -> None:
-        """A linger-qualified bird alert has been queued for delivery."""
+    def bird_detection_triggered(self, pi_id: str | None) -> None:
+        """Start POV when the same linger/cooldown gate as an alert passes."""
         if pi_id is None:
             logger.warning(
                 "POV trigger skipped: detection stream has no matching Pi"
             )
             return
-        with self._lock:
-            self._pending_alert_devices.add(pi_id)
-
-    def bird_alert_sent(self, pi_id: str | None) -> None:
-        """Start POV cameras only after the alert delivery task succeeds."""
-        if pi_id is None:
+        settings = self.snapshot(pi_id)
+        if not (
+            settings["auto_manage_pov"] and settings["bird_triggered_pov"]
+        ):
             return
         with self._lock:
-            if pi_id not in self._pending_alert_devices:
-                return
-            self._pending_alert_devices.discard(pi_id)
-            self._active_alert_devices.add(pi_id)
+            self._triggered_devices.add(pi_id)
+            self._primary_bird_present.add(pi_id)
+            # Unknown until the POV monitor sees a frame. This prevents an
+            # immediate stop while the newly-started stream is coming online.
+            self._pov_cat_present[pi_id] = None
             device = self._devices.get(pi_id)
         if device:
             self._start_triggered_pov(device)
 
     def bird_presence_ended(self) -> None:
-        """Stop bird-triggered POV cameras when the alerted presence ends."""
+        """Mark primary birds absent; cats on POV may keep streaming active."""
         with self._lock:
-            active_ids = set(self._active_alert_devices)
-            self._pending_alert_devices.clear()
-            self._active_alert_devices.clear()
-            devices = [
-                device for pi_id, device in self._devices.items()
-                if pi_id in active_ids
-            ]
-        for device in devices:
-            settings = self.snapshot(device["pi_id"])
-            if settings["auto_manage_pov"] and settings["bird_triggered_pov"]:
-                self._control_pov(device, "stop")
+            active_ids = set(self._triggered_devices)
+            self._primary_bird_present.difference_update(active_ids)
+        for pi_id in active_ids:
+            self._stop_if_clear(pi_id)
+
+    def pov_cat_presence_changed(self, pi_id: str, present: bool) -> None:
+        """Receive generic cat presence from the active POV stream monitor."""
+        with self._lock:
+            if pi_id not in self._triggered_devices:
+                return
+            self._pov_cat_present[pi_id] = present
+        self._stop_if_clear(pi_id)
+
+    def active_pov_target(self) -> dict | None:
+        """Return the active POV path that needs cat monitoring, if any."""
+        with self._lock:
+            pi_ids = sorted(self._triggered_devices)
+            devices = {key: self._devices.get(key) for key in pi_ids}
+        for pi_id in pi_ids:
+            device = devices.get(pi_id)
+            if not device:
+                continue
+            streams = device.get("streams") or []
+            has_explicit_primary = any(
+                stream.get("primary", False) for stream in streams
+            )
+            for index, stream in enumerate(streams):
+                if (
+                    not self._is_primary(stream, index, has_explicit_primary)
+                    and _is_pov(stream)
+                    and stream.get("path")
+                ):
+                    return {"pi_id": pi_id, "path": stream["path"]}
+        return None
+
+    def _stop_if_clear(self, pi_id: str) -> None:
+        with self._lock:
+            if (
+                pi_id not in self._triggered_devices
+                or pi_id in self._primary_bird_present
+                or self._pov_cat_present.get(pi_id) is not False
+            ):
+                return
+            device = self._devices.get(pi_id)
+            self._clear_trigger_locked(pi_id)
+        if device:
+            self._control_pov(device, "stop")
+
+    def _clear_trigger_locked(self, pi_id: str) -> None:
+        self._triggered_devices.discard(pi_id)
+        self._primary_bird_present.discard(pi_id)
+        self._pov_cat_present.pop(pi_id, None)
 
     def _reconcile(self, device: dict) -> None:
         settings = self.snapshot(device["pi_id"])
@@ -188,7 +234,7 @@ class CameraAutomationService:
 
         if settings["bird_triggered_pov"]:
             with self._lock:
-                active = device["pi_id"] in self._active_alert_devices
+                active = device["pi_id"] in self._triggered_devices
             if active:
                 self._start_triggered_pov(device)
             else:
@@ -261,8 +307,9 @@ class CameraAutomationService:
         with self._lock:
             self._settings = {}
             self._devices = {}
-            self._pending_alert_devices = set()
-            self._active_alert_devices = set()
+            self._triggered_devices = set()
+            self._primary_bird_present = set()
+            self._pov_cat_present = {}
         self._mqtt = None
 
 

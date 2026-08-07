@@ -255,8 +255,12 @@ camera:
 An admin can enable **Automatically manage POV camera** for each Pi in the
 stream panel. This keeps secondary cameras marked `role: pov` enabled and
 other secondary cameras disabled; the primary camera is never changed. When
-**Bird-triggered POV stream** is also enabled, the POV stream starts only
-after a bird notification email is sent and stops after that bird is gone.
+**Enable POV camera on detection** is also enabled, the POV stream starts as
+soon as the primary bird satisfies the same linger and cooldown conditions as
+an email alert; it does not wait for email delivery. The stream stops only when
+birds are absent from the primary stream and cats are absent from the POV
+stream. A short startup grace period lets the newly-started POV stream come
+online before it can be considered cat-free.
 These preferences are persisted by the backend and take effect again when an
 offline Pi reconnects.
 
@@ -291,12 +295,13 @@ scenes with the motion gate. Human detection maps to the model's standard
 automation; cat and human detections remain available through the detection
 status and event endpoints. Bird alerts are sent to verified, unblocked
 subscribers only after a bird remains visible for `BIRD_LINGER_SECONDS` (3
-seconds by default). The
-snapshot taken at that point is cropped around all visible birds with a
-configurable `BIRD_SNAPSHOT_BORDER`, embedded in the prepared email, and
-attached as a JPEG. Tune sampling and recognition with `DETECTION_FPS`,
-`DETECTION_IMGSZ`, and `DETECTION_CONF`; tune brief missed detections with
-`BIRD_PRESENCE_GAP_SECONDS` and repeat-alert suppression with
+seconds by default). The snapshot taken at that point is cropped around all
+visible birds with a configurable `BIRD_SNAPSHOT_BORDER`, embedded in the
+prepared email, and attached as a JPEG. Tune sampling and recognition with
+`DETECTION_FPS`, `DETECTION_IMGSZ`, and `DETECTION_CONF`; tune brief missed detections with
+`BIRD_PRESENCE_GAP_SECONDS`, POV cat clearance with
+`POV_CAT_PRESENCE_GAP_SECONDS`, POV startup failure handling with
+`POV_MONITOR_STARTUP_TIMEOUT_SECONDS`, and repeat-alert suppression with
 `BIRD_NOTIFICATION_COOLDOWN_SECONDS`.
 With `DETECTION_STREAM_URL=auto`, the worker queries MediaMTX and follows the
 first active camera path, preferring the legacy `birdcam` path. Set an explicit

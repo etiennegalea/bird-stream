@@ -515,8 +515,8 @@
                   {#if d.camera_automation?.auto_manage_pov && d.camera_automation?.has_pov_camera}
                     <label class="automation-toggle nested">
                       <span>
-                        <strong>Bird-triggered POV stream</strong>
-                        <small>Start after a bird alert is sent; stop when that bird is gone.</small>
+                        <strong>Enable POV camera on detection</strong>
+                        <small>Start when a bird alert condition is met; stop after both primary birds and POV cats are gone.</small>
                       </span>
                       <input
                         type="checkbox"

@@ -28,6 +28,10 @@ Env:
     BIRD_LINGER_SECONDS     continuous bird presence required before an alert
                             (default 3 seconds)
     BIRD_PRESENCE_GAP_SECONDS  tolerated missed-detection gap (default 1 second)
+    POV_CAT_PRESENCE_GAP_SECONDS tolerated missed cat detections on the POV
+                               stream before it is considered clear (default 2)
+    POV_MONITOR_STARTUP_TIMEOUT_SECONDS maximum wait for a newly-started POV
+                               stream before treating it as clear (default 15)
     BIRD_SNAPSHOT_BORDER    crop padding relative to the bird bounds
                             (default 0.4 = 40%)
 
@@ -87,7 +91,13 @@ class MotionGate:
 
 
 class DetectionService:
-    def __init__(self, on_detection=None, on_bird_presence_ended=None):
+    def __init__(
+        self,
+        on_detection=None,
+        on_bird_presence_ended=None,
+        pov_target_provider=None,
+        on_pov_cat_presence=None,
+    ):
         self.configured_stream_url = os.environ.get(
             "DETECTION_STREAM_URL", "auto").strip()
         self.stream_url = (
@@ -135,6 +145,13 @@ class DetectionService:
         self.bird_presence_gap_seconds = max(
             0.0, float(os.environ.get("BIRD_PRESENCE_GAP_SECONDS", "1"))
         )
+        self.pov_cat_presence_gap_seconds = max(
+            0.0, float(os.environ.get("POV_CAT_PRESENCE_GAP_SECONDS", "2"))
+        )
+        self.pov_monitor_startup_timeout = max(
+            1.0,
+            float(os.environ.get("POV_MONITOR_STARTUP_TIMEOUT_SECONDS", "15")),
+        )
         self.snapshot_border = max(
             0.0, float(os.environ.get("BIRD_SNAPSHOT_BORDER", "0.4"))
         )
@@ -144,11 +161,15 @@ class DetectionService:
 
         self._gate = MotionGate(min_area_fraction=min_area)
         self._lock = threading.Lock()
+        self._model_lock = threading.Lock()
         self._stop = threading.Event()
         self._thread = None
+        self._pov_thread = None
         self._model = None
         self._on_detection = on_detection
         self._on_bird_presence_ended = on_bird_presence_ended
+        self._pov_target_provider = pov_target_provider
+        self._on_pov_cat_presence = on_pov_cat_presence
         self._last_notification = None
         self._bird_seen_since = None
         self._bird_last_seen = None
@@ -163,6 +184,9 @@ class DetectionService:
         self.last_error = None
         self.latest = {"timestamp": None, "detections": []}
         self.events = deque(maxlen=100)  # only frames that contained a match
+        self.pov_monitor_connected = False
+        self.pov_monitor_target = None
+        self.pov_cat_present = None
 
     # ── lifecycle ─────────────────────────────────────────────────────────
 
@@ -174,6 +198,13 @@ class DetectionService:
         self._thread = threading.Thread(target=self._run, daemon=True,
                                         name="detection-worker")
         self._thread.start()
+        if self._pov_target_provider and self._on_pov_cat_presence:
+            self._pov_thread = threading.Thread(
+                target=self._run_pov_monitor,
+                daemon=True,
+                name="pov-cat-monitor",
+            )
+            self._pov_thread.start()
         logger.info(f"Detection worker started "
                     f"(stream={self.configured_stream_url}, "
                     f"model={self.model_name}, fps={self.sample_fps}, "
@@ -183,6 +214,8 @@ class DetectionService:
         self._stop.set()
         if self._thread:
             self._thread.join(timeout=5)
+        if self._pov_thread:
+            self._pov_thread.join(timeout=5)
         self.running = False
         logger.info("Detection worker stopped")
 
@@ -227,16 +260,20 @@ class DetectionService:
             self.last_error = "Model does not support bird, cat, or human detection"
             logger.error(self.last_error)
             return None
+        self._cat_class_ids = (
+            [name_to_id["cat"]] if "cat" in name_to_id else []
+        )
         return model
 
-    def _infer(self, frame) -> list[dict]:
-        results = self._model.predict(
-            frame,
-            conf=self.conf,
-            classes=self._class_ids,
-            imgsz=self.image_size,
-            verbose=False,
-        )
+    def _infer(self, frame, class_ids=None) -> list[dict]:
+        with self._model_lock:
+            results = self._model.predict(
+                frame,
+                conf=self.conf,
+                classes=self._class_ids if class_ids is None else class_ids,
+                imgsz=self.image_size,
+                verbose=False,
+            )
         detections = []
         for r in results:
             for b in r.boxes:
@@ -249,6 +286,137 @@ class DetectionService:
                     "bbox": [round(float(v), 1) for v in b.xyxy[0].tolist()],
                 })
         return detections
+
+    # ── triggered POV cat monitor ─────────────────────────────────────────
+
+    def _run_pov_monitor(self):
+        """Inspect only the currently triggered POV stream for generic cats."""
+        import cv2
+
+        os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
+        cap = None
+        target_key = None
+        target = None
+        startup_deadline = None
+        last_inference = 0.0
+        last_cat_seen = None
+        reported = None
+        interval = 1.0 / self.sample_fps if self.sample_fps > 0 else 1.0
+
+        def close_capture():
+            nonlocal cap
+            if cap is not None:
+                cap.release()
+                cap = None
+            self.pov_monitor_connected = False
+
+        while not self._stop.is_set():
+            try:
+                next_target = self._pov_target_provider()
+            except Exception:
+                logger.exception("POV target provider failed")
+                next_target = None
+
+            next_key = (
+                (next_target.get("pi_id"), next_target.get("path"))
+                if next_target else None
+            )
+            if next_key != target_key:
+                close_capture()
+                target_key = next_key
+                target = next_target
+                startup_deadline = (
+                    time.monotonic() + self.pov_monitor_startup_timeout
+                    if target else None
+                )
+                last_cat_seen = None
+                reported = None
+                self.pov_cat_present = None
+                self.pov_monitor_target = (
+                    target.get("path") if target else None
+                )
+
+            if not target or self._model is None:
+                self._stop.wait(0.25)
+                continue
+
+            if not getattr(self, "_cat_class_ids", None):
+                if reported is not False:
+                    self._report_pov_cat(target["pi_id"], False)
+                    reported = False
+                self._stop.wait(1)
+                continue
+
+            if cap is None:
+                path = parse.quote(target["path"], safe="/-_.~")
+                stream_url = f"{self.rtsp_base_url}/{path}"
+                cap = cv2.VideoCapture(stream_url, cv2.CAP_FFMPEG)
+                if not cap.isOpened():
+                    cap.release()
+                    cap = None
+                    if (
+                        time.monotonic() >= startup_deadline
+                        and reported is not False
+                    ):
+                        logger.warning(
+                            "POV stream %s did not start within %.1fs",
+                            target["path"], self.pov_monitor_startup_timeout,
+                        )
+                        self._report_pov_cat(target["pi_id"], False)
+                        reported = False
+                    self._stop.wait(1)
+                    continue
+                self.pov_monitor_connected = True
+                logger.info("Monitoring POV stream %s for cats", target["path"])
+
+            ok, frame = cap.read()
+            if not ok:
+                close_capture()
+                self._stop.wait(0.5)
+                continue
+
+            now = time.monotonic()
+            if now - last_inference < interval:
+                continue
+            last_inference = now
+            try:
+                detections = self._infer(frame, self._cat_class_ids)
+            except Exception:
+                logger.exception("POV cat inference failed")
+                continue
+
+            present, last_cat_seen = self._pov_cat_state(
+                detections, now, last_cat_seen
+            )
+            if present != reported:
+                self._report_pov_cat(target["pi_id"], present)
+                reported = present
+
+        close_capture()
+        self.pov_monitor_target = None
+        self.pov_cat_present = None
+
+    def _pov_cat_state(
+        self,
+        detections: list[dict],
+        now: float,
+        last_cat_seen: float | None,
+    ) -> tuple[bool, float | None]:
+        """Apply the missed-detection gap to POV cat observations."""
+        if any(item.get("label") == "cat" for item in detections):
+            return True, now
+        return (
+            last_cat_seen is not None
+            and now - last_cat_seen <= self.pov_cat_presence_gap_seconds,
+            last_cat_seen,
+        )
+
+    def _report_pov_cat(self, pi_id: str, present: bool) -> None:
+        self.pov_cat_present = present
+        try:
+            self._on_pov_cat_presence(pi_id, present)
+        except Exception:
+            logger.exception("POV cat-presence callback failed")
 
     # ── worker loop ───────────────────────────────────────────────────────
 
@@ -504,6 +672,11 @@ class DetectionService:
             "notification_cooldown_seconds": self.notification_cooldown,
             "bird_linger_seconds": self.bird_linger_seconds,
             "bird_presence_gap_seconds": self.bird_presence_gap_seconds,
+            "pov_cat_presence_gap_seconds": self.pov_cat_presence_gap_seconds,
+            "pov_monitor_startup_timeout_seconds": self.pov_monitor_startup_timeout,
+            "pov_monitor_connected": self.pov_monitor_connected,
+            "pov_monitor_target": self.pov_monitor_target,
+            "pov_cat_present": self.pov_cat_present,
             "snapshot_border": self.snapshot_border,
             "frames_seen": self.frames_seen,
             "frames_inferred": self.frames_inferred,

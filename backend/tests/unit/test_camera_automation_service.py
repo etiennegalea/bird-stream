@@ -99,7 +99,7 @@ def test_primary_is_never_changed_with_legacy_status_shape():
     assert "feeder" not in changed_ids
 
 
-def test_bird_triggered_pov_starts_after_alert_and_stops_when_bird_gone():
+def test_bird_detection_condition_starts_pov_without_waiting_for_email():
     service = configured_service({
         "auto_manage_pov": True,
         "bird_triggered_pov": True,
@@ -107,36 +107,30 @@ def test_bird_triggered_pov_starts_after_alert_and_stops_when_bird_gone():
     service.handle_device_status(device(pov_enabled=True, pov_status="idle"))
     service._mqtt.send_control.reset_mock()
 
-    service.bird_alert_pending("pi-01")
-    service.bird_alert_sent("pi-01")
-    service.bird_presence_ended()
+    service.bird_detection_triggered("pi-01")
 
-    assert service._mqtt.send_control.call_args_list == [
-        (("pi-01", "start"), {"params": {"camera_id": "close-up"}}),
-        (("pi-01", "stop"), {"params": {"camera_id": "close-up"}}),
-    ]
-
-
-def test_alert_delivery_after_bird_is_gone_does_not_start_camera():
-    service = configured_service({
-        "auto_manage_pov": True,
-        "bird_triggered_pov": True,
-    })
-    service.handle_device_status(device(pov_enabled=True, pov_status="idle"))
-    service._mqtt.send_control.reset_mock()
-
-    service.bird_alert_pending("pi-01")
-    service.bird_presence_ended()
-    service._mqtt.send_control.reset_mock()
-    service.bird_alert_sent("pi-01")
-
-    assert not any(
-        call.args[1] == "start"
-        for call in service._mqtt.send_control.call_args_list
+    service._mqtt.send_control.assert_called_once_with(
+        "pi-01", "start", params={"camera_id": "close-up"}
     )
+    assert service.active_pov_target() == {
+        "pi_id": "pi-01", "path": "birdcam-pi-01-close-up",
+    }
 
 
-def test_heartbeat_does_not_start_pov_while_notification_is_pending():
+def test_detection_trigger_is_ignored_when_device_setting_is_off():
+    service = configured_service({
+        "auto_manage_pov": True,
+        "bird_triggered_pov": False,
+    })
+    service.handle_device_status(device(pov_enabled=True, pov_status="idle"))
+    service._mqtt.send_control.reset_mock()
+
+    service.bird_detection_triggered("pi-01")
+
+    service._mqtt.send_control.assert_not_called()
+
+
+def test_pov_waits_for_cat_result_after_primary_bird_leaves():
     service = configured_service({
         "auto_manage_pov": True,
         "bird_triggered_pov": True,
@@ -145,13 +139,50 @@ def test_heartbeat_does_not_start_pov_while_notification_is_pending():
     service.handle_device_status(idle)
     service._mqtt.send_control.reset_mock()
 
-    service.bird_alert_pending("pi-01")
-    service.handle_device_status(idle)
+    service.bird_detection_triggered("pi-01")
+    service._mqtt.send_control.reset_mock()
+    service.bird_presence_ended()
 
-    assert not any(
-        call.args[1] == "start"
-        for call in service._mqtt.send_control.call_args_list
+    service._mqtt.send_control.assert_not_called()
+
+    service.pov_cat_presence_changed("pi-01", False)
+    service._mqtt.send_control.assert_called_once_with(
+        "pi-01", "stop", params={"camera_id": "close-up"}
     )
+
+
+def test_cat_keeps_pov_running_until_both_streams_are_clear():
+    service = configured_service({
+        "auto_manage_pov": True,
+        "bird_triggered_pov": True,
+    })
+    service.handle_device_status(device(pov_enabled=True, pov_status="idle"))
+    service._mqtt.send_control.reset_mock()
+    service.bird_detection_triggered("pi-01")
+    service._mqtt.send_control.reset_mock()
+
+    service.pov_cat_presence_changed("pi-01", True)
+    service.bird_presence_ended()
+    service._mqtt.send_control.assert_not_called()
+
+    service.pov_cat_presence_changed("pi-01", False)
+    service._mqtt.send_control.assert_called_once_with(
+        "pi-01", "stop", params={"camera_id": "close-up"}
+    )
+
+
+def test_primary_bird_keeps_pov_running_when_cat_is_absent():
+    service = configured_service({
+        "auto_manage_pov": True,
+        "bird_triggered_pov": True,
+    })
+    service.handle_device_status(device(pov_enabled=True, pov_status="idle"))
+    service.bird_detection_triggered("pi-01")
+    service._mqtt.send_control.reset_mock()
+
+    service.pov_cat_presence_changed("pi-01", False)
+
+    service._mqtt.send_control.assert_not_called()
 
 
 def test_detection_stream_is_resolved_to_its_owning_device():

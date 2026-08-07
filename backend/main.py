@@ -77,7 +77,7 @@ async def lifespan(app: Litestar):
     if detection_enabled():
         event_loop = asyncio.get_running_loop()
 
-        def log_notification_result(completed, pi_id):
+        def log_notification_result(completed):
             error = completed.exception()
             if error:
                 logger.error(
@@ -86,17 +86,16 @@ async def lifespan(app: Litestar):
                 )
             else:
                 sent = completed.result()
-                logger.info(
-                    "Sent %s bird notification email(s)", sent
-                )
-                if sent > 0:
-                    camera_automation.bird_alert_sent(pi_id)
+                logger.info("Sent %s bird notification email(s)", sent)
 
         def notify_bird(snapshot_jpeg, _detections, detected_at):
             pi_id = camera_automation.device_id_for_stream_url(
                 app.state.detection_service.stream_url
             )
-            camera_automation.bird_alert_pending(pi_id)
+            # This callback runs only after linger and notification cooldown
+            # conditions pass. POV activation uses that same condition and is
+            # intentionally independent of email delivery success.
+            camera_automation.bird_detection_triggered(pi_id)
             future = asyncio.run_coroutine_threadsafe(
                 send_bird_alerts(
                     SessionLocal,
@@ -106,13 +105,13 @@ async def lifespan(app: Litestar):
                 ),
                 event_loop,
             )
-            future.add_done_callback(
-                lambda completed: log_notification_result(completed, pi_id)
-            )
+            future.add_done_callback(log_notification_result)
 
         app.state.detection_service = DetectionService(
             on_detection=notify_bird,
             on_bird_presence_ended=camera_automation.bird_presence_ended,
+            pov_target_provider=camera_automation.active_pov_target,
+            on_pov_cat_presence=camera_automation.pov_cat_presence_changed,
         )
         app.state.detection_service.start()
     else:

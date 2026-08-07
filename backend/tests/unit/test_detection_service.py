@@ -78,6 +78,8 @@ class TestDetectionServiceConfig:
                     "DETECTION_RTSP_BASE_URL", "MEDIAMTX_API_URL",
                     "MEDIAMTX_PATH", "BIRD_LINGER_SECONDS",
                     "BIRD_PRESENCE_GAP_SECONDS", "BIRD_SNAPSHOT_BORDER",
+                    "POV_CAT_PRESENCE_GAP_SECONDS",
+                    "POV_MONITOR_STARTUP_TIMEOUT_SECONDS",
                     "BIRD_NOTIFICATION_COOLDOWN_SECONDS"]:
             monkeypatch.delenv(var, raising=False)
         svc = DetectionService()
@@ -91,6 +93,8 @@ class TestDetectionServiceConfig:
         assert svc.classes == {"bird", "cat", "human"}
         assert svc.bird_linger_seconds == 3.0
         assert svc.bird_presence_gap_seconds == 1.0
+        assert svc.pov_cat_presence_gap_seconds == 2.0
+        assert svc.pov_monitor_startup_timeout == 15.0
         assert svc.snapshot_border == 0.4
         assert svc.motion_gate_enabled is True
         assert svc.running is False
@@ -303,6 +307,73 @@ class TestDetectionServiceConfig:
         svc._track_bird_presence(frame, other_objects, "later", now=10.0)
 
         assert calls == []
+
+    def test_pov_cat_presence_tolerates_brief_missed_detections(self):
+        svc = DetectionService()
+        cat = [{"label": "cat", "bbox": [10, 10, 20, 20]}]
+
+        present, last_seen = svc._pov_cat_state(cat, 10.0, None)
+        assert present is True
+        assert last_seen == 10.0
+        assert svc._pov_cat_state([], 11.9, last_seen)[0] is True
+        assert svc._pov_cat_state([], 12.1, last_seen)[0] is False
+
+    def test_pov_cat_callback_reports_device_and_presence(self):
+        calls = []
+        svc = DetectionService(
+            on_pov_cat_presence=lambda pi_id, present: calls.append(
+                (pi_id, present)
+            )
+        )
+
+        svc._report_pov_cat("pi-01", True)
+        svc._report_pov_cat("pi-01", False)
+
+        assert calls == [("pi-01", True), ("pi-01", False)]
+        assert svc.pov_cat_present is False
+
+    def test_pov_monitor_reports_clear_after_first_cat_free_frame(
+        self, monkeypatch
+    ):
+        calls = []
+
+        class FakeCapture:
+            def isOpened(self):
+                return True
+
+            def read(self):
+                return True, np.zeros((20, 20, 3), dtype=np.uint8)
+
+            def release(self):
+                pass
+
+        class FakeModel:
+            names = {0: "bird", 1: "cat"}
+
+            def predict(self, *_args, **_kwargs):
+                return [SimpleNamespace(boxes=[])]
+
+        fake_cv2 = SimpleNamespace(
+            CAP_FFMPEG=1,
+            VideoCapture=lambda *_args: FakeCapture(),
+        )
+        monkeypatch.setitem(sys.modules, "cv2", fake_cv2)
+
+        svc = DetectionService(
+            pov_target_provider=lambda: {
+                "pi_id": "pi-01", "path": "birdcam-pi-01-pov",
+            },
+            on_pov_cat_presence=lambda pi_id, present: (
+                calls.append((pi_id, present)), svc._stop.set()
+            ),
+        )
+        svc._model = FakeModel()
+        svc._class_ids = [0, 1]
+        svc._cat_class_ids = [1]
+
+        svc._run_pov_monitor()
+
+        assert calls == [("pi-01", False)]
 
     def test_short_bird_visit_is_discarded(self, monkeypatch):
         calls = []
