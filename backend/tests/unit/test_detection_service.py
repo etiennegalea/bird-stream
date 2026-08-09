@@ -199,6 +199,30 @@ class TestDetectionServiceConfig:
 
         assert DetectionService()._discover_stream_url() is None
 
+    def test_auto_ignores_path_without_readiness_field(self, monkeypatch):
+        response = BytesIO(json.dumps({
+            "items": [{"name": "birdcam"}],
+        }).encode())
+        monkeypatch.setattr(
+            "services.detection_service.request.urlopen",
+            lambda *_args, **_kwargs: response,
+        )
+
+        assert DetectionService()._discover_stream_url() is None
+
+    def test_auto_supports_legacy_source_ready_field(self, monkeypatch):
+        response = BytesIO(json.dumps({
+            "items": [{"name": "birdcam", "sourceReady": True}],
+        }).encode())
+        monkeypatch.setattr(
+            "services.detection_service.request.urlopen",
+            lambda *_args, **_kwargs: response,
+        )
+
+        assert DetectionService()._discover_stream_url() == (
+            "rtsp://mediamtx:8554/birdcam"
+        )
+
     def test_explicit_stream_skips_discovery(self, monkeypatch):
         monkeypatch.setenv("DETECTION_STREAM_URL", "rtsp://example/camera")
         svc = DetectionService()

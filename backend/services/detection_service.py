@@ -435,7 +435,16 @@ class DetectionService:
             item.get("name")
             for item in payload.get("items", [])
             if item.get("name")
-            and item.get("ready", True)
+            # MediaMTX v1.x exposes `ready`; older releases used
+            # `sourceReady`. Missing readiness must never mean ready, since
+            # configured-but-unpublished paths also appear in API results.
+            and (
+                item.get("ready") is True
+                or (
+                    "ready" not in item
+                    and item.get("sourceReady") is True
+                )
+            )
             and (
                 item["name"] == self.path_prefix
                 or item["name"].startswith(f"{self.path_prefix}-")
@@ -479,23 +488,30 @@ class DetectionService:
             return
 
         interval = 1.0 / self.sample_fps if self.sample_fps > 0 else 0.5
-        backoff = 2
+        retry_delay = 2
+        last_capture_error = None
         last_inference = 0.0
 
         while not self._stop.is_set():
             cap = self._open_capture()
             if cap is None:
                 self.connected = False
-                logger.warning("%s, retrying in %ss",
-                               self.last_error or "Cannot open camera stream",
-                               backoff)
-                if self._stop.wait(backoff):
+                error = self.last_error or "Cannot open camera stream"
+                log = (
+                    logger.warning
+                    if error != last_capture_error
+                    else logger.debug
+                )
+                log("%s, retrying in %ss", error, retry_delay)
+                last_capture_error = error
+                # Publisher state can change at any time. A long exponential
+                # backoff made a newly-restored camera invisible for 30s.
+                if self._stop.wait(retry_delay):
                     break
-                backoff = min(backoff * 2, 30)
                 continue
 
             self.connected = True
-            backoff = 2
+            last_capture_error = None
             logger.info(f"Connected to {self.stream_url}")
 
             while not self._stop.is_set():
