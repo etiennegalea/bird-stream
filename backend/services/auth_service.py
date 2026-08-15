@@ -6,10 +6,10 @@ from datetime import datetime, timedelta, timezone
 
 import anyio
 import jwt
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import sessionmaker
 
-from models.orm import AuthToken, User
+from models.orm import AuthToken, ChatMessage, User
 
 logger = logging.getLogger("auth_service")
 
@@ -438,6 +438,12 @@ def _public_profile(user: User, session, include_profanities: bool) -> dict:
         from services.profanity_service import get_profanity_counts, retention_days
         profile["profanities"] = get_profanity_counts(session, user.id)
         profile["profanity_retention_days"] = retention_days()
+        profile["deleted_message_count"] = session.execute(
+            select(func.count(ChatMessage.id)).where(
+                ChatMessage.user_id == user.id,
+                ChatMessage.is_deleted.is_(True),
+            )
+        ).scalar_one()
     return profile
 
 

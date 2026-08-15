@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from models.orm import Base, ProfanityOccurrence, User
+from models.orm import Base, ChatMessage, ProfanityOccurrence, User
 from services.profanity_service import extract_profanities, get_profanity_counts, record_profanities
 from services.auth_service import get_public_profile_by_id
 
@@ -87,6 +87,16 @@ def test_public_profile_only_includes_counts_when_requested():
     engine, factory, user_id = _db()
     with factory() as session:
         record_profanities(session, user_id, "foxx")
+        session.add_all([
+            ChatMessage(
+                user_id=user_id, username="finch", text="hidden",
+                is_deleted=True,
+            ),
+            ChatMessage(
+                user_id=user_id, username="finch", text="visible",
+                is_deleted=False,
+            ),
+        ])
         session.commit()
 
     hidden = get_public_profile_by_id(factory, user_id)
@@ -95,4 +105,5 @@ def test_public_profile_only_includes_counts_when_requested():
     assert "profanities" not in hidden
     assert visible["profanities"] == [{"word": "foxx", "count": 1}]
     assert visible["profanity_retention_days"] == 7
+    assert visible["deleted_message_count"] == 1
     engine.dispose()

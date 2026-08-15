@@ -10,6 +10,7 @@ import controllers.admin_controller as controller
 @pytest.fixture(autouse=True)
 def admin_and_mqtt(monkeypatch):
     monkeypatch.setattr(controller, "_require_admin", lambda request, db: 7)
+    monkeypatch.setattr(controller, "record_admin_action_with_factory", Mock())
     send = Mock()
     monkeypatch.setattr(controller.mqtt_devices, "send_control", send)
     return send
@@ -17,16 +18,25 @@ def admin_and_mqtt(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_start_one_camera_publishes_scoped_mqtt_command(admin_and_mqtt):
+    db_factory = object()
     result = await controller.AdminController.control_stream_camera.fn(
         None,
         request=object(),
-        state=SimpleNamespace(db=object()),
+        state=SimpleNamespace(db=db_factory),
         pi_id="pi-01",
         camera_id="cam-2",
         action="start",
     )
     admin_and_mqtt.assert_called_once_with(
         "pi-01", "start", params={"camera_id": "cam-2"})
+    controller.record_admin_action_with_factory.assert_called_once_with(
+        db_factory,
+        admin_user_id=7,
+        action_type="camera.start",
+        target_type="camera",
+        target_id="pi-01/cam-2",
+        details={"pi_id": "pi-01", "camera_id": "cam-2"},
+    )
     assert result["camera_id"] == "cam-2"
 
 

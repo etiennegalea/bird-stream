@@ -24,7 +24,8 @@ from controllers.stream_settings_controller import (
 from controllers.weather_controller import weather_endpoint
 from controllers.webrtc_controller import WebRTCController
 from models.orm import (
-    Base, ChatMessage, DeviceCameraAutomation, StreamConfiguration, User,
+    AdminAction, Base, ChatMessage, DeviceCameraAutomation,
+    StreamConfiguration, User,
 )
 from services.auth_service import create_jwt
 from services.camera_automation_service import camera_automation
@@ -177,6 +178,7 @@ def isolate(db_factory):
     stream_settings.reset()
     camera_automation.reset()
     with db_factory() as session:
+        session.execute(delete(AdminAction))
         session.execute(delete(ChatMessage))
         session.execute(delete(DeviceCameraAutomation))
         session.execute(delete(StreamConfiguration))

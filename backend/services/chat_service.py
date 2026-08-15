@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from time import monotonic
 from typing import Any
 
@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from models.orm import ChatMessage, User
+from services.admin_action_service import record_admin_action
 from services.profanity_service import record_profanities
 
 logger = logging.getLogger("chat_service")
@@ -129,6 +130,7 @@ class ChatService:
             rows = session.execute(
                 select(ChatMessage)
                 .options(joinedload(ChatMessage.user))
+                .where(ChatMessage.is_deleted.is_(False))
                 .order_by(ChatMessage.timestamp.desc())
                 .limit(50)
             ).scalars().all()
@@ -137,6 +139,7 @@ class ChatService:
             history = [
                 {
                     "type": "message",
+                    "id": m.id,
                     "sender_type": m.sender_type,
                     "username": (m.user.username if m.sender_type == "account" and m.user else m.username),
                     "user_id": m.user_id,
@@ -144,6 +147,7 @@ class ChatService:
                     "is_account": m.sender_type == "account",
                     "text": m.text,
                     "timestamp": int(m.timestamp.timestamp() * 1000),
+                    "is_deleted": False,
                 }
                 for m in reversed(rows)
             ]
@@ -192,24 +196,68 @@ class ChatService:
                     if user:
                         message["username"] = user.username
                         message["avatar"] = user.avatar
-                session.add(ChatMessage(
+                stored_message = ChatMessage(
                     user_id=user_id,
                     username=message["username"],
                     sender_type=sender_type,
                     text=message["text"],
                     message_type="message",
-                ))
+                )
+                session.add(stored_message)
                 if sender_type == "account" and user_id:
                     record_profanities(session, user_id, message["text"])
                 session.commit()
+                message["id"] = stored_message.id
+                message["is_deleted"] = False
+
+        await self.broadcast_event(message)
+
+    async def broadcast_event(self, event: dict[str, Any]) -> None:
+        """Broadcast a chat event and discard dead sockets."""
 
         connections_to_remove = []
         for connection in self.active_connections:
             try:
-                await connection.send_json(message)
+                await connection.send_json(event)
             except Exception as e:
                 logger.error(f"Error sending message to a client: {e}")
                 connections_to_remove.append(connection)
 
         for connection in connections_to_remove:
             self.disconnect(connection)
+
+    async def soft_delete_message(
+        self, db_factory, message_id: int, admin_user_id: int
+    ) -> tuple[dict | None, str]:
+        """Hide a chat message, retain its text, audit it, and notify clients."""
+        with db_factory() as session:
+            message = session.get(ChatMessage, message_id)
+            if not message:
+                return None, "Message not found"
+            if message.is_deleted:
+                return None, "Message is already deleted"
+
+            message.is_deleted = True
+            message.deleted_at = datetime.now(timezone.utc)
+            message.deleted_by_admin_id = admin_user_id
+            record_admin_action(
+                session,
+                admin_user_id=admin_user_id,
+                action_type="chat.message_deleted",
+                target_type="chat_message",
+                target_id=message.id,
+                details={
+                    "message_user_id": message.user_id,
+                    "message_username": message.username,
+                },
+            )
+            result = {
+                "message_id": message.id,
+                "user_id": message.user_id,
+                "username": message.username,
+                "deleted_at": message.deleted_at.isoformat(),
+            }
+            session.commit()
+
+        await self.broadcast_event({"type": "message_deleted", **result})
+        return result, ""

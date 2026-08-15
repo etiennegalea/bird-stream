@@ -14,6 +14,7 @@
 
   const authState = get(auth);
   const isLoggedIn = !!authState?.user?.username;
+  const isAdmin = !!authState?.user?.is_admin;
   $: profanityFilterEnabled = $auth?.user?.profanity_filter_enabled ?? true;
 
   let username = authState?.user?.username ?? generateBirdUsername();
@@ -25,6 +26,9 @@
   let autoJoinAttempted = false;
   let isCycling = false;
   let isSpinning = false;
+  let messageMenu = null;
+  let longPressTimer = null;
+  let suppressNextWindowClick = false;
 
   function portal(node) {
     document.body.appendChild(node);
@@ -119,6 +123,13 @@
         delete profileCache[`${senderProfileKey}|filter:false`];
         messages = [...messages, data];
         onNewMessage(data);
+      } else if (data.type === 'message_deleted') {
+        messages = messages.filter(message => message.id !== data.message_id);
+        if (data.user_id != null) {
+          delete profileCache[`${data.user_id}|filter:true`];
+          delete profileCache[`${data.user_id}|filter:false`];
+        }
+        if (messageMenu?.message?.id === data.message_id) messageMenu = null;
       } else if (data.type === 'system') {
         messages = [...messages, data];
       }
@@ -211,6 +222,98 @@
     newMessage = '';
   }
 
+  function openMessageMenu(message, group, x, y) {
+    if (!isAdmin || message.id == null) return;
+    const menuWidth = 180;
+    const menuHeight = 92;
+    messageMenu = {
+      message,
+      group,
+      x: Math.max(8, Math.min(x, window.innerWidth - menuWidth - 8)),
+      y: Math.max(8, Math.min(y, window.innerHeight - menuHeight - 8)),
+      loading: false,
+      error: '',
+    };
+  }
+
+  function openDesktopMessageMenu(event, message, group) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    openMessageMenu(message, group, rect.right - 180, rect.bottom + 4);
+  }
+
+  function startLongPress(event, message, group) {
+    if (!isAdmin || message.id == null) return;
+    cancelLongPress();
+    const touch = event.touches?.[0];
+    if (!touch) return;
+    const { clientX, clientY } = touch;
+    longPressTimer = setTimeout(() => {
+      openMessageMenu(message, group, clientX, clientY);
+      suppressNextWindowClick = true;
+      navigator.vibrate?.(30);
+      longPressTimer = null;
+    }, 550);
+  }
+
+  function cancelLongPress() {
+    if (longPressTimer) clearTimeout(longPressTimer);
+    longPressTimer = null;
+  }
+
+  function handleWindowClick() {
+    if (suppressNextWindowClick) {
+      suppressNextWindowClick = false;
+      return;
+    }
+    messageMenu = null;
+  }
+
+  async function deleteSelectedMessage() {
+    if (!messageMenu || messageMenu.loading) return;
+    messageMenu = { ...messageMenu, loading: true, error: '' };
+    try {
+      const resp = await fetch(
+        `${getApiBaseUrl()}/admin/chat/messages/${messageMenu.message.id}`,
+        { method: 'DELETE', headers: { Authorization: `Bearer ${authState.token}` } },
+      );
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        messageMenu = { ...messageMenu, loading: false, error: data.detail || 'Could not delete message.' };
+        return;
+      }
+      messages = messages.filter(message => message.id !== data.message_id);
+      messageMenu = null;
+    } catch {
+      messageMenu = { ...messageMenu, loading: false, error: 'Network error.' };
+    }
+  }
+
+  async function blockSelectedUser() {
+    if (!messageMenu?.group?.user_id || messageMenu.loading) return;
+    messageMenu = { ...messageMenu, loading: true, error: '' };
+    try {
+      const resp = await fetch(
+        `${getApiBaseUrl()}/admin/users/${messageMenu.group.user_id}/blocked`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${authState.token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ is_blocked: true }),
+        },
+      );
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        messageMenu = { ...messageMenu, loading: false, error: data.detail || 'Could not block user.' };
+        return;
+      }
+      messageMenu = null;
+    } catch {
+      messageMenu = { ...messageMenu, loading: false, error: 'Network error.' };
+    }
+  }
+
   function buildMessageGroups(msgs) {
     const groups = [];
     let current = null;
@@ -244,8 +347,11 @@
   onDestroy(() => {
     if (ws) ws.close();
     clearTimeout(hideTimeout);
+    cancelLongPress();
   });
 </script>
+
+<svelte:window on:click={handleWindowClick} />
 
 {#if hasJoined}
   <div class="chat-bar">
@@ -317,12 +423,29 @@
             >{group.username}</span>
           </div>
           <div class="group-messages">
-            {#each group.messages as msg, i (msg.timestamp)}
+            {#each group.messages as msg, i (msg.id ?? msg.timestamp)}
               {@const timeStr = formatChatTime(msg.timestamp)}
               {@const prevTimeStr = i > 0 ? formatChatTime(group.messages[i - 1].timestamp) : null}
-              <div class="msg-row" class:gap-above={i > 0 && timeStr !== prevTimeStr}>
+              <div
+                class="msg-row"
+                class:admin-message={isAdmin}
+                class:gap-above={i > 0 && timeStr !== prevTimeStr}
+                on:touchstart={(event) => startLongPress(event, msg, group)}
+                on:touchend={cancelLongPress}
+                on:touchcancel={cancelLongPress}
+                on:touchmove={cancelLongPress}
+              >
                 <span class="msg-time">{timeStr !== prevTimeStr ? timeStr : ''}</span>
                 <span class="msg-text">{profanityFilterEnabled ? censorProfanity(msg.text) : msg.text}</span>
+                {#if isAdmin && msg.id != null}
+                  <button
+                    class="message-admin-trigger"
+                    type="button"
+                    aria-label="Moderate message"
+                    title="Message actions"
+                    on:click|stopPropagation={(event) => openDesktopMessageMenu(event, msg, group)}
+                  >•••</button>
+                {/if}
               </div>
             {/each}
           </div>
@@ -353,6 +476,28 @@
     </span>
     </div>
   {/if}
+{/if}
+
+{#if messageMenu}
+  <div
+    use:portal
+    class="message-admin-menu"
+    style="left: {messageMenu.x}px; top: {messageMenu.y}px"
+    role="menu"
+    tabindex="-1"
+    on:click|stopPropagation
+    on:keydown|stopPropagation
+  >
+    <button role="menuitem" disabled={messageMenu.loading} on:click={deleteSelectedMessage}>
+      Delete message
+    </button>
+    <button
+      role="menuitem"
+      disabled={messageMenu.loading || !messageMenu.group.user_id || messageMenu.group.user_id === authState.user.id}
+      on:click={blockSelectedUser}
+    >Block user</button>
+    {#if messageMenu.error}<p role="alert">{messageMenu.error}</p>{/if}
+  </div>
 {/if}
 
 {#if showParticipantList && participants.count > 0}
@@ -423,6 +568,10 @@
             {:else}
               <p class="popup-profanities-empty">None recorded</p>
             {/if}
+            <div class="popup-deleted-count">
+              <span>Deleted messages (all time)</span>
+              <strong>×{popup.profile.deleted_message_count ?? 0}</strong>
+            </div>
           </div>
         {/if}
       </div>

@@ -2,7 +2,7 @@ import logging
 import re
 
 import msgspec
-from litestar import Controller, get, post
+from litestar import Controller, delete, get, post
 from litestar.connection import Request
 from litestar.datastructures import State
 from litestar.exceptions import HTTPException
@@ -11,6 +11,11 @@ from sqlalchemy import select
 import services.auth_service as auth_svc
 from controllers.chat_controller import chat_service
 from models.orm import User
+from services.admin_action_service import (
+    list_admin_actions,
+    record_admin_action,
+    record_admin_action_with_factory,
+)
 from services.mqtt_service import mqtt_devices
 from services.camera_automation_service import camera_automation
 from services.stream_settings_service import stream_settings
@@ -126,6 +131,26 @@ class AdminController(Controller):
             ],
         }
 
+    @get("/actions")
+    async def get_admin_actions(
+        self, request: Request, state: State, limit: int = 100
+    ) -> dict:
+        _require_admin(request, state.db)
+        return {"actions": list_admin_actions(state.db, limit)}
+
+    @delete("/chat/messages/{message_id:int}", status_code=200)
+    async def delete_chat_message(
+        self, request: Request, state: State, message_id: int
+    ) -> dict:
+        admin_id = _require_admin(request, state.db)
+        result, error = await chat_service.soft_delete_message(
+            state.db, message_id, admin_id
+        )
+        if error:
+            status = 404 if error == "Message not found" else 409
+            raise HTTPException(status_code=status, detail=error)
+        return result
+
     @post("/users/{user_id:int}/blocked")
     async def set_user_blocked(
         self,
@@ -143,6 +168,14 @@ class AdminController(Controller):
                 raise HTTPException(status_code=404, detail="User not found")
             user.is_blocked = data.is_blocked
             username = user.username
+            record_admin_action(
+                session,
+                admin_user_id=admin_id,
+                action_type=("user.blocked" if data.is_blocked else "user.unblocked"),
+                target_type="user",
+                target_id=user_id,
+                details={"username": username},
+            )
             session.commit()
         disconnected = (
             await chat_service.disconnect_user(user_id)
@@ -161,19 +194,34 @@ class AdminController(Controller):
 
     @post("/block-ip")
     async def block_ip(self, request: Request, data: BlockIpRequest, state: State) -> dict:
-        _require_admin(request, state.db)
+        admin_id = _require_admin(request, state.db)
         ip = data.ip.strip()
         if not ip:
             raise HTTPException(status_code=400, detail="IP address required")
         closed = await chat_service.block_ip(ip)
+        record_admin_action_with_factory(
+            state.db,
+            admin_user_id=admin_id,
+            action_type="ip.blocked",
+            target_type="ip_address",
+            target_id=ip,
+            details={"connections_closed": closed},
+        )
         logger.info("Admin blocked IP %s (%d connections closed)", ip, closed)
         return {"blocked": ip, "connections_closed": closed}
 
     @post("/unblock-ip")
     async def unblock_ip(self, request: Request, data: BlockIpRequest, state: State) -> dict:
-        _require_admin(request, state.db)
+        admin_id = _require_admin(request, state.db)
         ip = data.ip.strip()
         chat_service.unblock_ip(ip)
+        record_admin_action_with_factory(
+            state.db,
+            admin_user_id=admin_id,
+            action_type="ip.unblocked",
+            target_type="ip_address",
+            target_id=ip,
+        )
         logger.info("Admin unblocked IP %s", ip)
         return {"unblocked": ip}
 
@@ -199,6 +247,14 @@ class AdminController(Controller):
             private_enabled=data.private_enabled,
             db_factory=state.db,
         )
+        record_admin_action_with_factory(
+            state.db,
+            admin_user_id=user_id,
+            action_type="stream.settings_updated",
+            target_type="stream_settings",
+            target_id="global",
+            details=settings,
+        )
         logger.info("Admin (user_id=%s) set stream settings: %s", user_id, settings)
         return settings
 
@@ -208,6 +264,13 @@ class AdminController(Controller):
     ) -> dict:
         """Issue a short-lived MediaMTX read token to a verified admin."""
         user_id = _require_admin(request, state.db)
+        record_admin_action_with_factory(
+            state.db,
+            admin_user_id=user_id,
+            action_type="stream.access_token_issued",
+            target_type="user",
+            target_id=user_id,
+        )
         return {
             "token": auth_svc.create_stream_access_token(user_id),
             "expires_in": auth_svc.stream_access_token_lifetime_seconds(),
@@ -242,6 +305,14 @@ class AdminController(Controller):
             auto_manage_pov=data.auto_manage_pov,
             bird_triggered_pov=data.bird_triggered_pov,
             db_factory=state.db,
+        )
+        record_admin_action_with_factory(
+            state.db,
+            admin_user_id=user_id,
+            action_type="device.camera_automation_updated",
+            target_type="device",
+            target_id=pi_id,
+            details=settings,
         )
         logger.info(
             "Admin (user_id=%s) set camera automation on '%s': %s",
@@ -283,6 +354,14 @@ class AdminController(Controller):
             raise HTTPException(status_code=400, detail=str(e))
         except RuntimeError as e:
             raise HTTPException(status_code=503, detail=str(e))
+        record_admin_action_with_factory(
+            state.db,
+            admin_user_id=user_id,
+            action_type="device.schedule_updated",
+            target_type="device",
+            target_id=pi_id,
+            details=params,
+        )
         logger.info("Admin (user_id=%s) set schedule on '%s': %s",
                     user_id, pi_id, params)
         return {"ok": True, "pi_id": pi_id, "schedule": params}
@@ -303,6 +382,13 @@ class AdminController(Controller):
             raise HTTPException(status_code=400, detail=str(e))
         except RuntimeError as e:
             raise HTTPException(status_code=503, detail=str(e))
+        record_admin_action_with_factory(
+            state.db,
+            admin_user_id=user_id,
+            action_type=f"device.{action}",
+            target_type="device",
+            target_id=pi_id,
+        )
         logger.info("Admin (user_id=%s) sent '%s' to device '%s'",
                     user_id, action, pi_id)
         return {"ok": True, "pi_id": pi_id, "action": action}
@@ -323,6 +409,14 @@ class AdminController(Controller):
             raise HTTPException(status_code=400, detail=str(e))
         except RuntimeError as e:
             raise HTTPException(status_code=503, detail=str(e))
+        record_admin_action_with_factory(
+            state.db,
+            admin_user_id=user_id,
+            action_type=f"camera.{action}",
+            target_type="camera",
+            target_id=f"{pi_id}/{camera_id}",
+            details={"pi_id": pi_id, "camera_id": camera_id},
+        )
         logger.info(
             "Admin (user_id=%s) sent '%s' to camera '%s/%s'",
             user_id, action, pi_id, camera_id)
@@ -347,6 +441,18 @@ class AdminController(Controller):
             raise HTTPException(status_code=400, detail=str(e))
         except RuntimeError as e:
             raise HTTPException(status_code=503, detail=str(e))
+        record_admin_action_with_factory(
+            state.db,
+            admin_user_id=user_id,
+            action_type="camera.enabled_updated",
+            target_type="camera",
+            target_id=f"{pi_id}/{camera_id}",
+            details={
+                "pi_id": pi_id,
+                "camera_id": camera_id,
+                "enabled": data.enabled,
+            },
+        )
         logger.info(
             "Admin (user_id=%s) set camera '%s/%s' enabled=%s",
             user_id, pi_id, camera_id, data.enabled)

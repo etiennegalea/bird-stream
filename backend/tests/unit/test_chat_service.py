@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
-from models.orm import Base, ChatMessage, ProfanityOccurrence, User
+from models.orm import AdminAction, Base, ChatMessage, ProfanityOccurrence, User
 from services.chat_service import ChatService, LeakyBucket, _BUCKET_CAPACITY
 
 
@@ -230,7 +230,74 @@ async def test_broadcast_keeps_text_raw_and_records_account_profanity(service):
     }, db_factory)
 
     assert ws.send_json.call_args.args[0]["text"] == raw_text
+    assert isinstance(ws.send_json.call_args.args[0]["id"], int)
     with db_factory() as session:
         assert session.execute(select(ChatMessage.text)).scalar_one() == raw_text
         assert sorted(session.execute(select(ProfanityOccurrence.word)).scalars()) == ["foxx", "shit"]
+    engine.dispose()
+
+
+async def test_soft_delete_retains_text_audits_and_notifies_clients(service):
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    db_factory = sessionmaker(bind=engine)
+    with db_factory() as session:
+        author = User(email="author@example.com", username="author", hashed_password="unused")
+        admin = User(
+            email="admin@example.com", username="admin", hashed_password="unused",
+            is_admin=True,
+        )
+        session.add_all([author, admin])
+        session.flush()
+        message = ChatMessage(
+            user_id=author.id, username=author.username,
+            sender_type="account", text="retain this for audit",
+        )
+        session.add(message)
+        session.commit()
+        message_id, author_id, admin_id = message.id, author.id, admin.id
+
+    ws = _make_ws()
+    service.active_connections[ws] = "admin"
+    result, error = await service.soft_delete_message(db_factory, message_id, admin_id)
+    second_result, second_error = await service.soft_delete_message(
+        db_factory, message_id, admin_id
+    )
+
+    assert error == ""
+    assert second_result is None
+    assert second_error == "Message is already deleted"
+    assert result["message_id"] == message_id
+    ws.send_json.assert_awaited_once()
+    assert ws.send_json.call_args.args[0]["type"] == "message_deleted"
+    with db_factory() as session:
+        stored = session.get(ChatMessage, message_id)
+        assert stored.text == "retain this for audit"
+        assert stored.is_deleted is True
+        assert stored.deleted_by_admin_id == admin_id
+        action = session.execute(select(AdminAction)).scalar_one()
+        assert action.action_type == "chat.message_deleted"
+        assert action.admin_user_id == admin_id
+        assert action.details["message_user_id"] == author_id
+    engine.dispose()
+
+
+async def test_history_excludes_soft_deleted_messages(service):
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    db_factory = sessionmaker(bind=engine)
+    with db_factory() as session:
+        session.add_all([
+            ChatMessage(username="visible", text="show me", is_deleted=False),
+            ChatMessage(username="hidden", text="do not show me", is_deleted=True),
+        ])
+        session.commit()
+
+    ws = _make_ws()
+    await service.connect(ws, "viewer", False, None, db_factory)
+    history = next(
+        call.args[0] for call in ws.send_json.call_args_list
+        if call.args[0].get("type") == "history"
+    )
+    assert [message["text"] for message in history["messages"]] == ["show me"]
     engine.dispose()
